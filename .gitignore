@@ -1,0 +1,39 @@
+
+.gradle/
+build/
+.idea/
+.DS_Store
+local.properties
+.kotlinc/
+**/build/
+mediasfu_sdk/
+MediaSFUReactJS/
+node_modules/
+mediasfu_mediasoup_client/
+index_localhost.js
+
+# ==========================================
+# PRIVATE - DO NOT COMMIT
+# ==========================================
+
+# Credentials (use gradle.properties.template)
+gradle.properties
+
+# GPG/PGP private keys
+*.asc
+private-key*.asc
+secring.gpg
+*.gpg
+
+# Signing keystores
+*.jks
+*.keystore
+*.p12
+
+# Build artifacts
+*.zip
+*.aar
+bundle/
+
+# Local config
+local.properties

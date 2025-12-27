@@ -1,0 +1,83 @@
+package com.mediasfu.sdk.consumers
+
+import com.mediasfu.sdk.model.Stream
+import com.mediasfu.sdk.model.Participant
+
+/**
+ * Parameters interface for adding videos to the grid.
+ */
+interface AddVideosGridParameters {
+    val eventType: Any?
+    val refParticipants: List<Participant>
+    val islevel: String
+    val videoAlreadyOn: Boolean
+    val localStreamVideo: Any?
+    val keepBackground: Boolean
+    val virtualStream: Any?
+    val forceFullDisplay: Boolean
+    val member: String
+    val otherGridStreams: List<List<Any>>
+    
+    // Update functions
+    fun updateEventType(type: Any?)
+    fun updateRefParticipants(participants: List<Participant>)
+    fun updateIslevel(level: String)
+    fun updateVideoAlreadyOn(on: Boolean)
+    fun updateLocalStreamVideo(stream: Any?)
+    fun updateKeepBackground(keep: Boolean)
+    fun updateVirtualStream(stream: Any?)
+    fun updateForceFullDisplay(force: Boolean)
+    fun updateMember(member: String)
+    fun updateOtherGridStreams(streams: List<List<Any>>)
+    fun updateAddAltGrid(add: Boolean)
+    
+    // MediaSFU functions
+    suspend fun updateMiniCardsGrid(): Result<Unit>
+    
+    // Get updated parameters
+    fun getUpdatedAllParams(): AddVideosGridParameters
+}
+
+/**
+ * Options for adding videos to the grid.
+ */
+data class AddVideosGridOptions(
+    val parameters: AddVideosGridParameters,
+    val participants: List<Participant> = emptyList(),
+    val streams: List<Stream> = emptyList(),
+    val forceUpdate: Boolean = false
+)
+
+/**
+ * Adds videos to the grid layout based on the provided options.
+ */
+suspend fun addVideosGrid(options: AddVideosGridOptions) {
+    try {
+        val parameters = options.parameters
+        val participants = options.participants
+        val streams = options.streams
+        
+        if (participants.isEmpty() && streams.isEmpty()) {
+            println("No participants or streams to add to grid")
+            return
+        }
+        
+        parameters.updateRefParticipants(participants)
+        
+        val gridStreams = mutableListOf<List<Any>>()
+        participants.forEach { participant ->
+            val participantStreams = streams.filter { it.producerId == participant.id }
+            if (participantStreams.isNotEmpty()) {
+                gridStreams.add(participantStreams.map { it as Any })
+            }
+        }
+        
+        parameters.updateOtherGridStreams(gridStreams)
+        parameters.updateMiniCardsGrid()
+        
+        println("Successfully added ${participants.size} participants and ${streams.size} streams to grid")
+        
+    } catch (e: Exception) {
+        println("Error adding videos to grid: ${e.message}")
+    }
+}

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Cache directory for sharing whiteboard images -->
+    <cache-path name="whiteboard" path="whiteboard/" />
+    <!-- External files for other sharing purposes -->
+    <external-path name="external_files" path="." />
+</paths>

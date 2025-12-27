@@ -1,0 +1,47 @@
+[
+    {
+        "label": "os",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "os",
+        "description": "os",
+        "detail": "os",
+        "documentation": {}
+    },
+    {
+        "label": "re",
+        "kind": 6,
+        "isExtraImport": true,
+        "importPath": "re",
+        "description": "re",
+        "detail": "re",
+        "documentation": {}
+    },
+    {
+        "label": "base_path",
+        "kind": 5,
+        "importPath": "convert_println",
+        "description": "convert_println",
+        "peekOfCode": "base_path = os.path.join(os.getcwd(), 'shared', 'src', 'commonMain', 'kotlin')\ntotal_converted = 0\nfiles_modified = 0\nfor root, dirs, files in os.walk(base_path):\n    for filename in files:\n        if not filename.endswith('.kt'):\n            continue\n        filepath = os.path.join(root, filename)\n        with open(filepath, 'r', encoding='utf-8') as f:\n            content = f.read()",
+        "detail": "convert_println",
+        "documentation": {}
+    },
+    {
+        "label": "total_converted",
+        "kind": 5,
+        "importPath": "convert_println",
+        "description": "convert_println",
+        "peekOfCode": "total_converted = 0\nfiles_modified = 0\nfor root, dirs, files in os.walk(base_path):\n    for filename in files:\n        if not filename.endswith('.kt'):\n            continue\n        filepath = os.path.join(root, filename)\n        with open(filepath, 'r', encoding='utf-8') as f:\n            content = f.read()\n        if 'println' not in content:",
+        "detail": "convert_println",
+        "documentation": {}
+    },
+    {
+        "label": "files_modified",
+        "kind": 5,
+        "importPath": "convert_println",
+        "description": "convert_println",
+        "peekOfCode": "files_modified = 0\nfor root, dirs, files in os.walk(base_path):\n    for filename in files:\n        if not filename.endswith('.kt'):\n            continue\n        filepath = os.path.join(root, filename)\n        with open(filepath, 'r', encoding='utf-8') as f:\n            content = f.read()\n        if 'println' not in content:\n            continue",
+        "detail": "convert_println",
+        "documentation": {}
+    }
+]
