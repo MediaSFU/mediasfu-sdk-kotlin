@@ -62,7 +62,7 @@ kotlin {
         val androidMain by getting {
             dependencies {
                 // Mediasoup Android bindings from Maven Central
-                compileOnly("com.mediasfu:mediasoup-client:1.0.0")
+                compileOnly("com.mediasfu:mediasoup-client:1.0.1")
                 implementation("io.ktor:ktor-client-okhttp:2.3.11")
 
                 // ML Kit Selfie Segmentation for virtual backgrounds
@@ -125,7 +125,7 @@ mavenPublishing {
     publishToMavenCentral(com.vanniktech.maven.publish.SonatypeHost.CENTRAL_PORTAL)
     signAllPublications()
 
-    coordinates("com.mediasfu", "mediasfu-sdk", "1.0.0")
+    coordinates("com.mediasfu", "mediasfu-sdk", "1.0.1")
 
     pom {
         name.set("MediaSFU Kotlin Multiplatform SDK")

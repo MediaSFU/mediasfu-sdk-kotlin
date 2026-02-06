@@ -245,19 +245,19 @@ private fun MediaSfuSampleScreen() {
         }
     }
 
-    var apiUserName by rememberSaveable { mutableStateOf("") }
+    var apiUserName by rememberSaveable { mutableStateOf("yourDevUser") }
     var apiKey by rememberSaveable {
-        mutableStateOf("")
+        mutableStateOf("yourDevApiKey0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
     }
     var localLink by rememberSaveable { mutableStateOf("") }
     var connectMediaSfu by rememberSaveable { mutableStateOf(true) }
     var actionChoice by rememberSaveable { mutableStateOf(ActionMode.CREATE) }
-    var userName by rememberSaveable { mutableStateOf("") }
+    var userName by rememberSaveable { mutableStateOf("tester") }
     var roomName by rememberSaveable { mutableStateOf("mediasfu-demo") }
     var meetingId by rememberSaveable { mutableStateOf("") }
     var durationMinutes by rememberSaveable { mutableStateOf("5") }
     var capacity by rememberSaveable { mutableStateOf("4") }
-    var adminPasscode by rememberSaveable { mutableStateOf("") }
+    var adminPasscode by rememberSaveable { mutableStateOf("admin123") }
     var isLevel by rememberSaveable { mutableStateOf("0") }
     var eventType by remember { mutableStateOf(EventType.CONFERENCE) }
 
