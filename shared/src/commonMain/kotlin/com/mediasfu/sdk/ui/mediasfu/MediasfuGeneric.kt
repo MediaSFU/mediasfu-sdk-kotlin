@@ -178,10 +178,16 @@ import com.mediasfu.sdk.consumers.OnScreenChangesOptions
 import com.mediasfu.sdk.consumers.PrepopulateUserMediaOptions
 import com.mediasfu.sdk.consumers.ScreenState
 import com.mediasfu.sdk.consumers.ReorderStreamsOptions
+import com.mediasfu.sdk.consumers.ConsumerResumeOptions
+import com.mediasfu.sdk.consumers.ConsumerTransportInfo
+import com.mediasfu.sdk.consumers.SignalNewConsumerTransportOptions
+import com.mediasfu.sdk.consumers.SignalNewConsumerTransportParameters
 import com.mediasfu.sdk.EngineReorderStreamsParameters
 import com.mediasfu.sdk.consumers.generatePageContent
+import com.mediasfu.sdk.consumers.signalNewConsumerTransport
 import com.mediasfu.sdk.consumers.onScreenChanges as consumerOnScreenChanges
 import com.mediasfu.sdk.consumers.updateMiniCardsGridImpl
+import com.mediasfu.sdk.createConsumerResumeParameters
 import com.mediasfu.sdk.methods.MediasfuParameters
 import com.mediasfu.sdk.methods.breakout_rooms_methods.BreakoutRoomUpdatedData as BreakoutData
 import com.mediasfu.sdk.methods.breakout_rooms_methods.BreakoutRoomUpdatedOptions
@@ -504,6 +510,57 @@ class MediasfuGenericState internal constructor(
     private val _orientation = MutableStateFlow("landscape")
     val orientation: StateFlow<String> = _orientation.asStateFlow()
 
+    private val _translationSupported = MutableStateFlow(false)
+    val translationSupported: StateFlow<Boolean> = _translationSupported.asStateFlow()
+
+    private val _translationConfig = MutableStateFlow<TranslationRoomConfig?>(null)
+    val translationConfig: StateFlow<TranslationRoomConfig?> = _translationConfig.asStateFlow()
+
+    private val _mySpokenLanguage = MutableStateFlow("")
+    val mySpokenLanguage: StateFlow<String> = _mySpokenLanguage.asStateFlow()
+
+    private val _mySpokenLanguageEnabled = MutableStateFlow(false)
+    val mySpokenLanguageEnabled: StateFlow<Boolean> = _mySpokenLanguageEnabled.asStateFlow()
+
+    private val _myDefaultOutputLanguage = MutableStateFlow<String?>(null)
+    val myDefaultOutputLanguage: StateFlow<String?> = _myDefaultOutputLanguage.asStateFlow()
+
+    private val _myDefaultListenLanguage = MutableStateFlow<String?>(null)
+    val myDefaultListenLanguage: StateFlow<String?> = _myDefaultListenLanguage.asStateFlow()
+
+    private val _showTranslationSubtitles = MutableStateFlow(true)
+    val showTranslationSubtitles: StateFlow<Boolean> = _showTranslationSubtitles.asStateFlow()
+
+    private val _translationTranscripts = MutableStateFlow<List<TranslationTranscriptData>>(emptyList())
+    val translationTranscripts: StateFlow<List<TranslationTranscriptData>> = _translationTranscripts.asStateFlow()
+
+    private val _translationProducerMap = MutableStateFlow<TranslationProducerMap>(emptyMap())
+    val translationProducerMap: StateFlow<TranslationProducerMap> = _translationProducerMap.asStateFlow()
+
+    private val _translationChannelsBySpeaker = MutableStateFlow<Map<String, List<String>>>(emptyMap())
+    val translationChannelsBySpeaker: StateFlow<Map<String, List<String>>> = _translationChannelsBySpeaker.asStateFlow()
+
+    private val _participantTranslationState = MutableStateFlow<Map<String, Map<String, Any?>>>(emptyMap())
+    val participantTranslationState: StateFlow<Map<String, Map<String, Any?>>> = _participantTranslationState.asStateFlow()
+
+    private val _listenPreferences = MutableStateFlow<Map<String, String>>(emptyMap())
+    val listenPreferences: StateFlow<Map<String, String>> = _listenPreferences.asStateFlow()
+
+    private val _permissionConfig = MutableStateFlow<PermissionConfig?>(null)
+    val permissionConfig: StateFlow<PermissionConfig?> = _permissionConfig.asStateFlow()
+
+    private val _panelists = MutableStateFlow<List<Participant>>(emptyList())
+    val panelists: StateFlow<List<Participant>> = _panelists.asStateFlow()
+
+    private val _panelistsFocused = MutableStateFlow(false)
+    val panelistsFocused: StateFlow<Boolean> = _panelistsFocused.asStateFlow()
+
+    private val _muteOthersMic = MutableStateFlow(false)
+    val muteOthersMic: StateFlow<Boolean> = _muteOthersMic.asStateFlow()
+
+    private val _muteOthersCamera = MutableStateFlow(false)
+    val muteOthersCamera: StateFlow<Boolean> = _muteOthersCamera.asStateFlow()
+
     val connectivity = ConnectivityState(parameters, ::notifyParametersChanged)
     val room = RoomState(parameters, ::notifyParametersChanged)
     val media = MediaState(parameters, ::notifyParametersChanged)
@@ -562,6 +619,62 @@ class MediasfuGenericState internal constructor(
         }
     }
 
+    private fun buildWhiteboardUsersPayload(): List<Map<String, Any?>> =
+        whiteboard.users.map { user ->
+            mapOf(
+                "name" to user.name,
+                "useBoard" to user.useBoard
+            )
+        }
+
+    private fun emitWhiteboardLifecycleEvent(
+        event: String,
+        payload: Map<String, Any?>,
+        failureMessage: String,
+        onSuccess: () -> Unit
+    ) {
+        val socket = connectivity.socket
+        if (socket == null) {
+            showAlert("Socket connection not available", "danger")
+            return
+        }
+
+        try {
+            socket.emitWithAck(event, payload) { response ->
+                val (success, reason) = response.toWhiteboardAckResult()
+                scope.launch {
+                    if (success) {
+                        onSuccess()
+                    } else {
+                        showAlert(reason ?: failureMessage, "danger")
+                    }
+                }
+            }
+        } catch (error: Exception) {
+            showAlert(error.message ?: failureMessage, "danger")
+        }
+    }
+
+    private fun canStartWhiteboardSession(): Boolean {
+        if (media.shareScreenStarted || media.shared) {
+            showAlert(
+                "Cannot start whiteboard while screen sharing is active",
+                "danger"
+            )
+            return false
+        }
+
+        if (breakout.breakOutRoomStarted && !breakout.breakOutRoomEnded) {
+            showAlert(
+                "Cannot start whiteboard while breakout rooms are active",
+                "danger"
+            )
+            return false
+        }
+
+        return true
+    }
+
     private fun startWhiteboardSession() {
         if (!hasWhiteboardDrawingAccess()) {
             showAlert("You do not have permission to start the whiteboard.", "danger")
@@ -580,10 +693,41 @@ class MediasfuGenericState internal constructor(
             return
         }
 
-        whiteboard.updateStarted(true)
-        whiteboard.updateEnded(false)
-        modals.setWhiteboardVisibility(false)
-        showAlert("Whiteboard started.", "success")
+        if (!canStartWhiteboardSession()) {
+            return
+        }
+
+        emitWhiteboardLifecycleEvent(
+            event = "startWhiteboard",
+            payload = mapOf(
+                "whiteboardUsers" to buildWhiteboardUsersPayload(),
+                "roomName" to room.roomName
+            ),
+            failureMessage = "Failed to start whiteboard"
+        ) {
+            whiteboard.updateStarted(true)
+            whiteboard.updateEnded(false)
+            whiteboard.updateCanStart(false)
+            modals.setWhiteboardVisibility(false)
+            showAlert("Whiteboard active", "success")
+
+            if (
+                room.islevel == "2" &&
+                (recording.recordStarted || recording.recordResumed) &&
+                !(recording.recordPaused || recording.recordStopped) &&
+                recording.recordingMediaOptions == "video"
+            ) {
+                scope.launch {
+                    try {
+                        val options = CaptureCanvasStreamOptions(
+                            parameters = createStartRecordingParameters()
+                        )
+                        com.mediasfu.sdk.methods.whiteboard_methods.captureCanvasStream(options)
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+        }
     }
 
     private fun stopWhiteboardSession() {
@@ -592,9 +736,16 @@ class MediasfuGenericState internal constructor(
             return
         }
 
-        whiteboard.updateEnded(true)
-        whiteboard.updateStarted(false)
-        showAlert("Whiteboard ended.", "success")
+        emitWhiteboardLifecycleEvent(
+            event = "stopWhiteboard",
+            payload = mapOf("roomName" to room.roomName),
+            failureMessage = "Failed to stop whiteboard"
+        ) {
+            whiteboard.updateEnded(true)
+            whiteboard.updateStarted(false)
+            whiteboard.updateCanStart(true)
+            showAlert("Whiteboard stopped successfully", "success")
+        }
     }
 
     private fun clearWhiteboardContent() {
@@ -607,10 +758,25 @@ class MediasfuGenericState internal constructor(
             return
         }
 
-        whiteboard.updateShapes(emptyList())
-        whiteboard.updateUndoStack(emptyList())
-        whiteboard.updateRedoStack(emptyList())
-        showAlert("Whiteboard cleared.", "success")
+        if (!whiteboard.whiteboardStarted || whiteboard.whiteboardEnded) {
+            showAlert("Whiteboard is not currently active.", "info")
+            return
+        }
+
+        emitWhiteboardLifecycleEvent(
+            event = "updateBoardAction",
+            payload = mapOf(
+                "action" to "clear",
+                "payload" to emptyMap<String, Any?>(),
+                "roomName" to room.roomName
+            ),
+            failureMessage = "Failed to clear whiteboard"
+        ) {
+            whiteboard.updateShapes(emptyList())
+            whiteboard.updateUndoStack(emptyList())
+            whiteboard.updateRedoStack(emptyList())
+            showAlert("Whiteboard cleared.", "success")
+        }
     }
 
     private fun ModelCoHostResponsibility.toUi(): UiCoHostResponsibility =
@@ -1199,6 +1365,122 @@ class MediasfuGenericState internal constructor(
                 handleWhiteboardUpdatedEvent(payload)
             }
         }
+
+        // Translation-related events
+        registerSocketListener(socket, "translation:roomConfig") { payload ->
+            scope.launch {
+                handleTranslationRoomConfigEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "translation:configUpdated") { payload ->
+            scope.launch {
+                handleTranslationConfigUpdatedEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "translation:languageSet") { payload ->
+            scope.launch {
+                handleTranslationLanguageSetEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "translation:subscribed") { payload ->
+            scope.launch {
+                handleTranslationSubscribedEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "translation:unsubscribed") { payload ->
+            scope.launch {
+                handleTranslationUnsubscribedEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "translation:producerReady") { payload ->
+            scope.launch {
+                handleTranslationProducerReadyEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "translation:producerClosed") { payload ->
+            scope.launch {
+                handleTranslationProducerClosedEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "translation:channelsAvailable") { payload ->
+            scope.launch {
+                handleTranslationChannelsAvailableEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "translation:memberState") { payload ->
+            scope.launch {
+                handleTranslationMemberStateEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "translation:error") { payload ->
+            scope.launch {
+                handleTranslationErrorEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "translation:transcript") { payload ->
+            scope.launch {
+                handleTranslationTranscriptEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "translation:speakerOutputChanged") { payload ->
+            scope.launch {
+                handleTranslationSpeakerOutputChangedEvent(payload)
+            }
+        }
+
+        // Permission and panelist events
+        registerSocketListener(socket, "permissionUpdated") { payload ->
+            scope.launch {
+                handlePermissionUpdatedEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "permissionConfigUpdated") { payload ->
+            scope.launch {
+                handlePermissionConfigUpdatedEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "panelistsUpdated") { payload ->
+            scope.launch {
+                handlePanelistsUpdatedEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "panelistFocusChanged") { payload ->
+            scope.launch {
+                handlePanelistFocusChangedEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "controlMedia") { payload ->
+            scope.launch {
+                handlePanelistControlMediaEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "addedAsPanelist") { payload ->
+            scope.launch {
+                handleAddedAsPanelistEvent(payload)
+            }
+        }
+
+        registerSocketListener(socket, "removedFromPanelists") { payload ->
+            scope.launch {
+                handleRemovedFromPanelistsEvent(payload)
+            }
+        }
     }
 
     private fun registerSocketListener(
@@ -1578,7 +1860,7 @@ class MediasfuGenericState internal constructor(
     }
 
     private suspend fun handleMeetingTimeRemainingEvent(payload: Map<String, Any?>) {
-        val timeRemaining = payload["timeRemaining"] as? Int ?: return
+        val timeRemaining = (payload["timeRemaining"] as? Number)?.toInt() ?: return
 
         val options = SocketMeetingTimeRemainingOptions(
             timeRemainingMillis = timeRemaining,
@@ -1749,8 +2031,8 @@ class MediasfuGenericState internal constructor(
 
     private suspend fun handleRecordingNoticeEvent(payload: Map<String, Any?>) {
         val state = payload["state"] as? String ?: return
-        val pauseCount = payload["pauseCount"] as? Int ?: 0
-        val timeDone = payload["timeDone"] as? Int ?: 0
+        val pauseCount = (payload["pauseCount"] as? Number)?.toInt() ?: 0
+        val timeDone = (payload["timeDone"] as? Number)?.toInt() ?: 0
 
         val userRecordingParams = if (payload.containsKey("userRecordingParam") && 
             payload["userRecordingParam"] != null) {
@@ -1774,7 +2056,7 @@ class MediasfuGenericState internal constructor(
     }
 
     private suspend fun handleTimeLeftRecordingEvent(payload: Map<String, Any?>) {
-        val timeLeft = payload["timeLeft"] as? Int ?: return
+        val timeLeft = (payload["timeLeft"] as? Number)?.toInt() ?: return
 
         val options = TimeLeftRecordingOptions(
             timeLeft = timeLeft,
@@ -1853,11 +2135,505 @@ class MediasfuGenericState internal constructor(
             updateShapes = { whiteboard.updateShapes(it) },
             updateWhiteboardStarted = { whiteboard.updateStarted(it) },
             updateWhiteboardEnded = { whiteboard.updateEnded(it) },
+            updateCanStartWhiteboard = { whiteboard.updateCanStart(it) },
             shapes = whiteboard.shapes.toList()
         )
 
         handleWhiteboardUpdated(options)
         propagateParameterChanges()
+    }
+
+    private suspend fun handleTranslationRoomConfigEvent(payload: Map<String, Any?>) {
+        val configMap = (payload["config"] as? Map<*, *>)?.toStringAnyMap() ?: payload
+
+        val config = configMap.toTranslationRoomConfig() ?: return
+
+        translationRoomConfig(
+            TranslationRoomConfigOptions(
+                data = TranslationRoomConfigData(config),
+                updateTranslationConfig = { _translationConfig.value = it },
+                updateTranslationSupported = { _translationSupported.value = it }
+            )
+        )
+    }
+
+    private suspend fun handleTranslationConfigUpdatedEvent(payload: Map<String, Any?>) {
+        val configMap = (payload["config"] as? Map<*, *>)?.toStringAnyMap() ?: payload
+
+        val config = configMap.toTranslationRoomConfig() ?: return
+
+        translationConfigUpdated(
+            TranslationConfigUpdatedOptions(
+                data = TranslationConfigUpdatedData(config),
+                updateTranslationConfig = { _translationConfig.value = it },
+                updateTranslationSupported = { _translationSupported.value = it },
+                showAlert = ShowAlert { message, type, duration -> showAlert(message, type, duration) }
+            )
+        )
+    }
+
+    private suspend fun handleTranslationLanguageSetEvent(payload: Map<String, Any?>) {
+        val success = payload["success"].toBooleanLoose()
+        val language = payload["language"] as? String ?: return
+        val enabled = payload["enabled"].toBooleanLoose()
+        val error = payload["error"] as? String
+
+        translationLanguageSet(
+            TranslationLanguageSetOptions(
+                data = TranslationLanguageSetData(
+                    success = success,
+                    language = language,
+                    enabled = enabled,
+                    error = error
+                ),
+                updateMySpokenLanguage = { _mySpokenLanguage.value = it },
+                updateMySpokenLanguageEnabled = { _mySpokenLanguageEnabled.value = it },
+                showAlert = ShowAlert { message, type, duration -> showAlert(message, type, duration) }
+            )
+        )
+    }
+
+    private suspend fun handleTranslationSubscribedEvent(payload: Map<String, Any?>) {
+        val speakerId = payload["speakerId"] as? String ?: return
+        val speakerName = payload["speakerName"] as? String
+        val language = payload["language"] as? String ?: return
+        val channelCreated = payload["channelCreated"].toBooleanLoose()
+        val producerId = payload["producerId"] as? String
+        val originalProducerId = payload["originalProducerId"] as? String
+
+        translationSubscribed(
+            TranslationSubscribedOptions(
+                data = TranslationSubscribedData(
+                    speakerId = speakerId,
+                    speakerName = speakerName,
+                    language = language,
+                    channelCreated = channelCreated,
+                    producerId = producerId,
+                    originalProducerId = originalProducerId
+                ),
+                updateListenPreferences = { patch ->
+                    _listenPreferences.value = _listenPreferences.value.mergePatch(patch)
+                },
+                updateTranslationProducerMap = { patch ->
+                    _translationProducerMap.value = _translationProducerMap.value.mergeNestedPatch(patch)
+                },
+                showAlert = ShowAlert { message, type, duration -> showAlert(message, type, duration) }
+            )
+        )
+
+        if (!producerId.isNullOrBlank() && !originalProducerId.isNullOrBlank()) {
+            startConsumingTranslation(
+                producerId = producerId,
+                speakerId = speakerId,
+                language = language,
+                originalProducerId = originalProducerId
+            )
+        }
+    }
+
+    private suspend fun handleTranslationUnsubscribedEvent(payload: Map<String, Any?>) {
+        val speakerId = payload["speakerId"] as? String ?: return
+        val language = payload["language"] as? String ?: return
+        val channelClosed = payload["channelClosed"].toBooleanLoose()
+
+        translationUnsubscribed(
+            TranslationUnsubscribedOptions(
+                data = TranslationUnsubscribedData(
+                    speakerId = speakerId,
+                    language = language,
+                    channelClosed = channelClosed
+                ),
+                updateListenPreferences = { patch ->
+                    _listenPreferences.value = _listenPreferences.value.mergePatch(patch, removeEmpty = true)
+                }
+            )
+        )
+
+        stopConsumingTranslationForSpeaker(speakerId)
+        val originalProducerId = _participantTranslationState.value[speakerId]?.get("originalProducerId") as? String
+        if (!originalProducerId.isNullOrBlank()) {
+            resumeOriginalProducer(originalProducerId, speakerId)
+        }
+    }
+
+    private suspend fun handleTranslationProducerReadyEvent(payload: Map<String, Any?>) {
+        val speakerId = payload["speakerId"] as? String ?: return
+        val speakerName = payload["speakerName"] as? String
+        val language = payload["language"] as? String ?: return
+        val producerId = payload["producerId"] as? String ?: return
+        val originalProducerId = payload["originalProducerId"] as? String ?: return
+
+        translationProducerReady(
+            TranslationProducerReadyOptions(
+                data = TranslationProducerReadyData(
+                    speakerId = speakerId,
+                    speakerName = speakerName,
+                    language = language,
+                    producerId = producerId,
+                    originalProducerId = originalProducerId
+                ),
+                updateTranslationProducerMap = { patch ->
+                    _translationProducerMap.value = _translationProducerMap.value.mergeNestedPatch(patch)
+                }
+            )
+        )
+
+        if (shouldConsumeTranslation(speakerId, language)) {
+            startConsumingTranslation(
+                producerId = producerId,
+                speakerId = speakerId,
+                language = language,
+                originalProducerId = originalProducerId
+            )
+        }
+    }
+
+    private suspend fun handleTranslationProducerClosedEvent(payload: Map<String, Any?>) {
+        val speakerId = payload["speakerId"] as? String ?: return
+        val language = payload["language"] as? String ?: return
+        val producerId = payload["producerId"] as? String ?: return
+        val originalProducerId = payload["originalProducerId"] as? String
+        val reason = payload["reason"] as? String
+
+        translationProducerClosed(
+            TranslationProducerClosedOptions(
+                data = TranslationProducerClosedData(
+                    speakerId = speakerId,
+                    language = language,
+                    producerId = producerId,
+                    originalProducerId = originalProducerId,
+                    reason = reason
+                ),
+                updateTranslationProducerMap = { patch ->
+                    _translationProducerMap.value = _translationProducerMap.value.mergeNestedPatch(patch, removeEmpty = true)
+                },
+                showAlert = ShowAlert { message, type, duration -> showAlert(message, type, duration) }
+            )
+        )
+
+        stopConsumingTranslationByProducerId(producerId)
+        if (!originalProducerId.isNullOrBlank()) {
+            resumeOriginalProducer(originalProducerId, speakerId)
+        }
+
+        val remainingChannels = _translationChannelsBySpeaker.value[speakerId]
+            ?.filterNot { it.equals(language, ignoreCase = true) }
+            ?: emptyList()
+        _translationChannelsBySpeaker.value = _translationChannelsBySpeaker.value.mergeListPatch(
+            mapOf(speakerId to remainingChannels),
+            removeEmpty = true
+        )
+
+        if (_listenPreferences.value[speakerId]?.equals(language, ignoreCase = true) == true) {
+            _listenPreferences.value = _listenPreferences.value.mergePatch(
+                mapOf(speakerId to ""),
+                removeEmpty = true
+            )
+        }
+
+        val currentSpeakerState = _participantTranslationState.value[speakerId]
+        val currentOutputLanguage = currentSpeakerState?.get("outputLanguage") as? String
+        val currentOriginalProducerId = currentSpeakerState?.get("originalProducerId") as? String
+        val closedCurrentOutput = currentOutputLanguage?.equals(language, ignoreCase = true) == true
+        val sameOriginalProducer =
+            !originalProducerId.isNullOrBlank() && currentOriginalProducerId == originalProducerId
+
+        if (currentSpeakerState != null && (closedCurrentOutput || sameOriginalProducer)) {
+            _participantTranslationState.value = _participantTranslationState.value.mergeNestedAnyPatch(
+                mapOf(
+                    speakerId to currentSpeakerState.toMutableMap().apply {
+                        put("outputLanguage", null)
+                        put("translationEnabled", false)
+                    }.toMap()
+                )
+            )
+        }
+    }
+
+    private suspend fun handleTranslationChannelsAvailableEvent(payload: Map<String, Any?>) {
+        val speakerId = payload["speakerId"] as? String ?: return
+        val speakerName = payload["speakerName"] as? String
+        val originalProducerId = payload["originalProducerId"] as? String ?: return
+        val languages = (payload["languages"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+
+        translationChannelsAvailable(
+            TranslationChannelsAvailableOptions(
+                data = TranslationChannelsAvailableData(
+                    speakerId = speakerId,
+                    speakerName = speakerName,
+                    languages = languages,
+                    originalProducerId = originalProducerId
+                ),
+                updateAvailableTranslationChannels = { patch ->
+                    _translationChannelsBySpeaker.value = _translationChannelsBySpeaker.value.mergeListPatch(
+                        patch,
+                        removeEmpty = true
+                    )
+                }
+            )
+        )
+    }
+
+    private suspend fun handleTranslationMemberStateEvent(payload: Map<String, Any?>) {
+        val memberId = payload["memberId"] as? String ?: return
+        val memberName = payload["memberName"] as? String
+        val stateMap = (payload["state"] as? Map<*, *>)?.toStringAnyMap() ?: emptyMap()
+
+        translationMemberState(
+            TranslationMemberStateOptions(
+                data = TranslationMemberStateData(
+                    memberId = memberId,
+                    memberName = memberName,
+                    state = stateMap
+                ),
+                updateParticipantTranslationState = { patch ->
+                    _participantTranslationState.value = _participantTranslationState.value.mergeNestedAnyPatch(patch)
+                }
+            )
+        )
+    }
+
+    private suspend fun handleTranslationErrorEvent(payload: Map<String, Any?>) {
+        val error = payload["error"] as? String ?: "Translation error occurred"
+        val code = payload["code"] as? String
+        val details = payload["details"]
+        val maxChannels = (payload["maxChannels"] as? Number)?.toInt()
+        val message = payload["message"] as? String
+
+        @Suppress("UNCHECKED_CAST")
+        val availableChannels = (payload["availableChannels"] as? List<*>)
+            ?.mapNotNull { it as? String }
+
+        translationError(
+            TranslationErrorOptions(
+                data = TranslationErrorData(
+                    error = error,
+                    code = code,
+                    details = details,
+                    availableChannels = availableChannels,
+                    maxChannels = maxChannels,
+                    message = message
+                ),
+                showAlert = ShowAlert { msg, type, duration -> showAlert(msg, type, duration) }
+            )
+        )
+    }
+
+    private suspend fun handleTranslationTranscriptEvent(payload: Map<String, Any?>) {
+        val speakerId = payload["speakerId"] as? String ?: return
+        val speakerName = payload["speakerName"] as? String ?: "Speaker"
+        val language = payload["language"] as? String ?: return
+        val originalText = payload["originalText"] as? String ?: ""
+        val translatedText = payload["translatedText"] as? String ?: ""
+        val sourceLang = payload["sourceLang"] as? String ?: ""
+        val detectedLanguage = payload["detectedLanguage"] as? String
+        val timestamp = (payload["timestamp"] as? Number)?.toLong() ?: Clock.System.now().toEpochMilliseconds()
+
+        translationTranscript(
+            TranslationTranscriptOptions(
+                data = TranslationTranscriptData(
+                    speakerId = speakerId,
+                    speakerName = speakerName,
+                    language = language,
+                    originalText = originalText,
+                    translatedText = translatedText,
+                    sourceLang = sourceLang,
+                    detectedLanguage = detectedLanguage,
+                    timestamp = timestamp
+                ),
+                existingTranscripts = _translationTranscripts.value,
+                updateTranscripts = { _translationTranscripts.value = it }
+            )
+        )
+    }
+
+    private suspend fun handleTranslationSpeakerOutputChangedEvent(payload: Map<String, Any?>) {
+        val speakerId = payload["speakerId"] as? String ?: return
+        val speakerName = payload["speakerName"] as? String ?: "Speaker"
+        val inputLanguage = payload["inputLanguage"] as? String ?: ""
+        val outputLanguage = payload["outputLanguage"] as? String
+        val originalProducerId = payload["originalProducerId"] as? String ?: return
+        val enabled = payload["enabled"].toBooleanLoose()
+        val preferredLanguage = _listenPreferences.value[speakerId] ?: _myDefaultListenLanguage.value
+
+        translationSpeakerOutputChanged(
+            TranslationSpeakerOutputChangedOptions(
+                data = TranslationSpeakerOutputChangedData(
+                    speakerId = speakerId,
+                    speakerName = speakerName,
+                    inputLanguage = inputLanguage,
+                    outputLanguage = outputLanguage,
+                    originalProducerId = originalProducerId,
+                    enabled = enabled
+                ),
+                updateSpeakerTranslationState = { changedSpeakerId, changedOutputLanguage, changedOriginalProducerId ->
+                    val current = _participantTranslationState.value[changedSpeakerId].orEmpty().toMutableMap()
+                    current["speakerName"] = speakerName
+                    current["inputLanguage"] = inputLanguage
+                    current["outputLanguage"] = changedOutputLanguage
+                    current["originalProducerId"] = changedOriginalProducerId
+                    current["translationEnabled"] = enabled
+                    _participantTranslationState.value = _participantTranslationState.value.mergeNestedAnyPatch(
+                        mapOf(changedSpeakerId to current.toMap())
+                    )
+
+                    if (!enabled) {
+                        _listenPreferences.value = _listenPreferences.value.mergePatch(
+                            mapOf(changedSpeakerId to ""),
+                            removeEmpty = true
+                        )
+                    }
+                },
+                pauseOriginalProducer = ::pauseOriginalProducer,
+                resumeOriginalProducer = ::resumeOriginalProducer,
+                stopConsumingTranslationForSpeaker = ::stopConsumingTranslationForSpeaker,
+                showAlert = ShowAlert { message, type, duration -> showAlert(message, type, duration) },
+                listenerOverride = ListenerOverride(
+                    speakerId = speakerId,
+                    wantOriginal = preferredLanguage.isNullOrBlank(),
+                    preferredLanguage = preferredLanguage
+                )
+            )
+        )
+
+        if (enabled && !outputLanguage.isNullOrBlank() && shouldConsumeTranslation(speakerId, outputLanguage)) {
+            val translationProducerId = _translationProducerMap.value[originalProducerId]?.get(outputLanguage)
+            if (!translationProducerId.isNullOrBlank()) {
+                startConsumingTranslation(
+                    producerId = translationProducerId,
+                    speakerId = speakerId,
+                    language = outputLanguage,
+                    originalProducerId = originalProducerId
+                )
+            }
+        }
+    }
+
+    private suspend fun handlePermissionUpdatedEvent(payload: Map<String, Any?>) {
+        val newLevel = payload["newLevel"] as? String ?: payload["level"] as? String ?: return
+        val message = payload["message"] as? String
+
+        permissionUpdated(
+            PermissionUpdatedOptions(
+                data = PermissionUpdatedData(newLevel = newLevel, message = message),
+                showAlert = ShowAlert { msg, type, duration -> showAlert(msg, type, duration) },
+                updateIslevel = room::updateIslevel
+            )
+        )
+
+        propagateParameterChanges()
+    }
+
+    private suspend fun handlePermissionConfigUpdatedEvent(payload: Map<String, Any?>) {
+        val configMap = (payload["config"] as? Map<*, *>)?.toStringAnyMap() ?: payload
+
+        permissionConfigUpdated(
+            PermissionConfigUpdatedOptions(
+                data = PermissionConfigUpdatedData(config = PermissionConfig(configMap)),
+                updatePermissionConfig = { _permissionConfig.value = it }
+            )
+        )
+    }
+
+    private suspend fun handlePanelistsUpdatedEvent(payload: Map<String, Any?>) {
+        @Suppress("UNCHECKED_CAST")
+        val list = payload["panelists"] as? List<*> ?: return
+        val panelistsData = list.mapNotNull { raw ->
+            val map = (raw as? Map<*, *>)?.toStringAnyMap() ?: return@mapNotNull null
+            val id = map["id"]?.toString() ?: return@mapNotNull null
+            val name = map["name"]?.toString() ?: ""
+            PanelistData(id = id, name = name)
+        }
+
+        panelistsUpdated(
+            PanelistsUpdatedOptions(
+                data = PanelistsUpdatedData(panelistsData),
+                updatePanelists = { _panelists.value = it }
+            )
+        )
+    }
+
+    private suspend fun handlePanelistFocusChangedEvent(payload: Map<String, Any?>) {
+        @Suppress("UNCHECKED_CAST")
+        val list = (payload["panelists"] as? List<*>) ?: emptyList<Any?>()
+        val panelistsData = list.mapNotNull { raw ->
+            val map = (raw as? Map<*, *>)?.toStringAnyMap() ?: return@mapNotNull null
+            val id = map["id"]?.toString() ?: return@mapNotNull null
+            val name = map["name"]?.toString() ?: ""
+            PanelistData(id = id, name = name)
+        }
+
+        val focusEnabled = payload["focusEnabled"].toBooleanLoose()
+        val muteMic = payload["muteOthersMic"].toBooleanLoose()
+        val muteCamera = payload["muteOthersCamera"].toBooleanLoose()
+
+        panelistFocusChanged(
+            PanelistFocusChangedOptions(
+                data = PanelistFocusChangedData(
+                    focusEnabled = focusEnabled,
+                    panelists = panelistsData,
+                    muteOthersMic = muteMic,
+                    muteOthersCamera = muteCamera
+                ),
+                updatePanelistsFocused = { _panelistsFocused.value = it },
+                updateMuteOthersMic = { _muteOthersMic.value = it },
+                updateMuteOthersCamera = { _muteOthersCamera.value = it },
+                updatePanelists = { _panelists.value = it },
+                currentPanelistsFocused = _panelistsFocused.value,
+                currentPanelists = _panelists.value,
+                onScreenChanges = {
+                    consumerOnScreenChanges(
+                        OnScreenChangesOptions(
+                            changed = true,
+                            parameters = createAllMembersParameters()
+                        )
+                    )
+                }
+            )
+        )
+    }
+
+    private suspend fun handlePanelistControlMediaEvent(payload: Map<String, Any?>) {
+        val type = payload["type"] as? String ?: return
+        val action = payload["action"] as? String ?: return
+        val reason = payload["reason"] as? String
+
+        panelistControlMedia(
+            PanelistControlMediaOptions(
+                data = PanelistControlMediaData(
+                    type = type,
+                    action = action,
+                    reason = reason
+                ),
+                showAlert = ShowAlert { msg, alertType, duration -> showAlert(msg, alertType, duration) },
+                clickAudio = { toggleAudio() },
+                clickVideo = { toggleVideo() },
+                audioAlreadyOn = media.audioAlreadyOn,
+                videoAlreadyOn = media.videoAlreadyOn
+            )
+        )
+    }
+
+    private suspend fun handleAddedAsPanelistEvent(payload: Map<String, Any?>) {
+        val message = payload["message"] as? String ?: "You have been added as a panelist"
+
+        addedAsPanelist(
+            AddedAsPanelistOptions(
+                data = AddedAsPanelistData(message = message),
+                showAlert = ShowAlert { msg, type, duration -> showAlert(msg, type, duration) }
+            )
+        )
+    }
+
+    private suspend fun handleRemovedFromPanelistsEvent(payload: Map<String, Any?>) {
+        val message = payload["message"] as? String ?: "You have been removed from panelists"
+
+        removedFromPanelists(
+            RemovedFromPanelistsOptions(
+                data = RemovedFromPanelistsData(message = message),
+                showAlert = ShowAlert { msg, type, duration -> showAlert(msg, type, duration) }
+            )
+        )
     }
 
     // Helper to convert SocketManager to SocketLike
@@ -1932,6 +2708,144 @@ class MediasfuGenericState internal constructor(
                 JsonPrimitive(toString())
             }
         }
+    }
+
+    private fun Map<*, *>.toStringAnyMap(): Map<String, Any?> = buildMap {
+        this@toStringAnyMap.forEach { (k, v) ->
+            val key = k as? String ?: return@forEach
+            put(key, v)
+        }
+    }
+
+    private fun Any?.toBooleanLoose(): Boolean = when (this) {
+        is Boolean -> this
+        is Number -> this.toInt() != 0
+        is String -> this.equals("true", ignoreCase = true) || this == "1"
+        else -> false
+    }
+
+    private fun Any?.toBooleanLooseOrNull(): Boolean? = when (this) {
+        null -> null
+        is Boolean -> this
+        is Number -> this.toInt() != 0
+        is String -> when {
+            this.equals("true", ignoreCase = true) || this == "1" -> true
+            this.equals("false", ignoreCase = true) || this == "0" -> false
+            else -> null
+        }
+        else -> null
+    }
+
+    private fun Map<String, Any?>.toTranslationRoomConfig(): TranslationRoomConfig? {
+        val supportTranslation = this["supportTranslation"].toBooleanLoose()
+        val spokenMode = (this["spokenLanguageMode"] as? String)
+            ?.let { runCatching { LanguageMode.valueOf(it.uppercase()) }.getOrNull() }
+            ?: LanguageMode.ANY
+        val listenMode = (this["listenLanguageMode"] as? String)
+            ?.let { runCatching { LanguageMode.valueOf(it.uppercase()) }.getOrNull() }
+            ?: LanguageMode.ANY
+
+        @Suppress("UNCHECKED_CAST")
+        val allowedSpoken = (this["allowedSpokenLanguages"] as? List<*>)
+            ?.mapNotNull { entry ->
+                val map = (entry as? Map<*, *>)?.toStringAnyMap() ?: return@mapNotNull null
+                val code = map["code"] as? String ?: return@mapNotNull null
+                LanguageEntry(code = code, nickname = map["nickname"] as? String)
+            }
+
+        @Suppress("UNCHECKED_CAST")
+        val allowedListen = (this["allowedListenLanguages"] as? List<*>)
+            ?.mapNotNull { entry ->
+                val map = (entry as? Map<*, *>)?.toStringAnyMap() ?: return@mapNotNull null
+                val code = map["code"] as? String ?: return@mapNotNull null
+                LanguageEntry(code = code, nickname = map["nickname"] as? String)
+            }
+
+        val blockedSpoken = (this["blockedSpokenLanguages"] as? List<*>)?.mapNotNull { it as? String }
+        val blockedListen = (this["blockedListenLanguages"] as? List<*>)?.mapNotNull { it as? String }
+        val maxChannels = (this["maxActiveChannelsPerSpeaker"] as? Number)?.toInt() ?: 5
+        val autoDetect = this["autoDetectSpokenLanguage"].toBooleanLoose()
+        val allowSpokenChange = this["allowSpokenLanguageChange"].toBooleanLooseOrNull()
+        val allowListenChange = this["allowListenLanguageChange"].toBooleanLooseOrNull()
+
+        return TranslationRoomConfig(
+            supportTranslation = supportTranslation,
+            spokenLanguageMode = spokenMode,
+            allowedSpokenLanguages = allowedSpoken,
+            blockedSpokenLanguages = blockedSpoken,
+            listenLanguageMode = listenMode,
+            allowedListenLanguages = allowedListen,
+            blockedListenLanguages = blockedListen,
+            maxActiveChannelsPerSpeaker = maxChannels,
+            autoDetectSpokenLanguage = autoDetect,
+            allowSpokenLanguageChange = allowSpokenChange,
+            allowListenLanguageChange = allowListenChange
+        )
+    }
+
+    private fun Map<String, String>.mergePatch(
+        patch: Map<String, String>,
+        removeEmpty: Boolean = false
+    ): Map<String, String> {
+        val next = toMutableMap()
+        patch.forEach { (k, v) ->
+            if (removeEmpty && v.isBlank()) {
+                next.remove(k)
+            } else {
+                next[k] = v
+            }
+        }
+        return next.toMap()
+    }
+
+    private fun Map<String, List<String>>.mergeListPatch(
+        patch: Map<String, List<String>>,
+        removeEmpty: Boolean = false
+    ): Map<String, List<String>> {
+        val next = toMutableMap()
+        patch.forEach { (k, v) ->
+            if (removeEmpty && v.isEmpty()) {
+                next.remove(k)
+            } else {
+                next[k] = v
+            }
+        }
+        return next.toMap()
+    }
+
+    private fun Map<String, Map<String, String>>.mergeNestedPatch(
+        patch: Map<String, Map<String, String>>,
+        removeEmpty: Boolean = false
+    ): Map<String, Map<String, String>> {
+        val next = toMutableMap()
+        patch.forEach { (outerKey, innerPatch) ->
+            if (innerPatch.isEmpty() && removeEmpty) {
+                next.remove(outerKey)
+            } else {
+                val mergedInner = (next[outerKey] ?: emptyMap()).toMutableMap()
+                innerPatch.forEach { (k, v) ->
+                    if (removeEmpty && v.isBlank()) mergedInner.remove(k) else mergedInner[k] = v
+                }
+                if (mergedInner.isEmpty() && removeEmpty) {
+                    next.remove(outerKey)
+                } else {
+                    next[outerKey] = mergedInner.toMap()
+                }
+            }
+        }
+        return next.toMap()
+    }
+
+    private fun Map<String, Map<String, Any?>>.mergeNestedAnyPatch(
+        patch: Map<String, Map<String, Any?>>
+    ): Map<String, Map<String, Any?>> {
+        val next = toMutableMap()
+        patch.forEach { (outerKey, innerPatch) ->
+            val mergedInner = (next[outerKey] ?: emptyMap()).toMutableMap()
+            mergedInner.putAll(innerPatch)
+            next[outerKey] = mergedInner.toMap()
+        }
+        return next.toMap()
     }
 
     private fun applyInitialOptions() {
@@ -2238,6 +3152,25 @@ class MediasfuGenericState internal constructor(
     private fun resetToInitialValues() {
         // Increment session counter FIRST to force UI recomposition and clear cached composables
         incrementSessionCounter()
+
+        // PARITY AUXILIARY STATE - translation, permissions, panelists
+        _translationSupported.value = false
+        _translationConfig.value = null
+        _mySpokenLanguage.value = ""
+        _mySpokenLanguageEnabled.value = false
+        _myDefaultOutputLanguage.value = null
+        _myDefaultListenLanguage.value = null
+        _showTranslationSubtitles.value = true
+        _translationTranscripts.value = emptyList()
+        _translationProducerMap.value = emptyMap()
+        _translationChannelsBySpeaker.value = emptyMap()
+        _participantTranslationState.value = emptyMap()
+        _listenPreferences.value = emptyMap()
+        _permissionConfig.value = null
+        _panelists.value = emptyList()
+        _panelistsFocused.value = false
+        _muteOthersMic.value = false
+        _muteOthersCamera.value = false
         
         // ROOM STATE - participants, members, host info
         room.updateCoHost("No coHost")
@@ -2328,6 +3261,15 @@ class MediasfuGenericState internal constructor(
         breakout.updateBreakOutRoomEnded(false)
 
         // WHITEBOARD STATE
+        whiteboard.updateUsers(emptyList())
+        whiteboard.updateCurrentIndex(null)
+        whiteboard.updateCanStart(false)
+        whiteboard.updateStarted(false)
+        whiteboard.updateEnded(false)
+        whiteboard.updateShapes(emptyList())
+        whiteboard.updateUseImageBackground(true)
+        whiteboard.updateRedoStack(emptyList())
+        whiteboard.updateUndoStack(emptyList())
         whiteboard.refresh()
 
         // DISPLAY STATE - Grid components (CRITICAL for FlexibleGrid)
@@ -2612,6 +3554,694 @@ class MediasfuGenericState internal constructor(
                 removeParticipants(options)
             }.onFailure { error ->
                 showAlert("Unable to remove ${participant.name}. Please try again.", "danger")
+            }
+        }
+    }
+
+    fun addPanelist(participant: Participant) {
+        val socket = connectivity.socket
+        if (socket == null) {
+            showAlert("Unable to add panelist. Connection not established.", "danger")
+            return
+        }
+
+        val isHost = room.youAreHost || room.islevel.equals("2", ignoreCase = true)
+        if (!isHost) {
+            showAlert("Only the host can add panelists.", "danger")
+            return
+        }
+
+        if (participant.islevel.equals("2", ignoreCase = true)) {
+            showAlert("Host cannot be added as panelist.", "info")
+            return
+        }
+
+        val participantId = participant.id ?: return
+        if (_panelists.value.any { it.id == participantId }) {
+            showAlert("${participant.name} is already a panelist.", "info")
+            return
+        }
+
+        val maxPanelists = media.itemPageLimit.takeIf { it > 0 } ?: 10
+        if (_panelists.value.size >= maxPanelists) {
+            showAlert("Maximum panelist limit ($maxPanelists) reached.", "danger")
+            return
+        }
+
+        val roomName = room.roomName.ifBlank { parameters.roomName }
+        if (roomName.isBlank()) {
+            showAlert("Missing room information. Please try again.", "danger")
+            return
+        }
+
+        scope.launch {
+            runCatching {
+                socket.emitWithAck(
+                    "addPanelist",
+                    mapOf(
+                        "participantId" to participantId,
+                        "participantName" to participant.name,
+                        "roomName" to roomName
+                    )
+                ) { response ->
+                    val responseMap = (response as? Map<*, *>)?.toStringAnyMap() ?: emptyMap()
+                    val success = responseMap["success"].toBooleanLoose()
+                    val reason = responseMap["reason"]?.toString()
+                    scope.launch {
+                        if (success) {
+                            _panelists.value = (_panelists.value + participant).distinctBy { it.id ?: it.name }
+                            showAlert("${participant.name} added as panelist.", "success", 2_000)
+                        } else {
+                            showAlert(reason ?: "Failed to add panelist.", "danger", 3_000)
+                        }
+                    }
+                }
+            }.onFailure {
+                showAlert("Unable to add ${participant.name} as panelist.", "danger")
+            }
+        }
+    }
+
+    fun removePanelist(participant: Participant) {
+        val socket = connectivity.socket
+        if (socket == null) {
+            showAlert("Unable to remove panelist. Connection not established.", "danger")
+            return
+        }
+
+        val isHost = room.youAreHost || room.islevel.equals("2", ignoreCase = true)
+        if (!isHost) {
+            showAlert("Only the host can remove panelists.", "danger")
+            return
+        }
+
+        val participantId = participant.id ?: return
+        val roomName = room.roomName.ifBlank { parameters.roomName }
+        if (roomName.isBlank()) {
+            showAlert("Missing room information. Please try again.", "danger")
+            return
+        }
+
+        scope.launch {
+            runCatching {
+                socket.emitWithAck(
+                    "removePanelist",
+                    mapOf(
+                        "participantId" to participantId,
+                        "participantName" to participant.name,
+                        "roomName" to roomName
+                    )
+                ) { response ->
+                    val responseMap = (response as? Map<*, *>)?.toStringAnyMap() ?: emptyMap()
+                    val success = responseMap["success"].toBooleanLoose()
+                    val reason = responseMap["reason"]?.toString()
+                    scope.launch {
+                        if (success) {
+                            _panelists.value = _panelists.value.filterNot { it.id == participantId }
+                            showAlert("${participant.name} removed from panelists.", "info", 2_000)
+                        } else {
+                            showAlert(reason ?: "Failed to remove panelist.", "danger", 3_000)
+                        }
+                    }
+                }
+            }.onFailure {
+                showAlert("Unable to remove ${participant.name} from panelists.", "danger")
+            }
+        }
+    }
+
+    fun clearAllPanelists() {
+        val socket = connectivity.socket
+        if (socket == null) {
+            showAlert("Unable to clear panelists. Connection not established.", "danger")
+            return
+        }
+
+        val isHost = room.youAreHost || room.islevel.equals("2", ignoreCase = true)
+        if (!isHost) {
+            showAlert("Only the host can clear panelists.", "danger")
+            return
+        }
+
+        val roomName = room.roomName.ifBlank { parameters.roomName }
+        if (roomName.isBlank()) {
+            showAlert("Missing room information. Please try again.", "danger")
+            return
+        }
+
+        scope.launch {
+            runCatching {
+                socket.emitWithAck(
+                    "updatePanelists",
+                    mapOf("panelists" to emptyList<Map<String, String>>(), "roomName" to roomName)
+                ) { response ->
+                    val responseMap = (response as? Map<*, *>)?.toStringAnyMap() ?: emptyMap()
+                    val success = responseMap["success"].toBooleanLoose()
+                    val reason = responseMap["reason"]?.toString()
+                    scope.launch {
+                        if (success) {
+                            _panelists.value = emptyList()
+                            _panelistsFocused.value = false
+                            _muteOthersMic.value = false
+                            _muteOthersCamera.value = false
+                            showAlert("Panelists cleared.", "success", 2_000)
+                        } else {
+                            showAlert(reason ?: "Failed to clear panelists.", "danger", 3_000)
+                        }
+                    }
+                }
+            }.onFailure {
+                showAlert("Unable to clear panelists.", "danger")
+            }
+        }
+    }
+
+    fun togglePanelistFocus() {
+        applyPanelistFocus(
+            enabled = !_panelistsFocused.value,
+            muteMic = if (_panelistsFocused.value) false else _muteOthersMic.value,
+            muteCamera = if (_panelistsFocused.value) false else _muteOthersCamera.value
+        )
+    }
+
+    fun togglePanelistFocusMuteMic() {
+        if (!_panelistsFocused.value) return
+        applyPanelistFocus(
+            enabled = true,
+            muteMic = !_muteOthersMic.value,
+            muteCamera = _muteOthersCamera.value
+        )
+    }
+
+    fun togglePanelistFocusMuteCamera() {
+        if (!_panelistsFocused.value) return
+        applyPanelistFocus(
+            enabled = true,
+            muteMic = _muteOthersMic.value,
+            muteCamera = !_muteOthersCamera.value
+        )
+    }
+
+    private fun applyPanelistFocus(enabled: Boolean, muteMic: Boolean, muteCamera: Boolean) {
+        val socket = connectivity.socket
+        if (socket == null) {
+            showAlert("Unable to update panelist focus. Connection not established.", "danger")
+            return
+        }
+
+        val isHost = room.youAreHost || room.islevel.equals("2", ignoreCase = true)
+        if (!isHost) {
+            showAlert("Only the host can update panelist focus.", "danger")
+            return
+        }
+
+        val roomName = room.roomName.ifBlank { parameters.roomName }
+        if (roomName.isBlank()) {
+            showAlert("Missing room information. Please try again.", "danger")
+            return
+        }
+
+        scope.launch {
+            runCatching {
+                socket.emitWithAck(
+                    "focusPanelists",
+                    mapOf(
+                        "roomName" to roomName,
+                        "focusEnabled" to enabled,
+                        "muteOthersMic" to if (enabled) muteMic else false,
+                        "muteOthersCamera" to if (enabled) muteCamera else false
+                    )
+                ) { response ->
+                    val responseMap = (response as? Map<*, *>)?.toStringAnyMap() ?: emptyMap()
+                    val success = responseMap["success"].toBooleanLoose()
+                    val reason = responseMap["reason"]?.toString()
+
+                    scope.launch {
+                        if (!success) {
+                            showAlert(reason ?: "Failed to update panelist focus.", "danger", 3_000)
+                            return@launch
+                        }
+
+                        _panelistsFocused.value = enabled
+                        _muteOthersMic.value = if (enabled) muteMic else false
+                        _muteOthersCamera.value = if (enabled) muteCamera else false
+
+                        val message = if (!enabled) {
+                            "Panelist focus disabled"
+                        } else {
+                            buildString {
+                                append("Panelist focus enabled")
+                                if (muteMic && muteCamera) append(" (others' mic & camera muted)")
+                                else if (muteMic) append(" (others' mic muted)")
+                                else if (muteCamera) append(" (others' camera muted)")
+                            }
+                        }
+                        showAlert(message, if (enabled) "success" else "info", 2_500)
+                    }
+                }
+            }.onFailure {
+                showAlert("Unable to update panelist focus.", "danger")
+            }
+        }
+    }
+
+    fun permissionValue(level: String, key: String, default: String): String {
+        val levelMap = (_permissionConfig.value?.values?.get(level) as? Map<*, *>)?.toStringAnyMap() ?: emptyMap()
+        return levelMap[key]?.toString()?.ifBlank { default } ?: default
+    }
+
+    fun toggleAudienceChatPermission() {
+        val current = permissionValue(level = "level0", key = "useChat", default = "allow")
+        val next = if (current == "allow") "disallow" else "allow"
+        updatePermissionCapability(level = "level0", key = "useChat", value = next)
+    }
+
+    fun cycleAudienceMicPermission() {
+        val current = permissionValue(level = "level0", key = "useMic", default = "approval")
+        updatePermissionCapability(level = "level0", key = "useMic", value = cyclePermissionValue(current))
+    }
+
+    fun cycleAudienceCameraPermission() {
+        val current = permissionValue(level = "level0", key = "useCamera", default = "approval")
+        updatePermissionCapability(level = "level0", key = "useCamera", value = cyclePermissionValue(current))
+    }
+
+    fun cycleAudienceScreenPermission() {
+        val current = permissionValue(level = "level0", key = "useScreen", default = "disallow")
+        updatePermissionCapability(level = "level0", key = "useScreen", value = cyclePermissionValue(current))
+    }
+
+    private fun cyclePermissionValue(current: String): String {
+        return when (current.lowercase()) {
+            "allow" -> "approval"
+            "approval" -> "disallow"
+            else -> "allow"
+        }
+    }
+
+    private fun updatePermissionCapability(level: String, key: String, value: String) {
+        val socket = connectivity.socket
+        if (socket == null) {
+            showAlert("Unable to update permissions. Connection not established.", "danger")
+            return
+        }
+
+        val isHost = room.youAreHost || room.islevel.equals("2", ignoreCase = true)
+        if (!isHost) {
+            showAlert("Only the host can update permission configuration.", "danger")
+            return
+        }
+
+        val roomName = room.roomName.ifBlank { parameters.roomName }
+        if (roomName.isBlank()) {
+            showAlert("Missing room information. Please try again.", "danger")
+            return
+        }
+
+        val currentConfig = _permissionConfig.value?.values ?: emptyMap()
+        val mutableConfig = currentConfig.toMutableMap()
+        val levelMap = ((mutableConfig[level] as? Map<*, *>)?.toStringAnyMap() ?: emptyMap()).toMutableMap()
+        levelMap[key] = value
+        mutableConfig[level] = levelMap.toMap()
+
+        applyPermissionConfig(mutableConfig)
+    }
+
+    internal fun applyPermissionConfig(configValues: Map<String, Any?>) {
+        val socket = connectivity.socket
+        if (socket == null) {
+            showAlert("Unable to update permissions. Connection not established.", "danger")
+            return
+        }
+
+        val isHost = room.youAreHost || room.islevel.equals("2", ignoreCase = true)
+        if (!isHost) {
+            showAlert("Only the host can update permission configuration.", "danger")
+            return
+        }
+
+        val roomName = room.roomName.ifBlank { parameters.roomName }
+        if (roomName.isBlank()) {
+            showAlert("Missing room information. Please try again.", "danger")
+            return
+        }
+
+        scope.launch {
+            runCatching {
+                socket.emitWithAck(
+                    "updatePermissionConfig",
+                    mapOf(
+                        "config" to configValues,
+                        "roomName" to roomName
+                    )
+                ) { response ->
+                    val responseMap = (response as? Map<*, *>)?.toStringAnyMap() ?: emptyMap()
+                    val success = responseMap["success"].toBooleanLoose()
+                    val reason = responseMap["reason"]?.toString()
+                    scope.launch {
+                        if (success) {
+                            _permissionConfig.value = PermissionConfig(configValues)
+                            showAlert("Permission configuration updated", "success", 2_000)
+                        } else {
+                            showAlert(reason ?: "Failed to update permission configuration.", "danger", 3_000)
+                        }
+                    }
+                }
+            }.onFailure {
+                showAlert("Unable to update permission configuration.", "danger")
+            }
+        }
+    }
+
+    private fun labelForKey(key: String): String {
+        return when (key) {
+            "useMic" -> "Audience mic"
+            "useCamera" -> "Audience camera"
+            "useScreen" -> "Audience screen"
+            "useChat" -> "Audience chat"
+            else -> key
+        }
+    }
+
+    private fun shouldConsumeTranslation(speakerId: String, language: String): Boolean {
+        val preferredLanguage = _listenPreferences.value[speakerId]
+            ?.takeIf { it.isNotBlank() }
+            ?: _myDefaultListenLanguage.value?.takeIf { !it.isNullOrBlank() }
+
+        return !preferredLanguage.isNullOrBlank() && preferredLanguage.equals(language, ignoreCase = true)
+    }
+
+    private fun translationProducerIdsForSpeaker(speakerId: String): List<String> {
+        val originalProducerId = _participantTranslationState.value[speakerId]?.get("originalProducerId") as? String
+            ?: return emptyList()
+
+        return _translationProducerMap.value[originalProducerId]
+            .orEmpty()
+            .values
+            .filter { it.isNotBlank() }
+            .distinct()
+    }
+
+    private suspend fun startConsumingTranslation(
+        producerId: String,
+        speakerId: String,
+        language: String,
+        originalProducerId: String
+    ) {
+        if (producerId.isBlank()) return
+
+        val existingTransport = parameters.consumerTransportInfos.firstOrNull { it.producerId == producerId }
+        if (existingTransport != null) {
+            resumeConsumerByProducerId(producerId)
+            pauseOriginalProducer(originalProducerId, speakerId)
+            return
+        }
+
+        val socket = connectivity.socket ?: return
+        val signalParameters = object : SignalNewConsumerTransportParameters {
+            override val consumingTransports: List<String>
+                get() = parameters.consumingTransports
+
+            override val consumerTransports: List<ConsumerTransportInfo>
+                get() = parameters.consumerTransportInfos
+
+            override val lockScreen: Boolean
+                get() = parameters.lockScreen
+
+            override val device = parameters.device
+
+            override val rtpCapabilities = parameters.rtpCapabilities
+
+            override val routerRtpCapabilities = parameters.routerRtpCapabilities
+
+            override val negotiatedRecvRtpCapabilities = parameters.negotiatedRecvRtpCapabilities
+
+            override fun updateConsumingTransports(transports: List<String>) {
+                parameters.consumingTransports = transports
+            }
+
+            override val updateConsumerTransports: (List<ConsumerTransportInfo>) -> Unit
+                get() = { infos ->
+                    parameters.consumerTransportInfos = infos
+                    parameters.consumerTransportsWebRtc = infos.mapNotNull { it.consumerTransport }
+                }
+
+            override val consumerResume: suspend (ConsumerResumeOptions) -> Unit
+                get() = { options -> com.mediasfu.sdk.consumers.consumerResume(options) }
+
+            override val consumerResumeParamsProvider: () -> com.mediasfu.sdk.consumers.ConsumerResumeParameters
+                get() = { createConsumerResumeParameters(parameters) }
+
+            override val reorderStreams: suspend (ReorderStreamsOptions) -> Unit
+                get() = { options -> parameters.reorderStreams.invoke(options) }
+
+            override fun getUpdatedAllParams(): SignalNewConsumerTransportParameters = this
+        }
+
+        val consumeResult = signalNewConsumerTransport(
+            SignalNewConsumerTransportOptions(
+                producerId = producerId,
+                islevel = room.islevel.ifBlank { parameters.islevel },
+                socket = socket,
+                parameters = signalParameters
+            )
+        )
+
+        consumeResult
+            .onSuccess {
+                pauseOriginalProducer(originalProducerId, speakerId)
+            }
+            .onFailure { error ->
+                Logger.e(
+                    "MediasfuGeneric",
+                    "MediaSFU - failed to consume translation $language for $speakerId: ${error.message}"
+                )
+            }
+    }
+
+    private suspend fun stopConsumingTranslationForSpeaker(speakerId: String) {
+        translationProducerIdsForSpeaker(speakerId).forEach { producerId ->
+            stopConsumingTranslationByProducerId(producerId)
+        }
+    }
+
+    private suspend fun stopConsumingTranslationByProducerId(producerId: String) {
+        if (producerId.isBlank()) return
+
+        val transportInfo = parameters.consumerTransportInfos.firstOrNull { it.producerId == producerId }
+        val audioIndex = streams.allAudioStreams.indexOfFirst { it.producerId == producerId }
+
+        if (audioIndex >= 0) {
+            streams.updateAllAudioStreams(
+                streams.allAudioStreams.filterNot { it.producerId == producerId }
+            )
+
+            if (audioIndex < streams.audioOnlyStreams.size) {
+                val updatedAudioOnly = streams.audioOnlyStreams.toMutableList().apply {
+                    removeAt(audioIndex)
+                }
+                streams.updateAudioOnlyStreams(updatedAudioOnly)
+            }
+        }
+
+        transportInfo?.let { info ->
+            val consumerId = info.consumer?.id
+            if (!consumerId.isNullOrBlank()) {
+                runCatching {
+                    info.socket?.emit(
+                        "consumer-close",
+                        mapOf("serverConsumerId" to consumerId)
+                    )
+                }
+            }
+
+            runCatching { info.consumer?.close() }
+            runCatching { info.consumerTransport?.close() }
+        }
+
+        val updatedInfos = parameters.consumerTransportInfos.filterNot { it.producerId == producerId }
+        if (updatedInfos.size != parameters.consumerTransportInfos.size) {
+            parameters.consumerTransportInfos = updatedInfos
+            parameters.consumerTransportsWebRtc = updatedInfos.mapNotNull { it.consumerTransport }
+        }
+
+        parameters.consumingTransports = parameters.consumingTransports.filterNot { it == producerId }
+    }
+
+    private suspend fun pauseOriginalProducer(originalProducerId: String, speakerId: String) {
+        if (originalProducerId.isBlank()) return
+
+        val transportInfo = parameters.consumerTransportInfos.firstOrNull { info ->
+            info.producerId == originalProducerId &&
+                ((info.consumer?.track?.kind ?: info.consumer?.kind?.name?.lowercase()) == "audio")
+        } ?: return
+
+        val consumer = transportInfo.consumer ?: return
+        if (consumer.paused) return
+
+        runCatching {
+            transportInfo.socket?.emitWithAck<Any?>(
+                event = "consumer-pause",
+                data = mapOf("serverConsumerId" to consumer.id)
+            )
+        }.onFailure {
+            Logger.e(
+                "MediasfuGeneric",
+                "MediaSFU - failed to pause original producer $originalProducerId for $speakerId: ${it.message}"
+            )
+        }
+
+        runCatching { consumer.pause() }
+    }
+
+    private suspend fun resumeOriginalProducer(originalProducerId: String, speakerId: String) {
+        if (originalProducerId.isBlank()) return
+
+        val hasActiveTranslation = translationProducerIdsForSpeaker(speakerId).any { translationProducerId ->
+            parameters.consumerTransportInfos.any { it.producerId == translationProducerId }
+        }
+        if (hasActiveTranslation) return
+
+        resumeConsumerByProducerId(originalProducerId)
+    }
+
+    private suspend fun resumeConsumerByProducerId(producerId: String) {
+        if (producerId.isBlank()) return
+
+        val transportInfo = parameters.consumerTransportInfos.firstOrNull { it.producerId == producerId } ?: return
+        val consumer = transportInfo.consumer ?: return
+        if (!consumer.paused) return
+
+        val resumeResponse = runCatching {
+            transportInfo.socket?.emitWithAck<Any?>(
+                event = "consumer-resume",
+                data = mapOf("serverConsumerId" to consumer.id)
+            )
+        }.getOrNull()
+
+        val resumed = when (resumeResponse) {
+            is Map<*, *> -> resumeResponse["resumed"].toBooleanLoose()
+            is Boolean -> resumeResponse
+            null -> true
+            else -> false
+        }
+
+        if (resumed) {
+            runCatching { consumer.resume() }
+        }
+    }
+
+    internal fun applyTranslationSettings(
+        spokenLanguage: String,
+        spokenEnabled: Boolean,
+        defaultOutputLanguage: String?,
+        defaultListenLanguage: String?,
+        perSpeakerListenPreferences: Map<String, String>,
+        showSubtitles: Boolean
+    ) {
+        val socket = connectivity.socket
+        if (socket == null) {
+            showAlert("Unable to update translation settings. Connection not established.", "danger")
+            return
+        }
+
+        val roomName = room.roomName.ifBlank { parameters.roomName }
+        if (roomName.isBlank()) {
+            showAlert("Missing room information. Please try again.", "danger")
+            return
+        }
+
+        scope.launch {
+            runCatching {
+                if (translationSupported.value) {
+                    socket.emit(
+                        "translation:setMyLanguage",
+                        buildMap<String, Any?> {
+                            put("roomName", roomName)
+                            put("language", spokenLanguage)
+                            put("enabled", spokenEnabled)
+                            put("defaultOutputLanguage", defaultOutputLanguage)
+                        }
+                    )
+
+                    if (perSpeakerListenPreferences.isEmpty()) {
+                        socket.emit(
+                            "translation:setDefaultListenLanguage",
+                            mapOf(
+                                "roomName" to roomName,
+                                "language" to defaultListenLanguage
+                            )
+                        )
+
+                        _listenPreferences.value.keys.forEach { speakerId ->
+                            _listenPreferences.value[speakerId]?.let { language ->
+                                socket.emit(
+                                    "translation:unsubscribe",
+                                    mapOf(
+                                        "roomName" to roomName,
+                                        "speakerId" to speakerId,
+                                        "language" to language
+                                    )
+                                )
+                            }
+                        }
+                    } else {
+                        socket.emit(
+                            "translation:setDefaultListenLanguage",
+                            mapOf(
+                                "roomName" to roomName,
+                                "language" to null
+                            )
+                        )
+
+                        perSpeakerListenPreferences.forEach { (speakerId, language) ->
+                            val previous = _listenPreferences.value[speakerId]
+                            if (previous != language) {
+                                if (!previous.isNullOrBlank()) {
+                                    socket.emit(
+                                        "translation:unsubscribe",
+                                        mapOf(
+                                            "roomName" to roomName,
+                                            "speakerId" to speakerId,
+                                            "language" to previous
+                                        )
+                                    )
+                                }
+                                socket.emit(
+                                    "translation:subscribe",
+                                    mapOf(
+                                        "roomName" to roomName,
+                                        "speakerId" to speakerId,
+                                        "language" to language
+                                    )
+                                )
+                            }
+                        }
+
+                        _listenPreferences.value.forEach { (speakerId, language) ->
+                            if (!perSpeakerListenPreferences.containsKey(speakerId) && language.isNotBlank()) {
+                                socket.emit(
+                                    "translation:unsubscribe",
+                                    mapOf(
+                                        "roomName" to roomName,
+                                        "speakerId" to speakerId,
+                                        "language" to language
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                _mySpokenLanguage.value = spokenLanguage
+                _mySpokenLanguageEnabled.value = spokenEnabled
+                _myDefaultOutputLanguage.value = defaultOutputLanguage
+                _myDefaultListenLanguage.value = defaultListenLanguage
+                _showTranslationSubtitles.value = showSubtitles
+                _listenPreferences.value = if (perSpeakerListenPreferences.isEmpty()) emptyMap() else perSpeakerListenPreferences
+                showAlert("Translation settings saved", "success", 2_000)
+            }.onFailure {
+                showAlert("Failed to save translation settings", "danger", 3_000)
             }
         }
     }
@@ -3140,10 +4770,16 @@ class MediasfuGenericState internal constructor(
     internal fun createWhiteboardModalOptions(): WhiteboardModalOptions {
         val isActive = whiteboard.whiteboardStarted && !whiteboard.whiteboardEnded
         val hasAccess = hasWhiteboardDrawingAccess()
+        val showingScreenboard = modals.isScreenboardVisible
 
         return WhiteboardModalOptions(
-            isVisible = modals.isWhiteboardVisible,
-            onClose = { modals.setWhiteboardVisibility(false) },
+            isVisible = modals.isWhiteboardVisible || showingScreenboard,
+            onClose = {
+                if (showingScreenboard) {
+                    modals.setScreenboardVisibility(false)
+                }
+                modals.setWhiteboardVisibility(false)
+            },
             onStart = { startWhiteboardSession() },
             onStop = { stopWhiteboardSession() },
             onClear = { clearWhiteboardContent() },
@@ -7339,6 +8975,7 @@ class ModalState(
         if (isScreenboardVisible == visible) return
         isScreenboardVisible = visible
         parameters.isScreenboardModalVisible = visible
+        if (!visible) onSidebarClose?.invoke(SidebarContent.Screenboard)
         notifier()
     }
 
@@ -7958,6 +9595,7 @@ private fun MediasfuGenericContent(state: MediasfuGenericState, modifier: Modifi
         state.modals.isShareEventVisible,
         state.modals.isBreakoutRoomsVisible,
         state.polls.isPollModalVisible,
+        state.modals.isScreenboardVisible,
         state.modals.isWhiteboardVisible,
         state.modals.isConfigureWhiteboardVisible,
         state.modals.isBackgroundVisible
@@ -7978,6 +9616,7 @@ private fun MediasfuGenericContent(state: MediasfuGenericState, modifier: Modifi
                 state.modals.isShareEventVisible -> SidebarContent.Share
                 state.modals.isBreakoutRoomsVisible -> SidebarContent.BreakoutRooms
                 state.polls.isPollModalVisible -> SidebarContent.Polls
+                state.modals.isScreenboardVisible -> SidebarContent.Screenboard
                 state.modals.isWhiteboardVisible -> SidebarContent.Whiteboard
                 state.modals.isConfigureWhiteboardVisible -> SidebarContent.Whiteboard // Map ConfigureWhiteboard to Whiteboard
                 state.modals.isBackgroundVisible -> SidebarContent.Background
@@ -8245,6 +9884,16 @@ private fun UnifiedModalContentAdapter(
                 PollModalContentForUnifiedModal(
                     state = state,
                     modifier = Modifier.fillMaxSize().padding(16.dp)
+                )
+            }
+        }
+
+        SidebarContent.Screenboard -> {
+            Column(modifier = Modifier.fillMaxSize()) {
+                UnifiedModalHeader(title = "Screenboard", onBack = onBack, onClose = onClose)
+                WhiteboardModalContentEmbedded(
+                    state = state,
+                    onClose = onClose
                 )
             }
         }
@@ -10496,7 +12145,7 @@ private fun WhiteboardParticipantList(
 
 private fun Any?.toWhiteboardAckResult(): Pair<Boolean, String?> = when (this) {
     is Map<*, *> -> {
-        val success = (this["success"] as? Boolean) ?: false
+        val success = this["success"].toWhiteboardLooseBoolean()
         val reason = this["reason"] as? String
         success to reason
     }
@@ -10509,6 +12158,13 @@ private fun Any?.toWhiteboardAckResult(): Pair<Boolean, String?> = when (this) {
         else -> false to this
     }
     else -> false to null
+}
+
+private fun Any?.toWhiteboardLooseBoolean(): Boolean = when (this) {
+    is Boolean -> this
+    is Number -> this.toInt() != 0
+    is String -> this.equals("true", ignoreCase = true) || this == "1"
+    else -> false
 }
 
 // ==================== End of Embedded Modal Content Composables ====================
@@ -10710,7 +12366,86 @@ private fun MainAspectInline(
                     .align(Alignment.BottomStart)
                     .padding(12.dp)
             )
+
+            PanelistFocusOverlay(
+                isFocused = state.panelistsFocused.collectAsState().value,
+                muteOthersMic = state.muteOthersMic.collectAsState().value,
+                muteOthersCamera = state.muteOthersCamera.collectAsState().value,
+                panelistCount = state.panelists.collectAsState().value.size,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(12.dp)
+            )
+
+            TranslationSubtitleOverlay(
+                transcript = state.translationTranscripts.collectAsState().value.lastOrNull(),
+                isVisible = state.showTranslationSubtitles.collectAsState().value,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 20.dp)
+            )
         }
+    }
+}
+
+@Composable
+private fun PanelistFocusOverlay(
+    isFocused: Boolean,
+    muteOthersMic: Boolean,
+    muteOthersCamera: Boolean,
+    panelistCount: Int,
+    modifier: Modifier = Modifier
+) {
+    if (!isFocused) return
+
+    Row(
+        modifier = modifier
+            .background(Color(0xCC101623), RoundedCornerShape(10.dp))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "Panelist focus ON ($panelistCount)",
+            color = Color(0xFFFFC107),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        if (muteOthersMic) {
+            Text("Mic-muted", color = Color.White, fontSize = 11.sp)
+        }
+        if (muteOthersCamera) {
+            Text("Cam-muted", color = Color.White, fontSize = 11.sp)
+        }
+    }
+}
+
+@Composable
+private fun TranslationSubtitleOverlay(
+    transcript: TranslationTranscriptData?,
+    isVisible: Boolean,
+    modifier: Modifier = Modifier
+) {
+    if (!isVisible || transcript == null) return
+
+    val text = transcript.translatedText.ifBlank { transcript.originalText }
+    if (text.isBlank()) return
+
+    Box(
+        modifier = modifier
+            .background(Color(0xCC000000), RoundedCornerShape(8.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+            .widthIn(max = 760.dp)
+    ) {
+        Text(
+            text = "${transcript.speakerName}: $text",
+            color = Color.White,
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -11654,8 +13389,42 @@ internal fun MediasfuGenericState.primaryControlButtons(includeExtended: Boolean
         )
     )
 
+    val isHost = room.youAreHost || room.islevel.equals("2", ignoreCase = true)
+    val panelistButtons = if (isHost && (room.eventType == EventType.WEBINAR || room.eventType == EventType.CONFERENCE)) {
+        listOf(
+            ControlButtonModel(
+                label = if (panelistsFocused.value) "Unfocus" else "Focus",
+                icon = Icons.Rounded.Group,
+                isActive = panelistsFocused.value,
+                onClick = { togglePanelistFocus() },
+                activeTint = Color(0xFFFFC107),
+                isVisible = panelists.value.isNotEmpty()
+            ),
+            ControlButtonModel(
+                label = "Mute Mic",
+                icon = Icons.Rounded.MicOff,
+                isActive = muteOthersMic.value,
+                onClick = { togglePanelistFocusMuteMic() },
+                activeTint = Color(0xFFFF4D4F),
+                isVisible = panelistsFocused.value,
+                isEnabled = panelistsFocused.value
+            ),
+            ControlButtonModel(
+                label = "Mute Cam",
+                icon = Icons.Rounded.VideocamOff,
+                isActive = muteOthersCamera.value,
+                onClick = { togglePanelistFocusMuteCamera() },
+                activeTint = Color(0xFFFF4D4F),
+                isVisible = panelistsFocused.value,
+                isEnabled = panelistsFocused.value
+            )
+        )
+    } else {
+        emptyList()
+    }
+
     if (!includeExtended) {
-        return baseButtons
+        return baseButtons + panelistButtons
     }
 
     val recordingSupported = recordingState.recordingAudioSupport || recordingState.recordingVideoSupport
@@ -11686,7 +13455,7 @@ internal fun MediasfuGenericState.primaryControlButtons(includeExtended: Boolean
         )
     )
 
-    return baseButtons + extendedButtons
+    return baseButtons + panelistButtons + extendedButtons
 }
 
 /**

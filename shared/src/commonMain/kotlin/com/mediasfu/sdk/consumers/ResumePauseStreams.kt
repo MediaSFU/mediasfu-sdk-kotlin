@@ -189,15 +189,10 @@ private suspend fun resumeTransport(
                 }
             }
 
-            when (val response = ackResult.getOrElse { error ->
+            ackResult.getOrElse { error ->
                 Logger.e("ResumePauseStreams", "consumer-resume ack failed for ${transportInfo.producerId}: ${error.message}")
                 null
-            }) {
-                is Map<*, *> -> (response["resumed"] as? Boolean) ?: false
-                is Boolean -> response
-                null -> true // Assume success if no response
-                else -> false
-            }
+            }.resumeAckSucceeded(defaultOnNull = true)
         } else {
             true
         }

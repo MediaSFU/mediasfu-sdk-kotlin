@@ -4,6 +4,7 @@ import com.mediasfu.sdk.model.HostRequestResponseOptions
 import com.mediasfu.sdk.model.Request
 import com.mediasfu.sdk.model.RequestResponse
 import com.mediasfu.sdk.model.ShowAlert
+import kotlinx.datetime.Clock
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -98,9 +99,9 @@ class HostRequestResponseTest {
             updateRequestIntervalSeconds = 240
         )
 
-        val beforeTime = System.currentTimeMillis()
+        val beforeTime = Clock.System.now().toEpochMilliseconds()
         hostRequestResponse(options)
-        val afterTime = System.currentTimeMillis()
+        val afterTime = Clock.System.now().toEpochMilliseconds()
 
         assertEquals(false, videoActionUpdated, "Video action should not be enabled")
         assertEquals("rejected", videoRequestState, "Video request state should be 'rejected'")

@@ -138,6 +138,10 @@ suspend fun connectRecvTransport(options: ConnectRecvTransportOptions) {
             consumer = consumer,
             socket = nsock
         )
+        consumerTransports.removeAll { existing ->
+            existing.serverConsumerTransportId == serverConsumerTransportId ||
+                existing.producerId == remoteProducerId
+        }
         consumerTransports.add(newTransport)
         updateConsumerTransports(consumerTransports)
 
@@ -164,12 +168,7 @@ suspend fun connectRecvTransport(options: ConnectRecvTransportOptions) {
                 null
             }
 
-            val resumed = when (resumeResponse) {
-                is Map<*, *> -> resumeResponse["resumed"] as? Boolean ?: false
-                is Boolean -> resumeResponse
-                null -> true // Assume success when no ack available
-                else -> false
-            }
+            val resumed = resumeResponse.resumeAckSucceeded(defaultOnNull = true)
 
             if (resumed) {
                 try {

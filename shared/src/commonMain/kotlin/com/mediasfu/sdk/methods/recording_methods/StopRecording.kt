@@ -6,6 +6,8 @@ import com.mediasfu.sdk.methods.whiteboard_methods.StopCanvasStreamParameters
 import com.mediasfu.sdk.methods.whiteboard_methods.stopCanvasStream
 import com.mediasfu.sdk.model.ShowAlert
 import com.mediasfu.sdk.socket.SocketManager
+import com.mediasfu.sdk.util.toLooseBoolean
+import com.mediasfu.sdk.util.toStringAnyMap
 import com.mediasfu.sdk.webrtc.MediaStream
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -138,13 +140,13 @@ suspend fun stopRecording(options: StopRecordingOptions) {
             // Emit socket event and wait for acknowledgment
             val result = suspendCancellableCoroutine<Map<String, Any>> { continuation ->
                 socketRef.emitWithAck(action, mapOf("roomName" to parameters.roomName)) { data ->
-                    continuation.resume(data as Map<String, Any>)
+                    continuation.resume(data.toStringAnyMap())
                 }
             }
             
-            val success = result["success"] as Boolean
-            val reason = result["reason"] as String
-            val recordState = result["recordState"] as String
+            val success = result["success"].toLooseBoolean()
+            val reason = result["reason"]?.toString() ?: "unknown reason"
+            val recordState = result["recordState"]?.toString() ?: "unknown"
             
             if (success) {
                 RecordingUtils.cleanUpRecording(

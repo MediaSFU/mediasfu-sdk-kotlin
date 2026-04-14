@@ -1,5 +1,6 @@
 package com.mediasfu.sdk.socket
 import com.mediasfu.sdk.util.Logger
+import com.mediasfu.sdk.util.toLooseBoolean
 
 import kotlinx.datetime.Clock
 import com.mediasfu.sdk.consumers.PrepopulateUserMediaParameters
@@ -944,7 +945,7 @@ suspend fun startRecords(options: StartRecordsOptions) {
             )
         ) { response ->
             // Flutter implementation only logs the success flag in debug mode; parity not required.
-            if (response["success"] == true) {
+            if (response["success"].toLooseBoolean()) {
                 // no-op
             }
         }

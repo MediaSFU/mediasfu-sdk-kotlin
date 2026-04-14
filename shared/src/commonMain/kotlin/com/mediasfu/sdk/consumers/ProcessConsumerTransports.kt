@@ -155,12 +155,7 @@ suspend fun processConsumerTransports(
                 null
             }
 
-            val resumed = when (resumeResponse) {
-                is Map<*, *> -> resumeResponse["resumed"] as? Boolean ?: false
-                is Boolean -> resumeResponse
-                null -> true
-                else -> false
-            }
+            val resumed = resumeResponse.resumeAckSucceeded(defaultOnNull = true)
 
             if (resumed) {
                 runCatching { consumer.resume() }

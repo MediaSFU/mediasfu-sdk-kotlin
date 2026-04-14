@@ -1,7 +1,10 @@
 // Trigger.kt
 package com.mediasfu.sdk.consumers
 import com.mediasfu.sdk.util.Logger
+import com.mediasfu.sdk.util.toLooseBoolean
+import com.mediasfu.sdk.util.toStringAnyMap
 
+import com.mediasfu.sdk.model.EventType
 import com.mediasfu.sdk.model.Participant
 import com.mediasfu.sdk.model.ShowAlert
 import com.mediasfu.sdk.socket.SocketManager
@@ -22,7 +25,7 @@ interface TriggerParameters {
     val updateDateState: Int?
     val lastUpdate: Int?
     val nForReadjust: Int?
-    val eventType: Any? // EventType
+    val eventType: EventType
     val shared: Boolean
     val shareScreenStarted: Boolean
     val whiteboardStarted: Boolean
@@ -122,8 +125,8 @@ suspend fun trigger(
                 val stateMap = firstScreenState as? Map<String, Any?>
                 if (stateMap != null) {
                     personOnMainScreen = stateMap["mainScreenPerson"]?.toString()
-                    mainfilled = stateMap["mainScreenFilled"] as? Boolean ?: false
-                    adminOnMain = stateMap["adminOnMainScreen"] as? Boolean ?: false
+                    mainfilled = stateMap["mainScreenFilled"].toLooseBoolean()
+                    adminOnMain = stateMap["adminOnMainScreen"].toLooseBoolean()
                 }
             }
         }
@@ -136,7 +139,7 @@ suspend fun trigger(
         val timestamp = (nowMs / 1000).toInt()
         
         var eventPass = false
-        val eventTypeName = parameters.eventType?.toString()?.lowercase() ?: ""
+        val eventTypeName = parameters.eventType.name.lowercase()
         
         
         // Conference without screen sharing - matches TypeScript exactly
@@ -279,8 +282,8 @@ private fun emitUpdateScreenClient(
             "updateScreenClient",
             payload
         ) { response ->
-            val responseMap = response as? Map<String, Any?> ?: emptyMap()
-            val success = responseMap["success"] as? Boolean ?: false
+            val responseMap = response.toStringAnyMap()
+            val success = responseMap["success"].toLooseBoolean()
             val reason = responseMap["reason"]?.toString() ?: ""
             
             // Update state after emit (TypeScript does this in callback)

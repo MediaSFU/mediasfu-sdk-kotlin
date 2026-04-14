@@ -4,6 +4,8 @@ import com.mediasfu.sdk.util.Logger
 import com.mediasfu.sdk.model.ShowAlert
 import com.mediasfu.sdk.model.call
 import com.mediasfu.sdk.socket.SocketManager
+import com.mediasfu.sdk.util.toLooseBoolean
+import com.mediasfu.sdk.util.toStringAnyMap
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
@@ -57,11 +59,11 @@ suspend fun handleEndPoll(options: HandleEndPollOptions) {
                 "endPoll",
                 mapOf("roomName" to options.roomName, "poll_id" to options.pollId)
             ) { response ->
-                continuation.resume(response as Map<String, Any>)
+                continuation.resume(response.toStringAnyMap())
             }
         }
         
-        if (result["success"] as? Boolean == true) {
+        if (result["success"].toLooseBoolean()) {
             options.showAlert.call(
                 message = "Poll ended successfully",
                 type = "success",

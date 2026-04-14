@@ -1,5 +1,6 @@
 package com.mediasfu.sdk.model
 import com.mediasfu.sdk.util.Logger
+import com.mediasfu.sdk.util.toLooseBoolean
 
 import com.mediasfu.sdk.webrtc.MediaStream
 import kotlinx.serialization.Contextual
@@ -690,7 +691,7 @@ fun Message.Companion.fromMap(map: Map<String, Any?>): Message {
         receivers = (map["receivers"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList(),
         message = map["message"] as? String ?: "",
         timestamp = map["timestamp"] as? String ?: "",
-        group = map["group"] as? Boolean ?: false,
+        group = map["group"].toLooseBoolean(),
         extra = (map["extra"] as? JsonObject) ?: JsonObject(emptyMap())
     )
 }
@@ -723,13 +724,13 @@ fun UserRecordingParams.Companion.fromMap(map: Map<String, Any?>): UserRecording
         audioOptions = mainSpecsMap["audioOptions"] as? String ?: "all",
         videoOptions = mainSpecsMap["videoOptions"] as? String ?: "all",
         videoType = mainSpecsMap["videoType"] as? String ?: "video",
-        videoOptimized = mainSpecsMap["videoOptimized"] as? Boolean ?: false,
+        videoOptimized = mainSpecsMap["videoOptimized"].toLooseBoolean(),
         recordingDisplayType = mainSpecsMap["recordingDisplayType"] as? String ?: "video",
-        addHls = mainSpecsMap["addHls"] as? Boolean ?: false
+        addHls = mainSpecsMap["addHls"].toLooseBoolean()
     )
 
     val dispSpecs = DispSpecs(
-        nameTags = dispSpecsMap["nameTags"] as? Boolean ?: true,
+        nameTags = dispSpecsMap["nameTags"].toLooseBoolean(default = true),
         backgroundColor = dispSpecsMap["backgroundColor"] as? String ?: "#000000",
         nameTagsColor = dispSpecsMap["nameTagsColor"] as? String ?: "#FFFFFF",
         orientationVideo = dispSpecsMap["orientationVideo"] as? String ?: "landscape"
@@ -737,7 +738,7 @@ fun UserRecordingParams.Companion.fromMap(map: Map<String, Any?>): UserRecording
 
     val textSpecs = textSpecsMap?.let {
         TextSpecs(
-            addText = it["addText"] as? Boolean ?: false,
+            addText = it["addText"].toLooseBoolean(),
             customText = it["customText"] as? String,
             customTextPosition = it["customTextPosition"] as? String,
             customTextColor = it["customTextColor"] as? String
@@ -983,21 +984,21 @@ fun RecordParameters.Companion.fromMap(map: Map<String, Any?>): RecordParameters
     return RecordParameters(
         recordingAudioPausesLimit = (map["recordingAudioPausesLimit"] as? Number)?.toInt() ?: 0,
         recordingAudioPausesCount = (map["recordingAudioPausesCount"] as? Number)?.toInt() ?: 0,
-        recordingAudioSupport = map["recordingAudioSupport"] as? Boolean ?: false,
+        recordingAudioSupport = map["recordingAudioSupport"].toLooseBoolean(),
         recordingAudioPeopleLimit = (map["recordingAudioPeopleLimit"] as? Number)?.toInt() ?: 0,
         recordingAudioParticipantsTimeLimit = (map["recordingAudioParticipantsTimeLimit"] as? Number)?.toInt() ?: 0,
         recordingVideoPausesCount = (map["recordingVideoPausesCount"] as? Number)?.toInt() ?: 0,
         recordingVideoPausesLimit = (map["recordingVideoPausesLimit"] as? Number)?.toInt() ?: 0,
-        recordingVideoSupport = map["recordingVideoSupport"] as? Boolean ?: false,
+        recordingVideoSupport = map["recordingVideoSupport"].toLooseBoolean(),
         recordingVideoPeopleLimit = (map["recordingVideoPeopleLimit"] as? Number)?.toInt() ?: 0,
         recordingVideoParticipantsTimeLimit = (map["recordingVideoParticipantsTimeLimit"] as? Number)?.toInt() ?: 0,
-        recordingAllParticipantsSupport = map["recordingAllParticipantsSupport"] as? Boolean ?: false,
-        recordingVideoParticipantsSupport = map["recordingVideoParticipantsSupport"] as? Boolean ?: false,
-        recordingAllParticipantsFullRoomSupport = map["recordingAllParticipantsFullRoomSupport"] as? Boolean ?: false,
-        recordingVideoParticipantsFullRoomSupport = map["recordingVideoParticipantsFullRoomSupport"] as? Boolean ?: false,
+        recordingAllParticipantsSupport = map["recordingAllParticipantsSupport"].toLooseBoolean(),
+        recordingVideoParticipantsSupport = map["recordingVideoParticipantsSupport"].toLooseBoolean(),
+        recordingAllParticipantsFullRoomSupport = map["recordingAllParticipantsFullRoomSupport"].toLooseBoolean(),
+        recordingVideoParticipantsFullRoomSupport = map["recordingVideoParticipantsFullRoomSupport"].toLooseBoolean(),
         recordingPreferredOrientation = map["recordingPreferredOrientation"] as? String ?: "landscape",
-        recordingSupportForOtherOrientation = map["recordingSupportForOtherOrientation"] as? Boolean ?: false,
-        recordingMultiFormatsSupport = map["recordingMultiFormatsSupport"] as? Boolean ?: false
+        recordingSupportForOtherOrientation = map["recordingSupportForOtherOrientation"].toLooseBoolean(),
+        recordingMultiFormatsSupport = map["recordingMultiFormatsSupport"].toLooseBoolean()
     )
 }
 
@@ -1018,10 +1019,10 @@ fun BreakoutRoomUpdatedData.Companion.fromMap(map: Map<String, Any?>): BreakoutR
             Participant(
                 name = participantMap["name"] as? String ?: "",
                 islevel = participantMap["islevel"] as? String ?: "1",
-                audioOn = participantMap["audioOn"] as? Boolean ?: false,
-                videoOn = participantMap["videoOn"] as? Boolean ?: false,
+                audioOn = participantMap["audioOn"].toLooseBoolean(),
+                videoOn = participantMap["videoOn"].toLooseBoolean(),
                 id = participantMap["id"] as? String ?: "",
-                muted = participantMap["muted"] as? Boolean ?: false,
+                muted = participantMap["muted"].toLooseBoolean(),
                 audioID = participantMap["audioID"] as? String ?: "",
                 videoID = participantMap["videoID"] as? String ?: ""
             )
@@ -1040,7 +1041,7 @@ fun BreakoutRoomUpdatedData.Companion.fromMap(map: Map<String, Any?>): BreakoutR
     } ?: emptyList()
 
     return BreakoutRoomUpdatedData(
-        forHost = map["forHost"] as? Boolean ?: false,
+        forHost = map["forHost"].toLooseBoolean(),
         newRoom = (map["newRoom"] as? Number)?.toInt(),
         members = members,
         breakoutRooms = breakoutRooms,

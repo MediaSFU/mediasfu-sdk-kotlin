@@ -40,6 +40,8 @@ private class FakeSocketManager : SocketManager {
 
     override fun on(event: String, handler: suspend (Map<String, Any?>) -> Unit) {}
 
+    override fun hasListener(event: String): Boolean = false
+
     override fun off(event: String) {}
 
     override fun offAll() {}
@@ -99,7 +101,7 @@ private class TestParameters(
 class CheckLimitsAndMakeRequestTest {
 
     @AfterTest
-    fun tearDown() {
+    fun tearDown() = runTest {
         CheckLimitsRateLimiter.reset()
     }
 

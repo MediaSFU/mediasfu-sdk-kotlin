@@ -17,6 +17,7 @@ import com.mediasfu.sdk.consumers.OnScreenChangesOptions
 import com.mediasfu.sdk.consumers.StopShareScreenOptions
 import com.mediasfu.sdk.methods.utils.producer.ProducerOptionsType
 import com.mediasfu.sdk.model.ControlMediaHostParameters
+import com.mediasfu.sdk.model.AudioDecibels
 import com.mediasfu.sdk.model.DisconnectSendTransportAudioType
 import com.mediasfu.sdk.model.DisconnectSendTransportScreenType
 import com.mediasfu.sdk.model.DisconnectSendTransportVideoType
@@ -32,6 +33,7 @@ import com.mediasfu.sdk.model.Stream
 import com.mediasfu.sdk.model.StopShareScreenType
 import com.mediasfu.sdk.socket.ConnectionState
 import com.mediasfu.sdk.socket.SocketManager
+import com.mediasfu.sdk.ui.MediaSfuUIComponent
 import com.mediasfu.sdk.webrtc.MediaDeviceInfo
 import com.mediasfu.sdk.webrtc.MediaKind
 import com.mediasfu.sdk.webrtc.MediaStream
@@ -204,6 +206,10 @@ class TestWebRtcDevice(
         return stream
     }
 
+    override suspend fun getDisplayMedia(constraints: Map<String, Any?>): MediaStream {
+        return getUserMedia(constraints)
+    }
+
     override suspend fun enumerateDevices(): List<MediaDeviceInfo> {
         enumerateDevicesCalls += Unit
         return enumerateDevicesResult
@@ -291,6 +297,7 @@ class TestWebRtcTransport(
     var onProduceHandler: ((com.mediasfu.sdk.webrtc.ProduceData) -> Unit)? = null
     var onConnectionStateChangeHandler: ((String) -> Unit)? = null
     val produceCalls = mutableListOf<ProducedCall>()
+    val consumeCalls = mutableListOf<ConsumedCall>()
 
     override val connectionState: TransportConnectionState
         get() = state
@@ -326,6 +333,24 @@ class TestWebRtcTransport(
         return producer
     }
 
+    override fun consume(
+        id: String,
+        producerId: String,
+        kind: String,
+        rtpParameters: Map<String, Any?>
+    ): com.mediasfu.sdk.webrtc.WebRtcConsumer {
+        val consumer = TestWebRtcConsumer(
+            id = id,
+            kind = if (kind.lowercase() == "video") MediaKind.VIDEO else MediaKind.AUDIO,
+            stream = TestMediaStream(
+                audioTracks = if (kind.lowercase() == "audio") listOf(TestMediaStreamTrack(kind = "audio")) else emptyList(),
+                videoTracks = if (kind.lowercase() == "video") listOf(TestMediaStreamTrack(kind = "video")) else emptyList()
+            )
+        )
+        consumeCalls += ConsumedCall(id, producerId, kind, rtpParameters, consumer)
+        return consumer
+    }
+
     fun updateState(newState: TransportConnectionState) {
         state = newState
         onConnectionStateChangeHandler?.invoke(newState.name.lowercase())
@@ -337,6 +362,14 @@ class TestWebRtcTransport(
         val codecOptions: com.mediasfu.sdk.methods.utils.producer.ProducerCodecOptions?,
         val appData: Map<String, Any?>?,
         val producer: TestWebRtcProducer
+    )
+
+    data class ConsumedCall(
+        val id: String,
+        val producerId: String,
+        val kind: String,
+        val rtpParameters: Map<String, Any?>,
+        val consumer: TestWebRtcConsumer
     )
 
     companion object {
@@ -359,6 +392,55 @@ class TestWebRtcProducer(
 ) : WebRtcProducer {
     private var closed = false
     private var pausedState = false
+    var currentTrack: MediaStreamTrack? = null
+
+    override val paused: Boolean
+        get() = pausedState
+
+    override fun close() {
+        closed = true
+    }
+
+    override fun pause() {
+        pausedState = true
+    }
+
+    override fun resume() {
+        pausedState = false
+    }
+
+    override fun replaceTrack(track: MediaStreamTrack) {
+        currentTrack = track
+    }
+
+    val isClosed: Boolean
+        get() = closed
+
+    companion object {
+        private var counter = 0
+
+        private fun nextId(): Int {
+            counter += 1
+            return counter
+        }
+    }
+}
+
+class TestWebRtcConsumer(
+    override val id: String = "consumer-${nextId()}",
+    override val kind: MediaKind = MediaKind.AUDIO,
+    override val stream: MediaStream? = TestMediaStream(
+        audioTracks = listOf(TestMediaStreamTrack(kind = "audio"))
+    )
+) : com.mediasfu.sdk.webrtc.WebRtcConsumer {
+    private var closed = false
+    private var pausedState = false
+
+    override val track: MediaStreamTrack?
+        get() = when (kind) {
+            MediaKind.VIDEO -> stream?.getVideoTracks()?.firstOrNull()
+            MediaKind.AUDIO -> stream?.getAudioTracks()?.firstOrNull()
+        }
 
     override val paused: Boolean
         get() = pausedState
@@ -448,6 +530,8 @@ class TestSocketManager(
         onHandlers[event] = handler
     }
 
+    override fun hasListener(event: String): Boolean = onHandlers.containsKey(event)
+
     override fun off(event: String) {
         onHandlers.remove(event)
     }
@@ -536,6 +620,7 @@ open class TestPrepopulateUserMediaParameters(
     protected var virtualStreamState: Any? = null
     protected var keepBackgroundState: Boolean = false
     protected var annotateScreenStreamState: Boolean = false
+    protected var audioDecibelsState: List<AudioDecibels> = emptyList()
     protected var showAlertState: ShowAlert? = null
 
     val updateMainWindowCalls = mutableListOf<Boolean>()
@@ -639,6 +724,9 @@ open class TestPrepopulateUserMediaParameters(
     override val annotateScreenStream: Boolean
         get() = annotateScreenStreamState
 
+    override val audioDecibels: List<AudioDecibels>
+        get() = audioDecibelsState
+
     override val updateMainScreenPerson: (String) -> Unit = {
         mainScreenPersonState = it
         mainScreenPersonUpdates += it
@@ -673,6 +761,8 @@ open class TestPrepopulateUserMediaParameters(
         showAlertState = it
         showAlertUpdates += it
     }
+
+    override val updateMainGridStream: (List<MediaSfuUIComponent>) -> Unit = {}
 
     open override fun getUpdatedAllParams(): com.mediasfu.sdk.consumers.PrepopulateUserMediaParameters = this
 
@@ -741,6 +831,9 @@ class TestConnectSendTransportAudioParameters(
     private var localAudioProducerState: WebRtcProducer? = initialLocalAudioProducer
     private var hostLabelState: String = participants.firstOrNull()?.name ?: "Host"
     private var lockScreenState: Boolean = false
+    private var rtpCapabilitiesState: RtpCapabilities? = null
+    private var routerRtpCapabilitiesState: RtpCapabilities? = null
+    private var extendedRtpCapabilitiesState: com.mediasfu.sdk.webrtc.ortc.OrtcUtils.ExtendedRtpCapabilities? = null
 
     override var transportCreated: Boolean = false
     override var localTransportCreated: Boolean = false
@@ -802,6 +895,15 @@ class TestConnectSendTransportAudioParameters(
 
     override val lockScreen: Boolean
         get() = lockScreenState
+
+    override val rtpCapabilities: RtpCapabilities?
+        get() = rtpCapabilitiesState
+
+    override val routerRtpCapabilities: RtpCapabilities?
+        get() = routerRtpCapabilitiesState
+
+    override val extendedRtpCapabilities: com.mediasfu.sdk.webrtc.ortc.OrtcUtils.ExtendedRtpCapabilities?
+        get() = extendedRtpCapabilitiesState
 
     override val showAlert: ShowAlert?
         get() = showAlertState
@@ -885,6 +987,10 @@ class TestConnectSendTransportAudioParameters(
         localAudioProducerUpdates += producer
     }
 
+    override val updateExtendedRtpCapabilities: ((com.mediasfu.sdk.webrtc.ortc.OrtcUtils.ExtendedRtpCapabilities?) -> Unit)? = { capabilities ->
+        extendedRtpCapabilitiesState = capabilities
+    }
+
     override val prepopulateUserMedia: suspend (PrepopulateUserMediaOptions) -> Unit = { options ->
         prepopulateCalls += options
     }
@@ -948,6 +1054,9 @@ class TestConnectSendTransportVideoParameters(
     private var localStreamState: MediaStream? = null
     private var lockScreenState: Boolean = false
     private var hostLabelState: String = hostLabel
+    private var rtpCapabilitiesState: RtpCapabilities? = null
+    private var routerRtpCapabilitiesState: RtpCapabilities? = null
+    private var extendedRtpCapabilitiesState: com.mediasfu.sdk.webrtc.ortc.OrtcUtils.ExtendedRtpCapabilities? = null
     private val baseUpdateMainWindow = super.updateUpdateMainWindow
 
     override var transportCreated: Boolean = false
@@ -1029,6 +1138,19 @@ class TestConnectSendTransportVideoParameters(
     override val audioAlreadyOn: Boolean
         get() = audioAlreadyOnState
 
+    override val rtpCapabilities: RtpCapabilities?
+        get() = rtpCapabilitiesState
+
+    override val routerRtpCapabilities: RtpCapabilities?
+        get() = routerRtpCapabilitiesState
+
+    override val extendedRtpCapabilities: com.mediasfu.sdk.webrtc.ortc.OrtcUtils.ExtendedRtpCapabilities?
+        get() = extendedRtpCapabilitiesState
+
+    override val updateExtendedRtpCapabilities: ((com.mediasfu.sdk.webrtc.ortc.OrtcUtils.ExtendedRtpCapabilities?) -> Unit)? = { capabilities ->
+        extendedRtpCapabilitiesState = capabilities
+    }
+
     override fun getUpdatedAllParams(): ConnectSendTransportVideoParameters = this
 
     fun setLockScreen(value: Boolean) {
@@ -1069,8 +1191,18 @@ class TestConnectSendTransportScreenParameters(
     private var paramsState: ProducerOptionsType? = params
     private var defScreenIdState: String = defScreenId
     private var islevelState: String = islevel
+    private var memberState: String = "Host"
+    private var socketState: SocketManager? = null
+    private var localSocketState: SocketManager? = null
+    private var deviceState: WebRtcDevice? = TestWebRtcDevice()
+    private var rtpCapabilitiesState: RtpCapabilities? = null
+    private var routerRtpCapabilitiesState: RtpCapabilities? = null
+    private var extendedRtpCapabilitiesState: com.mediasfu.sdk.webrtc.ortc.OrtcUtils.ExtendedRtpCapabilities? = null
     private var updateMainWindowState: Boolean = false
     private var showAlertState: ShowAlert? = showAlert
+
+    override var transportCreated: Boolean = false
+    override var localTransportCreated: Boolean = false
 
     val screenProducerUpdates = mutableListOf<WebRtcProducer?>()
     val localScreenProducerUpdates = mutableListOf<WebRtcProducer?>()
@@ -1093,14 +1225,20 @@ class TestConnectSendTransportScreenParameters(
     override val screenProducer: WebRtcProducer?
         get() = screenProducerState
 
-    override val producerTransport: WebRtcTransport?
+    override var producerTransport: WebRtcTransport?
         get() = producerTransportState
+        set(value) {
+            producerTransportState = value
+        }
 
     override val localScreenProducer: WebRtcProducer?
         get() = localScreenProducerState
 
-    override val localProducerTransport: WebRtcTransport?
+    override var localProducerTransport: WebRtcTransport?
         get() = localProducerTransportState
+        set(value) {
+            localProducerTransportState = value
+        }
 
     override val localStream: MediaStream?
         get() = localStreamState
@@ -1119,6 +1257,27 @@ class TestConnectSendTransportScreenParameters(
 
     override val islevel: String
         get() = islevelState
+
+    override val member: String
+        get() = memberState
+
+    override val socket: SocketManager?
+        get() = socketState
+
+    override val localSocket: SocketManager?
+        get() = localSocketState
+
+    override val device: WebRtcDevice?
+        get() = deviceState
+
+    override val rtpCapabilities: RtpCapabilities?
+        get() = rtpCapabilitiesState
+
+    override val routerRtpCapabilities: RtpCapabilities?
+        get() = routerRtpCapabilitiesState
+
+    override val extendedRtpCapabilities: com.mediasfu.sdk.webrtc.ortc.OrtcUtils.ExtendedRtpCapabilities?
+        get() = extendedRtpCapabilitiesState
 
     override val updateMainWindow: Boolean
         get() = updateMainWindowState
@@ -1166,6 +1325,10 @@ class TestConnectSendTransportScreenParameters(
         defScreenIdUpdates += id
     }
 
+    override val updateExtendedRtpCapabilities: ((com.mediasfu.sdk.webrtc.ortc.OrtcUtils.ExtendedRtpCapabilities?) -> Unit)? = { capabilities ->
+        extendedRtpCapabilitiesState = capabilities
+    }
+
     override fun getUpdatedAllParams(): ConnectSendTransportScreenParameters = this
 
     fun setScreenParams(newParams: ProducerOptionsType?) {
@@ -1179,8 +1342,8 @@ class TestConnectSendTransportScreenParameters(
 
 /** Test implementation of [DisconnectSendTransportAudioParameters] with state tracking. */
 class TestDisconnectSendTransportAudioParameters(
-    initialAudioProducer: Any? = TestWebRtcProducer("remote-audio"),
-    initialLocalAudioProducer: Any? = TestWebRtcProducer("local-audio"),
+    initialAudioProducer: WebRtcProducer? = TestWebRtcProducer("remote-audio"),
+    initialLocalAudioProducer: WebRtcProducer? = TestWebRtcProducer("local-audio"),
     initialSocket: SocketManager? = TestSocketManager("remote-socket"),
     initialLocalSocket: SocketManager? = TestSocketManager("local-socket"),
     videoAlreadyOn: Boolean = false,
@@ -1191,9 +1354,9 @@ class TestDisconnectSendTransportAudioParameters(
     roomName: String = "testRoom"
 ) : DisconnectSendTransportAudioParameters {
 
-    private var audioProducerState: Any? = initialAudioProducer
+    private var audioProducerState: WebRtcProducer? = initialAudioProducer
     private var socketState: SocketManager? = initialSocket
-    private var localAudioProducerState: Any? = initialLocalAudioProducer
+    private var localAudioProducerState: WebRtcProducer? = initialLocalAudioProducer
     private var localSocketState: SocketManager? = initialLocalSocket
     private var videoAlreadyOnState: Boolean = videoAlreadyOn
     private var islevelState: String = islevel
@@ -1203,18 +1366,18 @@ class TestDisconnectSendTransportAudioParameters(
     private var hostLabelState: String = hostLabel
     private var roomNameState: String = roomName
 
-    val audioProducerUpdates = mutableListOf<Any?>()
-    val localAudioProducerUpdates = mutableListOf<Any?>()
+    val audioProducerUpdates = mutableListOf<WebRtcProducer?>()
+    val localAudioProducerUpdates = mutableListOf<WebRtcProducer?>()
     val updateMainWindowUpdates = mutableListOf<Boolean>()
     val prepopulateCalls = mutableListOf<Map<String, Any>>()
 
-    override val audioProducer: Any?
+    override val audioProducer: WebRtcProducer?
         get() = audioProducerState
 
     override val socket: SocketManager?
         get() = socketState
 
-    override val localAudioProducer: Any?
+    override val localAudioProducer: WebRtcProducer?
         get() = localAudioProducerState
 
     override val localSocket: SocketManager?
@@ -1298,8 +1461,8 @@ class TestDisconnectSendTransportAudioParameters(
 
 /** Test implementation of [DisconnectSendTransportVideoParameters] mirroring production state. */
 class TestDisconnectSendTransportVideoParameters(
-    initialVideoProducer: Any? = TestWebRtcProducer("remote-video", com.mediasfu.sdk.webrtc.MediaKind.VIDEO, ProducerSource.CAMERA),
-    initialLocalVideoProducer: Any? = TestWebRtcProducer("local-video", com.mediasfu.sdk.webrtc.MediaKind.VIDEO, ProducerSource.CAMERA),
+    initialVideoProducer: WebRtcProducer? = TestWebRtcProducer("remote-video", com.mediasfu.sdk.webrtc.MediaKind.VIDEO, ProducerSource.CAMERA),
+    initialLocalVideoProducer: WebRtcProducer? = TestWebRtcProducer("local-video", com.mediasfu.sdk.webrtc.MediaKind.VIDEO, ProducerSource.CAMERA),
     initialSocket: SocketManager? = TestSocketManager("remote-video-socket"),
     initialLocalSocket: SocketManager? = TestSocketManager("local-video-socket"),
     islevel: String = "1",
@@ -1310,9 +1473,9 @@ class TestDisconnectSendTransportVideoParameters(
     audioAlreadyOn: Boolean = false
 ) : DisconnectSendTransportVideoParameters {
 
-    private var videoProducerState: Any? = initialVideoProducer
+    private var videoProducerState: WebRtcProducer? = initialVideoProducer
     private var socketState: SocketManager? = initialSocket
-    private var localVideoProducerState: Any? = initialLocalVideoProducer
+    private var localVideoProducerState: WebRtcProducer? = initialLocalVideoProducer
     private var localSocketState: SocketManager? = initialLocalSocket
     private var islevelState: String = islevel
     private var lockScreenState: Boolean = lockScreen
@@ -1322,18 +1485,18 @@ class TestDisconnectSendTransportVideoParameters(
     private var roomNameState: String = roomName
     private var audioAlreadyOnState: Boolean = audioAlreadyOn
 
-    val videoProducerUpdates = mutableListOf<Any?>()
-    val localVideoProducerUpdates = mutableListOf<Any?>()
+    val videoProducerUpdates = mutableListOf<WebRtcProducer?>()
+    val localVideoProducerUpdates = mutableListOf<WebRtcProducer?>()
     val updateMainWindowUpdates = mutableListOf<Boolean>()
     val prepopulateCalls = mutableListOf<Map<String, Any>>()
 
-    override val videoProducer: Any?
+    override val videoProducer: WebRtcProducer?
         get() = videoProducerState
 
     override val socket: SocketManager?
         get() = socketState
 
-    override val localVideoProducer: Any?
+    override val localVideoProducer: WebRtcProducer?
         get() = localVideoProducerState
 
     override val localSocket: SocketManager?
@@ -1360,12 +1523,12 @@ class TestDisconnectSendTransportVideoParameters(
     override val audioAlreadyOn: Boolean
         get() = audioAlreadyOnState
 
-    override fun updateVideoProducer(producer: Any?) {
+    override fun updateVideoProducer(producer: WebRtcProducer?) {
         videoProducerState = producer
         videoProducerUpdates += producer
     }
 
-    override fun updateLocalVideoProducer(producer: Any?) {
+    override fun updateLocalVideoProducer(producer: WebRtcProducer?) {
         localVideoProducerState = producer
         localVideoProducerUpdates += producer
     }
@@ -1417,29 +1580,29 @@ class TestDisconnectSendTransportVideoParameters(
 
 /** Test implementation of [DisconnectSendTransportScreenParameters] with simple tracking. */
 class TestDisconnectSendTransportScreenParameters(
-    initialScreenProducer: Any? = TestWebRtcProducer("remote-screen", com.mediasfu.sdk.webrtc.MediaKind.VIDEO, ProducerSource.SCREEN),
-    initialLocalScreenProducer: Any? = TestWebRtcProducer("local-screen", com.mediasfu.sdk.webrtc.MediaKind.VIDEO, ProducerSource.SCREEN),
+    initialScreenProducer: WebRtcProducer? = TestWebRtcProducer("remote-screen", com.mediasfu.sdk.webrtc.MediaKind.VIDEO, ProducerSource.SCREEN),
+    initialLocalScreenProducer: WebRtcProducer? = TestWebRtcProducer("local-screen", com.mediasfu.sdk.webrtc.MediaKind.VIDEO, ProducerSource.SCREEN),
     initialSocket: SocketManager? = TestSocketManager("remote-screen-socket"),
     initialLocalSocket: SocketManager? = TestSocketManager("local-screen-socket"),
     roomName: String = "testRoom"
 ) : DisconnectSendTransportScreenParameters {
 
-    private var screenProducerState: Any? = initialScreenProducer
+    private var screenProducerState: WebRtcProducer? = initialScreenProducer
     private var socketState: SocketManager? = initialSocket
-    private var localScreenProducerState: Any? = initialLocalScreenProducer
+    private var localScreenProducerState: WebRtcProducer? = initialLocalScreenProducer
     private var localSocketState: SocketManager? = initialLocalSocket
     private var roomNameState: String = roomName
 
-    val screenProducerUpdates = mutableListOf<Any?>()
-    val localScreenProducerUpdates = mutableListOf<Any?>()
+    val screenProducerUpdates = mutableListOf<WebRtcProducer?>()
+    val localScreenProducerUpdates = mutableListOf<WebRtcProducer?>()
 
-    override val screenProducer: Any?
+    override val screenProducer: WebRtcProducer?
         get() = screenProducerState
 
     override val socket: SocketManager?
         get() = socketState
 
-    override val localScreenProducer: Any?
+    override val localScreenProducer: WebRtcProducer?
         get() = localScreenProducerState
 
     override val localSocket: SocketManager?
@@ -1448,12 +1611,12 @@ class TestDisconnectSendTransportScreenParameters(
     override val roomName: String
         get() = roomNameState
 
-    override fun updateScreenProducer(producer: Any?) {
+    override fun updateScreenProducer(producer: WebRtcProducer?) {
         screenProducerState = producer
         screenProducerUpdates += producer
     }
 
-    override fun updateLocalScreenProducer(producer: Any?) {
+    override fun updateLocalScreenProducer(producer: WebRtcProducer?) {
         localScreenProducerState = producer
         localScreenProducerUpdates += producer
     }
@@ -1499,13 +1662,14 @@ class TestControlMediaHostParameters(
     private var youYouStreamState: List<Stream> = emptyList()
     private var youYouStreamIDsState: List<String> = emptyList()
     private var isScreenboardModalVisibleState: Boolean = false
-    private var audioProducerState: Any? = null
-    private var localAudioProducerState: Any? = null
-    private var videoProducerState: Any? = null
-    private var localVideoProducerState: Any? = null
-    private var screenProducerState: Any? = null
-    private var localScreenProducerState: Any? = null
+    private var audioProducerState: WebRtcProducer? = null
+    private var localAudioProducerState: WebRtcProducer? = null
+    private var videoProducerState: WebRtcProducer? = null
+    private var localVideoProducerState: WebRtcProducer? = null
+    private var screenProducerState: WebRtcProducer? = null
+    private var localScreenProducerState: WebRtcProducer? = null
     private var roomNameState: String = ""
+    private var stopScreenCaptureServiceState: (() -> Unit)? = null
 
     val adminRestrictUpdates = mutableListOf<Boolean>()
     val audioAlreadyOnUpdates = mutableListOf<Boolean>()
@@ -1517,12 +1681,12 @@ class TestControlMediaHostParameters(
     val disconnectAudioOptions = mutableListOf<DisconnectSendTransportAudioOptions>()
     val disconnectVideoOptions = mutableListOf<DisconnectSendTransportVideoOptions>()
     val disconnectScreenOptions = mutableListOf<DisconnectSendTransportScreenOptions>()
-    val audioProducerUpdates = mutableListOf<Any?>()
-    val localAudioProducerUpdates = mutableListOf<Any?>()
-    val videoProducerUpdates = mutableListOf<Any?>()
-    val localVideoProducerUpdates = mutableListOf<Any?>()
-    val screenProducerUpdates = mutableListOf<Any?>()
-    val localScreenProducerUpdates = mutableListOf<Any?>()
+    val audioProducerUpdates = mutableListOf<WebRtcProducer?>()
+    val localAudioProducerUpdates = mutableListOf<WebRtcProducer?>()
+    val videoProducerUpdates = mutableListOf<WebRtcProducer?>()
+    val localVideoProducerUpdates = mutableListOf<WebRtcProducer?>()
+    val screenProducerUpdates = mutableListOf<WebRtcProducer?>()
+    val localScreenProducerUpdates = mutableListOf<WebRtcProducer?>()
     val reorderStreamsInvocations = mutableListOf<ReorderStreamsOptions>()
     val changeVidsInvocations = mutableListOf<ChangeVidsOptions>()
     val getVideosInvocations = mutableListOf<GetVideosOptions>()
@@ -1555,10 +1719,10 @@ class TestControlMediaHostParameters(
         localStreamScreenState = TestControllableMediaStream(videoTracks = listOf(TestMediaStreamTrack(kind = "video")))
     }
 
-    override val screenProducer: Any?
+    override val screenProducer: WebRtcProducer?
         get() = screenProducerState
 
-    override val localScreenProducer: Any?
+    override val localScreenProducer: WebRtcProducer?
         get() = localScreenProducerState
 
     override val roomName: String
@@ -1567,17 +1731,20 @@ class TestControlMediaHostParameters(
     override val localStream: MediaStream?
         get() = localStreamState
 
-    override val audioProducer: Any?
+    override val audioProducer: WebRtcProducer?
         get() = audioProducerState
 
-    override val videoProducer: Any?
+    override val videoProducer: WebRtcProducer?
         get() = videoProducerState
 
-    override val localVideoProducer: Any?
+    override val localVideoProducer: WebRtcProducer?
         get() = localVideoProducerState
 
-    override val localAudioProducer: Any?
+    override val localAudioProducer: WebRtcProducer?
         get() = localAudioProducerState
+
+    override val stopScreenCaptureService: (() -> Unit)?
+        get() = stopScreenCaptureServiceState
 
     override val updateLocalStream: (MediaStream?) -> Unit = { stream ->
         localStreamState = stream
@@ -1899,12 +2066,16 @@ class TestControlMediaHostParameters(
         localStreamScreenState = stream
     }
 
-    fun assignScreenProducer(producer: Any?) {
+    fun assignScreenProducer(producer: WebRtcProducer?) {
         screenProducerState = producer
     }
 
-    fun assignLocalScreenProducer(producer: Any?) {
+    fun assignLocalScreenProducer(producer: WebRtcProducer?) {
         localScreenProducerState = producer
+    }
+
+    fun assignStopScreenCaptureService(handler: (() -> Unit)?) {
+        stopScreenCaptureServiceState = handler
     }
 
     fun assignRoomName(value: String) {

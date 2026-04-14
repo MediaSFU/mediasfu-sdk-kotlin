@@ -246,9 +246,7 @@ suspend fun connectLocalIps(options: ConnectLocalIpsOptions): Result<Unit> {
  * @return true if listener exists, false otherwise
  */
 fun hasListener(socket: SocketManager, eventName: String): Boolean {
-    // TODO: Implement listener check in SocketManager
-    // For now, return false to allow registration
-    return false
+    return socket.hasListener(eventName)
 }
 
 /**

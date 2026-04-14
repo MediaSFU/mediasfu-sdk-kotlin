@@ -1279,7 +1279,7 @@ internal class EngineTriggerParameters(
     override val nForReadjust: Int?
         get() = backing.nForReadjust
 
-    override val eventType: Any?
+    override val eventType: com.mediasfu.sdk.model.EventType
         get() = backing.eventType
 
     override val shared: Boolean
@@ -1953,7 +1953,7 @@ internal class EngineGetEstimateParameters(
     override val shared: Boolean
         get() = backing.shared
 
-    override val eventType: Any?
+    override val eventType: com.mediasfu.sdk.model.EventType
         get() = backing.eventType
 
     override val removeAltGrid: Boolean
@@ -1979,7 +1979,7 @@ internal class EngineStartShareScreenParameters(
     override val shared: Boolean
         get() = backing.shared
 
-    override val showAlert: Any?
+    override val showAlert: com.mediasfu.sdk.model.ShowAlert?
         get() = backing.showAlertHandler
 
     override val onWeb: Boolean

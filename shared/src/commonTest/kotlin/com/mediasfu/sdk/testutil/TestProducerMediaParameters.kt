@@ -224,6 +224,9 @@ class TestProducerMediaClosedParameters(
     override val annotateScreenStream: Boolean
         get() = base.annotateScreenStream
 
+    override val audioDecibels: List<com.mediasfu.sdk.model.AudioDecibels>
+        get() = base.audioDecibels
+
     override val updateMainScreenPerson: (String) -> Unit = base.updateMainScreenPerson
 
     override val updateMainScreenFilled: (Boolean) -> Unit = base.updateMainScreenFilled
@@ -237,6 +240,9 @@ class TestProducerMediaClosedParameters(
     override val updateUpdateMainWindow: (Boolean) -> Unit = base.updateUpdateMainWindow
 
     override val updateShowAlert: (ShowAlert?) -> Unit = base.updateShowAlert
+
+    override val updateMainGridStream: (List<com.mediasfu.sdk.ui.MediaSfuUIComponent>) -> Unit =
+        base.updateMainGridStream
 
     override val allAudioStreams: List<Stream>
         get() = allAudioStreamsValue
@@ -392,14 +398,6 @@ class TestProducerMediaClosedParameters(
 
     override fun updateYouYouStream(streams: List<Stream>) {
         base.updateYouYouStream(streams)
-    }
-
-    override fun updateYouYouStreamIDs(ids: List<String>) {
-        base.updateYouYouStreamIDs(ids)
-    }
-
-    override fun updateYouYouStreamIDs(ids: List<String>) {
-        base.updateYouYouStreamIDs(ids)
     }
 
     override fun updateYouYouStreamIDs(ids: List<String>) {
@@ -627,6 +625,9 @@ class TestProducerMediaPausedParameters(
     override val forceFullDisplay: Boolean
         get() = base.forceFullDisplay
 
+    override val audioDecibels: List<com.mediasfu.sdk.model.AudioDecibels>
+        get() = base.audioDecibels
+
     override val mainScreenFilled: Boolean
         get() = base.mainScreenFilled
 
@@ -689,6 +690,9 @@ class TestProducerMediaPausedParameters(
     override val updateScreenForceFullDisplay: (Boolean) -> Unit = base.updateScreenForceFullDisplay
 
     override val updateShowAlert: (ShowAlert?) -> Unit = base.updateShowAlert
+
+    override val updateMainGridStream: (List<com.mediasfu.sdk.ui.MediaSfuUIComponent>) -> Unit =
+        base.updateMainGridStream
 
     override val meetingDisplayType: String
         get() = meetingDisplayTypeValue
@@ -865,6 +869,10 @@ class TestProducerMediaPausedParameters(
         base.updateYouYouStream(streams)
     }
 
+    override fun updateYouYouStreamIDs(ids: List<String>) {
+        base.updateYouYouStreamIDs(ids)
+    }
+
     override suspend fun changeVids(options: ChangeVidsOptions): Result<Unit> {
         changeVidsCalls += options
         return base.changeVids(options)
@@ -937,6 +945,9 @@ class TestProducerMediaResumedParameters(
 
     override val forceFullDisplay: Boolean
         get() = base.forceFullDisplay
+
+    override val audioDecibels: List<com.mediasfu.sdk.model.AudioDecibels>
+        get() = base.audioDecibels
 
     override val shared: Boolean
         get() = base.shared
@@ -1031,6 +1042,9 @@ class TestProducerMediaResumedParameters(
     override val updateShowAlert: (ShowAlert?) -> Unit
         get() = base.updateShowAlert
 
+    override val updateMainGridStream: (List<com.mediasfu.sdk.ui.MediaSfuUIComponent>) -> Unit
+        get() = base.updateMainGridStream
+
     override val updateUpdateMainWindow: (Boolean) -> Unit = { value ->
         updateMainWindowCalls += value
         base.updateUpdateMainWindow(value)
@@ -1118,6 +1132,10 @@ class TestProducerMediaResumedParameters(
 
     override fun updateYouYouStream(streams: List<Stream>) {
         base.updateYouYouStream(streams)
+    }
+
+    override fun updateYouYouStreamIDs(ids: List<String>) {
+        base.updateYouYouStreamIDs(ids)
     }
 
     override suspend fun changeVids(options: ChangeVidsOptions): Result<Unit> = base.changeVids(options)

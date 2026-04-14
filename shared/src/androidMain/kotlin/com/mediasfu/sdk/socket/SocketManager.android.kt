@@ -215,6 +215,8 @@ class SocketManagerImpl : SocketManager {
         eventHandlers.remove(event)
         socket?.off(event)
     }
+
+    override fun hasListener(event: String): Boolean = eventHandlers.containsKey(event)
     
     override fun offAll() {
         eventHandlers.clear()

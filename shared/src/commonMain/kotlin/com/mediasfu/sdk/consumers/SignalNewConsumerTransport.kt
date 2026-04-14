@@ -1,6 +1,7 @@
 // SignalNewConsumerTransport.kt
 package com.mediasfu.sdk.consumers
 import com.mediasfu.sdk.util.Logger
+import com.mediasfu.sdk.util.toStringAnyMap
 
 import com.mediasfu.sdk.methods.utils.mini_audio_player.MiniAudioPlayerParameters
 import com.mediasfu.sdk.model.AudioDecibels
@@ -418,8 +419,8 @@ suspend fun signalNewConsumerTransport(
 
         val transportParams = createTransportResult.fold(
             onSuccess = { response ->
-                val params = response["params"] as? Map<*, *>
-                if (params == null) {
+                    val params = response["params"].toStringAnyMap()
+                    if (params.isEmpty()) {
                     return Result.failure(SignalNewConsumerTransportException("createWebRtcTransport returned null params"))
                 }
                 
@@ -466,8 +467,8 @@ suspend fun signalNewConsumerTransport(
         consumeResult.fold(
             onSuccess = { response ->
                 // Check if response contains error (server returns {params={error={}}} on failure)
-                val params = response["params"] as? Map<*, *>
-                if (params != null) {
+                val params = response["params"].toStringAnyMap()
+                if (params.isNotEmpty()) {
                     // If params contains "error" key at all, it's an error response (even if empty {})
                     if (params.containsKey("error")) {
                         val error = params["error"] as? Map<*, *>
@@ -477,8 +478,7 @@ suspend fun signalNewConsumerTransport(
                 }
                 
                 // Parse successful response - extract from params if nested
-                @Suppress("UNCHECKED_CAST")
-                val dataMap = (params as? Map<String, Any?>) ?: response
+                val dataMap = if (params.isNotEmpty()) params else response.toStringAnyMap()
                 val consumeResponse = parseConsumeResponse(dataMap)
                 
                 // === CODEC DEBUG: Log consume response from server ===
@@ -501,9 +501,8 @@ suspend fun signalNewConsumerTransport(
                 }
                 
                 // STEP 3: Create client-side recv transport from STEP 1 params
-                @Suppress("UNCHECKED_CAST")
                 val clientTransport = runCatching {
-                    device.createRecvTransport(transportParams as Map<String, Any?>)
+                    device.createRecvTransport(transportParams.toStringAnyMap())
                 }.getOrElse { error ->
                     return@fold Result.failure(SignalNewConsumerTransportException("Failed to create client transport", error))
                 }
@@ -553,6 +552,10 @@ suspend fun signalNewConsumerTransport(
                     socket = socket
                 )
                 val updatedConsumerTransports = parameters.consumerTransports.toMutableList()
+                updatedConsumerTransports.removeAll { existing ->
+                    existing.serverConsumerTransportId == serverConsumerTransportId ||
+                        existing.producerId == producerId
+                }
                 updatedConsumerTransports.add(newTransportInfo)
                 parameters.updateConsumerTransports(updatedConsumerTransports)
 
@@ -571,7 +574,7 @@ suspend fun signalNewConsumerTransport(
                 
                 resumeResult.fold(
                     onSuccess = { resumeResponse ->
-                        val resumed = resumeResponse["resumed"] as? Boolean ?: false
+                        val resumed = resumeResponse["resumed"].toLooseBoolean()
                         
                         if (resumed) {
                             runCatching { consumer.resume() }
@@ -628,7 +631,7 @@ private fun parseConsumeResponse(response: Map<String, Any?>): ConsumeResponse {
         id = response["id"] as? String ?: "",
         producerId = response["producerId"] as? String ?: "",
         kind = response["kind"] as? String ?: "",
-        rtpParameters = response["rtpParameters"] as? Map<String, Any> ?: emptyMap(),
+        rtpParameters = response["rtpParameters"].toStringAnyMap(),
         serverConsumerId = response["serverConsumerId"] as? String ?: ""
     )
 }

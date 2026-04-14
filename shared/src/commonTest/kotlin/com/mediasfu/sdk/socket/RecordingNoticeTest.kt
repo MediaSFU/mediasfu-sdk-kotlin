@@ -25,7 +25,7 @@ private class RecordingNoticeParamsFixture(
     private var levelValue = level
     private var userParamsValue = initialUserParams
     private var recordElapsedTimeValue = 0
-    private var recordStartTimeValue: Int? = 0
+    private var recordStartTimeValue: Long? = 0L
     private var recordStartedValue = false
     private var recordPausedValue = false
     private var canLaunchRecordValue = true
@@ -63,7 +63,7 @@ private class RecordingNoticeParamsFixture(
     override val recordElapsedTime: Int
         get() = recordElapsedTimeValue
 
-    override val recordStartTime: Int?
+    override val recordStartTime: Long?
         get() = recordStartTimeValue
 
     override val recordStarted: Boolean
@@ -164,7 +164,7 @@ private class RecordingNoticeParamsFixture(
         recordElapsedTimeValue = it
     }
 
-    override val updateRecordStartTime: (Int?) -> Unit = {
+    override val updateRecordStartTime: (Long?) -> Unit = {
         recordStartTimeValue = it
     }
 

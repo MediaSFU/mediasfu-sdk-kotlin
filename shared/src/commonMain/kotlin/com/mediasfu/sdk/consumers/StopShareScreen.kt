@@ -91,7 +91,7 @@ data class StopShareScreenOptions(
  *     override val firstAll = false
  *     override val firstRound = false
  *     override val localStreamScreen = localStream
- *     override val eventType = "conference"
+ *     override val eventType = EventType.CONFERENCE
  *     override val prevForceFullDisplay = false
  *     override val annotateScreenStream = false
  *     // ... other update functions
@@ -118,7 +118,7 @@ suspend fun stopShareScreen(options: StopShareScreenOptions) {
         var firstAll = parameters.firstAll
         var firstRound = parameters.firstRound
         val localStreamScreen = parameters.localStreamScreen
-        val eventType = parameters.eventType?.toString() ?: ""
+        val eventType = parameters.eventType
         val prevForceFullDisplay = parameters.prevForceFullDisplay
         var annotateScreenStream = parameters.annotateScreenStream
 
@@ -202,7 +202,7 @@ suspend fun stopShareScreen(options: StopShareScreenOptions) {
         }
 
         // Update mainHeightWidth if event type is conference
-        if (eventType.contains("conference", ignoreCase = true)) {
+        if (eventType == EventType.CONFERENCE) {
             updateMainHeightWidth(0.0)
         }
 

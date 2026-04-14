@@ -43,7 +43,13 @@ fun CoHostModal(state: MediasfuGenericState) {
     val props = state.createCoHostModalProps()
     if (!props.isCoHostModalVisible) return
 
-    DefaultCoHostModalContent(props)
+    val overrideContent = state.options.uiOverrides.coHostModal
+    val contentBuilder = withOverride(
+        override = overrideContent,
+        baseBuilder = { DefaultCoHostModalContent(it) }
+    )
+
+    contentBuilder(props)
 }
 
 /**

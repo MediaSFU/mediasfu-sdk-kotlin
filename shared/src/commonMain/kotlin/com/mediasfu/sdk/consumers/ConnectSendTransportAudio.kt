@@ -11,6 +11,7 @@ import com.mediasfu.sdk.webrtc.MediaKind
 import com.mediasfu.sdk.webrtc.MediaStream
 import com.mediasfu.sdk.webrtc.WebRtcProducer
 import com.mediasfu.sdk.webrtc.WebRtcTransport
+import com.mediasfu.sdk.webrtc.OutboundAudioStatsProvider
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -303,8 +304,10 @@ suspend fun connectSendTransportAudio(
 /**
  * Updates the microphone audio level periodically.
  * 
- * This function would retrieve stats from the audio producer's RTP sender
- * and calculate the audio level. For now, it's a placeholder.
+ * When the active producer exposes outbound audio stats, this polls the
+ * platform implementation and maps the normalized level to the existing
+ * UI scale. Platforms without producer stats support fall back to silence
+ * instead of simulating random activity.
  * 
  * @param audioProducer The audio producer to monitor
  * @param updateAudioLevel Callback function to handle the updated audio level
@@ -316,20 +319,31 @@ fun updateMicLevel(
     if (audioProducer == null) {
         return
     }
-    
-    // TODO: Implement actual audio level monitoring
-    // For now, simulate audio level updates
-    kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
-        while (true) {
+
+    val statsProvider = audioProducer as? OutboundAudioStatsProvider
+    if (statsProvider == null) {
+        updateAudioLevel(0.0)
+        return
+    }
+
+    CoroutineScope(Dispatchers.Default).launch {
+        var consecutiveFailures = 0
+        while (consecutiveFailures < 5) {
             try {
-                // Simulate audio level (0.0 to 1.0)
-                val audioLevel = kotlin.random.Random.nextDouble(0.0, 1.0)
-                val newLevel = 127.5 + (audioLevel * 127.5)
-                updateAudioLevel(newLevel)
-                
-                kotlinx.coroutines.delay(1000) // Update every second
+                val audioLevel = statsProvider.getOutboundAudioLevel()
+                val normalizedLevel = when {
+                    audioLevel == null || audioLevel.isNaN() -> 0.0
+                    audioLevel <= 0.0 -> 0.0
+                    audioLevel <= 1.0 -> 127.5 + (audioLevel * 127.5)
+                    else -> audioLevel.coerceIn(0.0, 255.0)
+                }
+                updateAudioLevel(normalizedLevel)
+                consecutiveFailures = 0
+                delay(250)
             } catch (_: Exception) {
-                break
+                consecutiveFailures += 1
+                updateAudioLevel(0.0)
+                delay(500)
             }
         }
     }

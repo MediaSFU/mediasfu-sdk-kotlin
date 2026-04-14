@@ -1,6 +1,5 @@
 package com.mediasfu.sdk.socket
 
-import com.mediasfu.sdk.model.Settings
 import com.mediasfu.sdk.model.UpdateMediaSettingsOptions
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -15,7 +14,7 @@ class UpdateMediaSettingsTest {
         var chat = ""
 
         val options = UpdateMediaSettingsOptions(
-            settings = Settings(settings = listOf("enabled", "disabled", "approval", "allow")),
+            settings = listOf("enabled", "disabled", "approval", "allow"),
             updateAudioSetting = { audio = it },
             updateVideoSetting = { video = it },
             updateScreenshareSetting = { screenshare = it },
@@ -38,7 +37,7 @@ class UpdateMediaSettingsTest {
         var chat = ""
 
         val options = UpdateMediaSettingsOptions(
-            settings = Settings(settings = listOf("enabled")),
+            settings = listOf("enabled"),
             updateAudioSetting = { audio = it },
             updateVideoSetting = { video = it },
             updateScreenshareSetting = { screenshare = it },
@@ -61,7 +60,7 @@ class UpdateMediaSettingsTest {
         var chat = ""
 
         val options = UpdateMediaSettingsOptions(
-            settings = Settings(settings = emptyList()),
+            settings = emptyList(),
             updateAudioSetting = { audio = it },
             updateVideoSetting = { video = it },
             updateScreenshareSetting = { screenshare = it },
@@ -84,7 +83,7 @@ class UpdateMediaSettingsTest {
         var chat = ""
 
         val options = UpdateMediaSettingsOptions(
-            settings = Settings(settings = listOf("disabled", "enabled")),
+            settings = listOf("disabled", "enabled"),
             updateAudioSetting = { audio = it },
             updateVideoSetting = { video = it },
             updateScreenshareSetting = { screenshare = it },
@@ -102,7 +101,7 @@ class UpdateMediaSettingsTest {
     @Test
     fun `handles exception gracefully`() {
         val options = UpdateMediaSettingsOptions(
-            settings = Settings(settings = listOf("enabled")),
+            settings = listOf("enabled"),
             updateAudioSetting = { throw RuntimeException("Test error") },
             updateVideoSetting = {},
             updateScreenshareSetting = {},

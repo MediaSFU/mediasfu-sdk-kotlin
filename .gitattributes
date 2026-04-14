@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
-* text=auto
+* text=auto eol=lf
+*.jar binary
+*.aar binary
+*.png binary
+*.webp binary

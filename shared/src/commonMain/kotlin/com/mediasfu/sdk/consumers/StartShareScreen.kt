@@ -2,6 +2,8 @@
 package com.mediasfu.sdk.consumers
 import com.mediasfu.sdk.util.Logger
 
+import com.mediasfu.sdk.model.ShowAlert
+import com.mediasfu.sdk.model.call
 import com.mediasfu.sdk.webrtc.*
 import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.Clock
@@ -24,7 +26,7 @@ typealias RequestScreenCapturePermissionType = suspend () -> Map<String, Any?>?
  */
 interface StartShareScreenParameters {
     val shared: Boolean
-    val showAlert: Any? // ShowAlert
+    val showAlert: ShowAlert?
     val onWeb: Boolean
     val device: WebRtcDevice? // WebRTC device for screen capture
     
@@ -215,7 +217,7 @@ suspend fun startShareScreen(
  * On Android, this requires MediaProjection API setup. Use ScreenCaptureHelper
  * to obtain the mediaProjectionData containing resultCode and Intent.
  * 
- * On iOS, this requires ReplayKit integration (not yet implemented).
+ * On iOS, this uses ReplayKit where supported by the active platform implementation.
  * 
  * On Web, this uses the navigator.mediaDevices.getDisplayMedia() API.
  * 
@@ -291,12 +293,7 @@ private suspend fun requestScreenCapture(
  */
 private fun showAlert(parameters: StartShareScreenParameters, message: String) {
     try {
-        // TODO: Implement platform-specific alert showing
-        // This would use platform-specific UI components to show alerts
-        
-        
-        // If showAlert function is available, call it
-        // parameters.showAlert?.show(message)
+        parameters.showAlert.call(message = message, type = "danger", duration = 3000)
     } catch (error: Exception) {
         Logger.e("StartShareScreen", "Error showing alert: ${error.message}")
     }

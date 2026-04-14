@@ -44,7 +44,7 @@ data class OnScreenChangesOptions(
  * Example:
  * ```kotlin
  * val parameters = object : OnScreenChangesParameters {
- *     override val eventType = "conference"
+ *     override val eventType = EventType.CONFERENCE
  *     override val shareScreenStarted = false
  *     override val shared = false
  *     override val addForBasic = false

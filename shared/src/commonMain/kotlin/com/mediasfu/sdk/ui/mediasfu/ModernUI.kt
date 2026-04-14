@@ -37,6 +37,7 @@ enum class SidebarContent {
     Polls,
     BreakoutRooms,
     Share,
+    Screenboard,
     Whiteboard,
     EventSettings,
     Background,

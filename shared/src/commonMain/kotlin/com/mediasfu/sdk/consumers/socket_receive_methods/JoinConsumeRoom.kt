@@ -1,5 +1,6 @@
 package com.mediasfu.sdk.consumers.socket_receive_methods
 import com.mediasfu.sdk.util.Logger
+import com.mediasfu.sdk.util.toLooseBoolean
 
 import com.mediasfu.sdk.socket.SocketManager
 import com.mediasfu.sdk.webrtc.WebRtcDevice
@@ -106,8 +107,8 @@ suspend fun joinConRoom(options: JoinConRoomOptions): ResponseJoinRoom {
             )
         )
 
-        val responseMap = response as? Map<*, *>
-        val success = responseMap?.get("success") as? Boolean ?: false
+		val responseMap = response as? Map<*, *>
+        val success = responseMap?.get("success").toLooseBoolean()
         val rtpCapabilities = responseMap?.get("rtpCapabilities")
         return ResponseJoinRoom(success = success, rtpCapabilities = rtpCapabilities)
     } catch (e: Exception) {

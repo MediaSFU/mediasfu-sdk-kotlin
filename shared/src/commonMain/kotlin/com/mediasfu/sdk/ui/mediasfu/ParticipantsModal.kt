@@ -16,11 +16,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Message
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MicOff
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +32,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -92,6 +96,17 @@ fun ParticipantsModalContentBody(
     props: ParticipantsModalProps,
     modifier: Modifier = Modifier
 ) {
+    val panelists by props.state.panelists.collectAsState()
+    val panelistsFocused by props.state.panelistsFocused.collectAsState()
+    val muteOthersMic by props.state.muteOthersMic.collectAsState()
+    val muteOthersCamera by props.state.muteOthersCamera.collectAsState()
+    val currentUserIsHost = props.state.room.youAreHost || props.state.room.islevel.equals("2", ignoreCase = true)
+    val panelistLimit = props.state.media.itemPageLimit.takeIf { it > 0 } ?: 10
+    val audienceMic = props.state.permissionValue(level = "level0", key = "useMic", default = "approval")
+    val audienceCamera = props.state.permissionValue(level = "level0", key = "useCamera", default = "approval")
+    val audienceScreen = props.state.permissionValue(level = "level0", key = "useScreen", default = "disallow")
+    val audienceChat = props.state.permissionValue(level = "level0", key = "useChat", default = "allow")
+
     val visibleParticipants = props.filteredParticipants
         .takeIf { it.isNotEmpty() || props.filter.isNotBlank() }
         ?: props.participants
@@ -106,6 +121,70 @@ fun ParticipantsModalContentBody(
             label = { Text("Filter participants") },
             modifier = Modifier.fillMaxWidth()
         )
+
+        if (currentUserIsHost && (props.state.room.eventType == EventType.WEBINAR || props.state.room.eventType == EventType.CONFERENCE)) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp),
+                tonalElevation = 1.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Panelists: ${panelists.size}/$panelistLimit",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { props.state.togglePanelistFocus() }) {
+                            Text(if (panelistsFocused) "Disable Focus" else "Enable Focus")
+                        }
+                        TextButton(
+                            enabled = panelistsFocused,
+                            onClick = { props.state.togglePanelistFocusMuteMic() }
+                        ) {
+                            Text(if (muteOthersMic) "Unmute Others Mic" else "Mute Others Mic")
+                        }
+                        TextButton(
+                            enabled = panelistsFocused,
+                            onClick = { props.state.togglePanelistFocusMuteCamera() }
+                        ) {
+                            Text(if (muteOthersCamera) "Unmute Others Cam" else "Mute Others Cam")
+                        }
+                        TextButton(
+                            enabled = panelists.isNotEmpty(),
+                            onClick = { props.state.clearAllPanelists() }
+                        ) {
+                            Text("Clear Panelists")
+                        }
+                    }
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { props.state.cycleAudienceMicPermission() }) {
+                            Text("Mic: $audienceMic")
+                        }
+                        TextButton(onClick = { props.state.cycleAudienceCameraPermission() }) {
+                            Text("Cam: $audienceCamera")
+                        }
+                        TextButton(onClick = { props.state.cycleAudienceScreenPermission() }) {
+                            Text("Screen: $audienceScreen")
+                        }
+                        TextButton(onClick = { props.state.toggleAudienceChatPermission() }) {
+                            Text("Chat: $audienceChat")
+                        }
+                    }
+                }
+            }
+        }
 
         if (visibleParticipants.isNotEmpty()) {
             Text(
@@ -156,10 +235,12 @@ fun ParticipantsModalContentBody(
 private fun ParticipantRow(participant: Participant, isCurrentUser: Boolean, state: MediasfuGenericState) {
     val isHost = participant.isHost || participant.islevel.equals("2", ignoreCase = true)
     val currentUserIsHost = state.room.youAreHost || state.room.islevel.equals("2", ignoreCase = true)
+    val isPanelist = state.panelists.value.any { it.id == participant.id }
     val statusLabels = buildList {
         if (isCurrentUser) add("You")
         if (isHost) add("Host")
         else if (participant.isAdmin) add("Admin")
+        if (isPanelist) add("Panelist")
         if (participant.breakRoom != null) add("Breakout ${participant.breakRoom}")
         if (participant.isBanned) add("Banned")
         if (participant.isSuspended) add("Suspended")
@@ -223,6 +304,7 @@ private fun ParticipantRow(participant: Participant, isCurrentUser: Boolean, sta
                 
                 // Remove button: only if user is host, not self, and target is not host
                 val canRemove = currentUserIsHost && !isCurrentUser && !isHost
+                val canManagePanelist = currentUserIsHost && !isCurrentUser && !isHost && participant.id != null
 
                 // Show mute button only if user has permission and not broadcast
                 if (canMute) {
@@ -256,6 +338,22 @@ private fun ParticipantRow(participant: Participant, isCurrentUser: Boolean, sta
                             imageVector = Icons.AutoMirrored.Rounded.Message,
                             contentDescription = "Send message",
                             tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                if (canManagePanelist) {
+                    IconButton(
+                        onClick = {
+                            if (isPanelist) state.removePanelist(participant) else state.addPanelist(participant)
+                        },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isPanelist) Icons.Rounded.Remove else Icons.Rounded.Add,
+                            contentDescription = if (isPanelist) "Remove panelist" else "Add panelist",
+                            tint = if (isPanelist) Color(0xFFFF9800) else Color(0xFF52C41A),
                             modifier = Modifier.size(18.dp)
                         )
                     }

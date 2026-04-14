@@ -67,22 +67,31 @@ suspend fun getVideos(
 ): Result<Unit> {
     return try {
         val participants = options.participants
-        val allVideoStreams = options.allVideoStreams
-        val oldAllStreams = options.oldAllStreams
-        val adminVidID = options.adminVidID
-        
-        // Filter out admin's video stream if adminVidID is provided
-        val filteredStreams = if (adminVidID != null) {
-            filterOutAdminStream(allVideoStreams, adminVidID)
-        } else {
-            allVideoStreams
+        var allVideoStreams = options.allVideoStreams.toList()
+        var oldAllStreams = options.oldAllStreams.toList()
+        var adminVidID = options.adminVidID
+
+        val admin = participants.filter { it.islevel == "2" }
+        if (admin.isNotEmpty()) {
+            adminVidID = admin.first().videoID
         }
-        
-        // Update the video streams
-        options.updateAllVideoStreams(filteredStreams)
-        
-        // Update old streams with current streams
-        options.updateOldAllStreams(allVideoStreams)
+
+        if (!adminVidID.isNullOrEmpty()) {
+            val previousOldAllStreams = if (oldAllStreams.isNotEmpty()) oldAllStreams.toList() else emptyList()
+
+            oldAllStreams = allVideoStreams.filter { stream ->
+                stream.producerId == adminVidID
+            }
+
+            if (oldAllStreams.isEmpty()) {
+                oldAllStreams = previousOldAllStreams
+            }
+
+            options.updateOldAllStreams(oldAllStreams)
+
+            allVideoStreams = filterOutAdminStream(allVideoStreams, adminVidID)
+            options.updateAllVideoStreams(allVideoStreams)
+        }
         
         Result.success(Unit)
     } catch (error: Exception) {
@@ -104,12 +113,7 @@ private fun filterOutAdminStream(
 ): List<Stream> {
     return try {
         streams.filter { stream ->
-            // TODO: Implement proper stream ID extraction
-            // This would extract the video ID from the stream object
-            // and compare it with adminVidID
-            
-            // For now, return all streams (no filtering)
-            true
+            stream.producerId != adminVidID
         }
     } catch (error: Exception) {
         Logger.e("GetVideos", "Error filtering admin stream: ${error.message}")

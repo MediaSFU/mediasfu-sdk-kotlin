@@ -252,21 +252,21 @@ class CoreModelsTest {
     @Test
     fun altDomainsShouldStoreDomainMappings() {
         val altDomains = AltDomains(
-            altDomains = mapOf(
+            data = mapOf(
                 "domain1" to "alt-domain1.com",
                 "domain2" to "alt-domain2.com"
             )
         )
         
-        assertEquals(2, altDomains.altDomains.size)
-        assertEquals("alt-domain1.com", altDomains.altDomains["domain1"])
-        assertEquals("alt-domain2.com", altDomains.altDomains["domain2"])
+        assertEquals(2, altDomains.data.size)
+        assertEquals("alt-domain1.com", altDomains.data["domain1"])
+        assertEquals("alt-domain2.com", altDomains.data["domain2"])
     }
     
     @Test
     fun altDomainsShouldDefaultToEmptyMap() {
         val altDomains = AltDomains()
         
-        assertTrue(altDomains.altDomains.isEmpty())
+        assertTrue(altDomains.data.isEmpty())
     }
 }

@@ -62,35 +62,49 @@ suspend fun mixStreams(
     options: MixStreamsOptions
 ): Result<List<Any>> {
     return try {
-        val alVideoStreams = options.alVideoStreams
-        val nonAlVideoStreams = options.nonAlVideoStreams
+        var alVideoStreams = options.alVideoStreams.toList()
+        val nonAlVideoStreams = options.nonAlVideoStreams.toList()
         val refParticipants = options.refParticipants
-        
-        // Create mixed streams list
-        val mixedStreams = mutableListOf<Any>()
-        
-        // Add "al" category streams first (prioritized)
-        mixedStreams.addAll(alVideoStreams)
-        
-        // Interleave non-"al" streams with participants
-        val maxLength = maxOf(nonAlVideoStreams.size, refParticipants.size)
-        
-        for (i in 0 until maxLength) {
-            // Add non-"al" stream if available
-            if (i < nonAlVideoStreams.size) {
-                mixedStreams.add(nonAlVideoStreams[i])
-            }
-            
-            // Add participant if available
-            if (i < refParticipants.size) {
-                mixedStreams.add(refParticipants[i])
-            }
+
+        val youyouStream = alVideoStreams.firstOrNull { stream ->
+            stream.producerId == "youyou" || stream.producerId == "youyouyou"
         }
-        
-        // Apply priority-based positioning
-        val prioritizedStreams = applyPriorityPositioning(mixedStreams)
-        
-        Result.success(prioritizedStreams)
+
+        alVideoStreams = alVideoStreams.filterNot { stream ->
+            stream.producerId == "youyou" || stream.producerId == "youyouyou"
+        }
+
+        val unmutedAlVideoStreams = alVideoStreams.filter { stream ->
+            val participant = refParticipants.firstOrNull { it.videoID == stream.producerId }
+            stream.muted != true && participant != null && !participant.muted
+        }
+
+        val mutedAlVideoStreams = alVideoStreams.filter { stream ->
+            val participant = refParticipants.firstOrNull { it.videoID == stream.producerId }
+            stream.muted == true || (participant != null && participant.muted)
+        }
+
+        val mixedStreams = mutableListOf<Stream>()
+        mixedStreams.addAll(unmutedAlVideoStreams)
+
+        var nonAlIndex = 0
+        for (mutedStream in mutedAlVideoStreams) {
+            if (nonAlIndex < nonAlVideoStreams.size) {
+                mixedStreams.add(nonAlVideoStreams[nonAlIndex])
+                nonAlIndex += 1
+            }
+            mixedStreams.add(mutedStream)
+        }
+
+        if (nonAlIndex < nonAlVideoStreams.size) {
+            mixedStreams.addAll(nonAlVideoStreams.subList(nonAlIndex, nonAlVideoStreams.size))
+        }
+
+        if (youyouStream != null && youyouStream.producerId.isNotEmpty()) {
+            mixedStreams.add(0, youyouStream)
+        }
+
+        Result.success(mixedStreams)
     } catch (error: Exception) {
         Result.failure(
             MixStreamsException(
@@ -101,18 +115,3 @@ suspend fun mixStreams(
     }
 }
 
-/**
- * Applies priority-based positioning to the mixed streams.
- */
-private fun applyPriorityPositioning(streams: List<Any>): List<Any> {
-    return try {
-        // TODO: Implement priority-based positioning logic
-        // This would analyze stream properties and reorder them based on priority
-        
-        // For now, return streams as-is
-        streams
-    } catch (error: Exception) {
-        Logger.e("MixStreams", "Error applying priority positioning: ${error.message}")
-        streams // Return original streams on error
-    }
-}

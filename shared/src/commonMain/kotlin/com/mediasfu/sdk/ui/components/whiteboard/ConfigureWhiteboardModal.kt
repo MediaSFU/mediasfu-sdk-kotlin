@@ -587,7 +587,7 @@ private fun ParticipantList(
 
 private fun Any?.toAckResult(): Pair<Boolean, String?> = when (this) {
     is Map<*, *> -> {
-        val success = (this["success"] as? Boolean) ?: false
+        val success = this["success"].toLooseBoolean()
         val reason = this["reason"] as? String
         success to reason
     }
@@ -600,4 +600,11 @@ private fun Any?.toAckResult(): Pair<Boolean, String?> = when (this) {
         else -> false to this
     }
     else -> false to null
+}
+
+private fun Any?.toLooseBoolean(): Boolean = when (this) {
+    is Boolean -> this
+    is Number -> this.toInt() != 0
+    is String -> this.equals("true", ignoreCase = true) || this == "1"
+    else -> false
 }

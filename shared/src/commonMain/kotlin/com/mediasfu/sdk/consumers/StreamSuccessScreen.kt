@@ -56,87 +56,73 @@ suspend fun streamSuccessScreen(options: StreamSuccessScreenOptions) {
         var transportCreated = parameters.transportCreated
         var transportCreatedScreen = parameters.transportCreatedScreen
         var screenAlreadyOn = parameters.screenAlreadyOn
-        var shareScreenStarted = parameters.shareScreenStarted
-        val screenAction = parameters.screenAction
-        val screenParams = parameters.screenParams
-        val localStreamScreen = parameters.localStreamScreen
-        val defScreenID = parameters.defScreenID
+        var screenAction = parameters.screenAction
         val hostLabel = parameters.hostLabel
-        val islevel = parameters.islevel
         val member = parameters.member
-        val updateMainWindow = parameters.updateMainWindow
         val lockScreen = parameters.lockScreen
         val shared = parameters.shared
+        val eventType = parameters.eventType
+        var annotateScreenStream = parameters.annotateScreenStream
 
         // Update functions
-    val updateParticipants = parameters::updateParticipants
+        val updateParticipants = parameters::updateParticipants
         val updateTransportCreated = parameters.updateTransportCreated
         val updateTransportCreatedScreen = parameters.updateTransportCreatedScreen
         val updateScreenAlreadyOn = parameters.updateScreenAlreadyOn
         val updateScreenAction = parameters.updateScreenAction
         val updateLocalStream = parameters.updateLocalStream
         val updateLocalStreamScreen = parameters.updateLocalStreamScreen
-        val updateDefScreenID = parameters.updateDefScreenID
         val updateShareScreenStarted = parameters.updateShareScreenStarted
         val updateUpdateMainWindow = parameters.updateUpdateMainWindow
+        val updateShared = parameters.updateShared
+        val updateIsScreenboardModalVisible = parameters.updateIsScreenboardModalVisible
 
         // Mediasfu functions
         val createSendTransport = parameters.createSendTransport
         val connectSendTransportScreen = parameters.connectSendTransportScreen
         val prepopulateUserMedia = parameters.prepopulateUserMedia
+        val reorderStreams = parameters.reorderStreams
 
         // Update local screen stream
         updateLocalStreamScreen(stream)
         updateLocalStream(stream)
 
-        // TODO: Platform-specific implementation needed
-        // In a full implementation, this would:
-        // 1. Extract screen track from stream
-        // 2. Update screen sharing configuration
-        // 3. Create/connect screen transport if needed
-        // 4. Update participant screen sharing states
-        // 5. Manage UI updates for screen sharing display
-        //
-        // For now, this is a placeholder that manages basic state
-
         // Update screen sharing state
         if (!screenAlreadyOn) {
             updateScreenAlreadyOn(true)
+            screenAlreadyOn = true
         }
 
-        if (!shareScreenStarted) {
+        if (!parameters.shareScreenStarted) {
             updateShareScreenStarted(true)
         }
 
-        // Create transport if needed
-        if (!transportCreated) {
-            try {
+        try {
+            if (!transportCreated) {
                 val optionsCreate = CreateSendTransportOptions(
                     option = "screen",
                     parameters = parameters as CreateSendTransportParameters
                 )
                 createSendTransport(optionsCreate)
-                transportCreated = true
-                updateTransportCreated(true)
-            } catch (error: Exception) {
-                Logger.e("StreamSuccessScreen", "MediaSFU - Error creating send transport: ${error.message}")
+            } else {
+                val optionsConnect = ConnectSendTransportScreenOptions(
+                    targetOption = "all",
+                    stream = stream,
+                    parameters = parameters as ConnectSendTransportScreenParameters
+                )
+                connectSendTransportScreen(optionsConnect)
             }
-        } else {
-            // Connect screen transport
-            try {
-                if (!transportCreatedScreen) {
-                    val optionsConnect = ConnectSendTransportScreenOptions(
-                        targetOption = "all",
-                        stream = stream,
-                        parameters = parameters as ConnectSendTransportScreenParameters
-                    )
-                    connectSendTransportScreen(optionsConnect)
-                    transportCreatedScreen = true
-                    updateTransportCreatedScreen(true)
+
+            runCatching { socket?.emit("startScreenShare", emptyMap()) }
+                .onFailure { error ->
+                    Logger.e("StreamSuccessScreen", "MediaSFU - Error emitting startScreenShare: ${error.message}")
                 }
-            } catch (error: Exception) {
-                Logger.e("StreamSuccessScreen", "MediaSFU - Error connecting screen transport: ${error.message}")
-            }
+        } catch (error: Exception) {
+            parameters.showAlert?.invoke(
+                "Error sharing screen: ${error.message}",
+                "danger",
+                3000
+            )
         }
 
         // Update participant screen sharing state
@@ -149,15 +135,69 @@ suspend fun streamSuccessScreen(options: StreamSuccessScreenOptions) {
         }
         updateParticipants(updatedParticipants)
 
-        // Handle UI updates
-        if (!lockScreen && !shared) {
-            updateUpdateMainWindow(true)
+        try {
+            updateShared(true)
             val optionsPrepopulate = PrepopulateUserMediaOptions(
                 name = hostLabel,
                 parameters = parameters as PrepopulateUserMediaParameters
             )
             prepopulateUserMedia(optionsPrepopulate)
-            updateUpdateMainWindow(false)
+        } catch (_: Exception) {
+        }
+
+        try {
+            val reorderOptions = if (eventType == EventType.CONFERENCE) {
+                ReorderStreamsOptions(
+                    add = false,
+                    screenChanged = true,
+                    parameters = parameters
+                )
+            } else {
+                ReorderStreamsOptions(
+                    add = false,
+                    screenChanged = false,
+                    parameters = parameters
+                )
+            }
+            reorderStreams(reorderOptions)
+
+            if (eventType == EventType.CONFERENCE) {
+                val optionsPrepopulate = PrepopulateUserMediaOptions(
+                    name = hostLabel,
+                    parameters = parameters as PrepopulateUserMediaParameters
+                )
+                prepopulateUserMedia(optionsPrepopulate)
+            }
+        } catch (error: Exception) {
+            val rePortParameters = parameters as? RePortParameters
+            if (rePortParameters != null) {
+                runCatching {
+                    rePort(RePortOptions(parameters = rePortParameters))
+                }.onFailure { rePortError ->
+                    Logger.e("StreamSuccessScreen", "MediaSFU - Error in rePort fallback: ${rePortError.message}")
+                }
+            } else {
+                Logger.e("StreamSuccessScreen", "MediaSFU - Error reordering screen streams: ${error.message}")
+            }
+        }
+
+        if (screenAction) {
+            screenAction = false
+            updateScreenAction(false)
+        }
+
+        transportCreatedScreen = true
+        updateTransportCreatedScreen(true)
+        if (!transportCreated) {
+            transportCreated = true
+            updateTransportCreated(true)
+        }
+
+        if (annotateScreenStream) {
+            annotateScreenStream = false
+            updateIsScreenboardModalVisible(true)
+            kotlinx.coroutines.delay(1000)
+            updateIsScreenboardModalVisible(false)
         }
 
     } catch (error: Exception) {

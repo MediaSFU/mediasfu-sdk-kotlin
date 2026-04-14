@@ -49,13 +49,13 @@ fun RecordingModal(state: MediasfuGenericState) {
     val props = state.createRecordingModalProps()
     if (!props.isRecordingModalVisible) return
 
-    // TODO: Temporarily removed uiOverrides check - property doesn't exist
-    // val overrideContent = state.options.uiOverrides.recordingModal
-    // if (overrideContent != null) {
-    //     overrideContent(props)
-    // } else {
-        DefaultRecordingModalContent(props)
-    // }
+    val overrideContent = state.options.uiOverrides.recordingModal
+    val contentBuilder = withOverride(
+        override = overrideContent,
+        baseBuilder = { DefaultRecordingModalContent(it) }
+    )
+
+    contentBuilder(props)
 }
 
 @Composable

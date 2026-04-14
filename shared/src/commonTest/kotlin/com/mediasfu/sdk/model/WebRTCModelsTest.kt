@@ -561,7 +561,7 @@ class WebRTCModelsTest {
     fun `TransportStats should track bytes and packets`() {
         val stats = TransportStats(
             transportId = "transport-1",
-            timestamp = System.currentTimeMillis(),
+            timestamp = 1_700_000_000_000,
             bytesSent = 1024000,
             bytesReceived = 2048000,
             packetsSent = 1000,
@@ -581,7 +581,7 @@ class WebRTCModelsTest {
     fun `ProducerStats should include codec info`() {
         val stats = ProducerStats(
             producerId = "producer-1",
-            timestamp = System.currentTimeMillis(),
+            timestamp = 1_700_000_000_100,
             kind = MediaKind.VIDEO,
             mimeType = "video/VP8",
             bytesSent = 500000,
@@ -600,7 +600,7 @@ class WebRTCModelsTest {
     fun `ConsumerStats should track quality metrics`() {
         val stats = ConsumerStats(
             consumerId = "consumer-1",
-            timestamp = System.currentTimeMillis(),
+            timestamp = 1_700_000_000_200,
             kind = MediaKind.AUDIO,
             mimeType = "audio/opus",
             bytesReceived = 250000,

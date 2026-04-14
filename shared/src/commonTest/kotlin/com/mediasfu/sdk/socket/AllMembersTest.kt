@@ -14,9 +14,9 @@ import com.mediasfu.sdk.model.Request
 import com.mediasfu.sdk.model.ReorderStreamsType
 import com.mediasfu.sdk.model.SleepOptions
 import com.mediasfu.sdk.model.SleepType
-import com.mediasfu.sdk.model.SocketLike
 import com.mediasfu.sdk.model.Stream
 import com.mediasfu.sdk.model.WaitingRoomParticipant
+import com.mediasfu.sdk.socket.SocketManager
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -76,7 +76,7 @@ class FakeAllMembersParameters : AllMembersRestParameters {
 
     var connectIpsResultSockets: List<ConsumeSocket> = listOf(mapOf("socket" to "remoteSocket"))
     var connectIpsResultIps: List<String> = listOf("10.0.0.2")
-    var socketState: SocketLike? = null
+    var socketState: SocketManager? = null
     var connectLocalIpsLambda: ConnectLocalIpsType? = null
     var eventTypeState: EventType = EventType.CONFERENCE
     var sharedState: Boolean = false
@@ -190,7 +190,7 @@ class FakeAllMembersParameters : AllMembersRestParameters {
     override val itemPageLimit: Int
         get() = itemPageLimitState
 
-    override val socket: SocketLike?
+    override val socket: SocketManager?
         get() = socketState
 
     override val consumeSockets: List<ConsumeSocket>

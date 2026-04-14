@@ -11,10 +11,13 @@ import androidx.compose.ui.interop.UIKitView
 import cocoapods.WebRTC.RTCMTLVideoView
 import cocoapods.WebRTC.RTCVideoTrack
 import com.mediasfu.sdk.webrtc.MediaStreamTrack
+import kotlinx.cinterop.CValue
+import kotlinx.cinterop.ExperimentalForeignApi
 import platform.UIKit.UIViewContentMode
-import platform.UIKit.UIViewContentModeScaleAspectFill
-import platform.UIKit.UIViewContentModeScaleAspectFit
+import platform.CoreGraphics.CGAffineTransform
+import platform.CoreGraphics.CGAffineTransformMakeScale
 
+@OptIn(ExperimentalForeignApi::class)
 @Composable
 actual fun PlatformVideoRenderer(
     track: MediaStreamTrack,
@@ -38,16 +41,16 @@ actual fun PlatformVideoRenderer(
         modifier = modifier,
         factory = {
             RTCMTLVideoView().apply {
-                videoContentMode = desiredContentMode(forceFullDisplay)
-                mirror = doMirror
+                contentMode = desiredContentMode(forceFullDisplay)
+                transform = mirrorTransform(doMirror)
             }.also { view ->
                 updatedTrack.value.addRenderer(view)
                 boundTrack = updatedTrack.value
             }
         },
         update = { view ->
-            view.videoContentMode = desiredContentMode(forceFullDisplay)
-            view.mirror = doMirror
+            view.contentMode = desiredContentMode(forceFullDisplay)
+            view.transform = mirrorTransform(doMirror)
 
             val desiredTrack = updatedTrack.value
             if (boundTrack !== desiredTrack) {
@@ -65,8 +68,15 @@ actual fun PlatformVideoRenderer(
 
 private fun desiredContentMode(forceFullDisplay: Boolean): UIViewContentMode {
     return if (forceFullDisplay) {
-        UIViewContentModeScaleAspectFill
+        UIViewContentMode.UIViewContentModeScaleAspectFill
     } else {
-        UIViewContentModeScaleAspectFit
+        UIViewContentMode.UIViewContentModeScaleAspectFit
     }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+private fun mirrorTransform(doMirror: Boolean): CValue<CGAffineTransform> = if (doMirror) {
+    CGAffineTransformMakeScale(-1.0, 1.0) as CValue<CGAffineTransform>
+} else {
+    CGAffineTransformMakeScale(1.0, 1.0) as CValue<CGAffineTransform>
 }

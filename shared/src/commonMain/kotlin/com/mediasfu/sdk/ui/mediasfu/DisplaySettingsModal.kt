@@ -27,7 +27,13 @@ fun DisplaySettingsModal(state: MediasfuGenericState) {
     val props = state.createDisplaySettingsModalProps()
     if (!props.isVisible) return
 
-    DefaultDisplaySettingsModalContent(props)
+    val overrideContent = state.options.uiOverrides.displaySettingsModal
+    val contentBuilder = withOverride(
+        override = overrideContent,
+        baseBuilder = { DefaultDisplaySettingsModalContent(it) }
+    )
+
+    contentBuilder(props)
 }
 
 /**

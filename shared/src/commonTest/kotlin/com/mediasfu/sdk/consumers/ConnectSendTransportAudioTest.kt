@@ -4,6 +4,12 @@ package com.mediasfu.sdk.consumers
 import com.mediasfu.sdk.testutil.TestConnectSendTransportAudioParameters
 import com.mediasfu.sdk.testutil.TestMediaStream
 import com.mediasfu.sdk.testutil.TestMediaStreamTrack
+import com.mediasfu.sdk.webrtc.MediaKind
+import com.mediasfu.sdk.webrtc.MediaStreamTrack
+import com.mediasfu.sdk.webrtc.OutboundAudioStatsProvider
+import com.mediasfu.sdk.webrtc.ProducerSource
+import com.mediasfu.sdk.webrtc.WebRtcProducer
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertTrue
@@ -90,6 +96,28 @@ class ConnectSendTransportAudioTest {
         // But we can verify it doesn't crash
         assertTrue(true) // Test passes if no exceptions
     }
+
+    @Test
+    fun testUpdateMicLevelFallsBackToZeroWithoutStatsProvider() {
+        var lastLevel = Double.NaN
+        updateMicLevel(TestProducer(), updateAudioLevel = { level ->
+            lastLevel = level
+        })
+
+        assertEquals(0.0, lastLevel)
+    }
+
+    @Test
+    fun testUpdateMicLevelUsesOutboundStatsProvider() = runTest {
+        var lastLevel = 0.0
+        updateMicLevel(TestStatsProducer(0.5), updateAudioLevel = { level ->
+            lastLevel = level
+        })
+
+        delay(350)
+
+        assertTrue(lastLevel > 127.5)
+    }
     
     @Test
     fun testConnectSendTransportAudioOptions() {
@@ -116,5 +144,23 @@ class ConnectSendTransportAudioTest {
         val exceptionWithCause = ConnectSendTransportAudioException("Test error", exception)
         assertEquals("Test error", exceptionWithCause.message)
         assertEquals(exception, exceptionWithCause.cause)
+    }
+
+    private open class TestProducer : WebRtcProducer {
+        override val id: String = "producer"
+        override val kind: MediaKind = MediaKind.AUDIO
+        override val source: ProducerSource = ProducerSource.MICROPHONE
+        override val paused: Boolean = false
+
+        override fun close() {}
+        override fun pause() {}
+        override fun resume() {}
+        override fun replaceTrack(track: MediaStreamTrack) {}
+    }
+
+    private class TestStatsProducer(
+        private val level: Double
+    ) : TestProducer(), OutboundAudioStatsProvider {
+        override suspend fun getOutboundAudioLevel(): Double = level
     }
 }

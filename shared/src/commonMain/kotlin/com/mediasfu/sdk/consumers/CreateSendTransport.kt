@@ -4,6 +4,7 @@ package com.mediasfu.sdk.consumers
 import com.mediasfu.sdk.webrtc.*
 import com.mediasfu.sdk.webrtc.ortc.OrtcUtils
 import com.mediasfu.sdk.socket.SocketManager
+import com.mediasfu.sdk.util.toStringAnyMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -202,10 +203,10 @@ private suspend fun createLocalSendTransport(options: CreateSendTransportOptions
             )
         }
 
-        val params = response["params"] as? Map<String, Any?>
-            ?: throw CreateSendTransportException("Missing params in local transport response")
+        val params = response["params"].toStringAnyMap()
+            .ifEmpty { throw CreateSendTransportException("Missing params in local transport response") }
 
-        val localTransport = device.createSendTransport(params as Map<String, Any>)
+        val localTransport = device.createSendTransport(params)
 
         setupSendTransportHandlers(
             transport = localTransport,
@@ -308,10 +309,10 @@ private suspend fun createRemoteSendTransport(
             )
         }
 
-        val params = response["params"] as? Map<String, Any?>
-            ?: throw CreateSendTransportException("Missing params in remote transport response")
+        val params = response["params"].toStringAnyMap()
+            .ifEmpty { throw CreateSendTransportException("Missing params in remote transport response") }
 
-        val remoteTransport = device.createSendTransport(params as Map<String, Any>)
+        val remoteTransport = device.createSendTransport(params)
 
         setupSendTransportHandlers(
             transport = remoteTransport,

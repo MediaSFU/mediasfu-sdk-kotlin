@@ -117,20 +117,17 @@ suspend fun streamSuccessAudio(options: StreamSuccessAudioOptions) {
     val parameters = options.parameters.getUpdatedAllParams()
 
     try {
-        val socket = parameters.socket
         val participants = parameters.participants
+        var localStream = parameters.localStream
         var transportCreated = parameters.transportCreated
         var transportCreatedAudio = parameters.transportCreatedAudio
         var audioAlreadyOn = parameters.audioAlreadyOn
-        val micAction = parameters.micAction
-        val audioParams = parameters.audioParams
-        val localStreamAudio = parameters.localStreamAudio
-        val defAudioID = parameters.defAudioID
-        val userDefaultAudioInputDevice = parameters.userDefaultAudioInputDevice
+        var micAction = parameters.micAction
+        var audioParams = parameters.audioParams
+        val aParams = parameters.aParams
         val hostLabel = parameters.hostLabel
         val islevel = parameters.islevel
         val member = parameters.member
-        val updateMainWindow = parameters.updateMainWindow
         val lockScreen = parameters.lockScreen
         val shared = parameters.shared
         val videoAlreadyOn = parameters.videoAlreadyOn
@@ -141,6 +138,7 @@ suspend fun streamSuccessAudio(options: StreamSuccessAudioOptions) {
         val updateTransportCreatedAudio = parameters.updateTransportCreatedAudio
         val updateAudioAlreadyOn = parameters.updateAudioAlreadyOn
         val updateMicAction = parameters.updateMicAction
+        val updateAudioParams = parameters.updateAudioParams
         val updateLocalStream = parameters.updateLocalStream
         val updateLocalStreamAudio = parameters.updateLocalStreamAudio
         val updateDefAudioID = parameters.updateDefAudioID
@@ -155,33 +153,53 @@ suspend fun streamSuccessAudio(options: StreamSuccessAudioOptions) {
 
         // Update local audio stream
         updateLocalStreamAudio(stream)
-        updateLocalStream(stream)
 
-        // TODO: Platform-specific implementation needed
-        // In a full implementation, this would:
-        // 1. Extract audio track from stream
-        // 2. Update default audio device ID
-        // 3. Create/connect audio transport if needed
-        // 4. Update participant mute states
-        // 5. Manage UI updates based on user level
-        //
-        // For now, this is a placeholder that manages basic state
+        if (localStream == null) {
+            localStream = stream
+            updateLocalStream(localStream)
+        } else {
+            runCatching {
+                localStream.getAudioTracks().forEach { track ->
+                    localStream.removeTrack(track)
+                }
+                stream.getAudioTracks().firstOrNull()?.let { track ->
+                    localStream.addTrack(track)
+                }
+            }.onFailure { error ->
+                Logger.e("StreamSuccessAudio", "MediaSFU - Error syncing local audio tracks: ${error.message}")
+            }
+            updateLocalStream(localStream)
+        }
+
+        val audioTrack = localStream?.getAudioTracks()?.firstOrNull()
+        val resolvedAudioDeviceId = audioTrack?.id.orEmpty()
+        if (resolvedAudioDeviceId.isNotEmpty()) {
+            updateDefAudioID(resolvedAudioDeviceId)
+            updateUserDefaultAudioInputDevice(resolvedAudioDeviceId)
+        }
+
+        if (audioParams == null && aParams != null) {
+            audioParams = aParams
+        }
+        audioParams = audioParams?.copy(track = audioTrack, stream = localStream)
+        audioParams?.let(updateAudioParams)
 
         // Update audio state
         if (!audioAlreadyOn) {
             updateAudioAlreadyOn(true)
+            audioAlreadyOn = true
         }
 
         // Create transport if needed
         if (!transportCreated) {
             try {
+                audioParams?.let(updateAudioParams)
                 val optionsCreate = CreateSendTransportOptions(
                     option = "audio",
-                    parameters = parameters as CreateSendTransportParameters
+                    parameters = parameters as CreateSendTransportParameters,
+                    audioConstraints = options.audioConstraints
                 )
                 createSendTransport(optionsCreate)
-                transportCreated = true
-                updateTransportCreated(true)
             } catch (error: Exception) {
                 Logger.e("StreamSuccessAudio", "MediaSFU - Error creating send transport: ${error.message}")
             }
@@ -189,14 +207,13 @@ suspend fun streamSuccessAudio(options: StreamSuccessAudioOptions) {
             // Connect or resume audio transport
             try {
                 if (!transportCreatedAudio) {
+                    audioParams?.let(updateAudioParams)
                     val optionsConnect = ConnectSendTransportAudioOptions(
-                        stream = stream,
+                        stream = localStream ?: stream,
                         parameters = parameters as ConnectSendTransportAudioParameters,
                         audioConstraints = options.audioConstraints
                     )
                     connectSendTransportAudio(optionsConnect)
-                    transportCreatedAudio = true
-                    updateTransportCreatedAudio(true)
                 } else {
                     val optionsResume = ResumeSendTransportAudioOptions(
                         parameters = parameters as ResumeSendTransportAudioParameters
@@ -206,6 +223,11 @@ suspend fun streamSuccessAudio(options: StreamSuccessAudioOptions) {
             } catch (error: Exception) {
                 Logger.e("StreamSuccessAudio", "MediaSFU - Error connecting audio transport: ${error.message}")
             }
+        }
+
+        if (micAction) {
+            micAction = false
+            updateMicAction(false)
         }
 
         // Update participant mute state
@@ -230,6 +252,11 @@ suspend fun streamSuccessAudio(options: StreamSuccessAudioOptions) {
                 updateUpdateMainWindow(false)
             }
         }
+
+        transportCreated = true
+        transportCreatedAudio = true
+        updateTransportCreated(true)
+        updateTransportCreatedAudio(true)
 
     } catch (error: Exception) {
         Logger.e("StreamSuccessAudio", "MediaSFU - streamSuccessAudio error: ${error.message}")

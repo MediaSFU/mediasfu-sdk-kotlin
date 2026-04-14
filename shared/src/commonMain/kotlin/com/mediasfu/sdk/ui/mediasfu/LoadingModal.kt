@@ -38,7 +38,14 @@ fun LoadingModal(state: MediasfuGenericState) {
 
     if (!shouldShow) return
 
-    DefaultLoadingModalContent(state.createLoadingModalProps())
+    val props = state.createLoadingModalProps()
+    val overrideContent = state.options.uiOverrides.loadingModal
+    val contentBuilder = withOverride(
+        override = overrideContent,
+        baseBuilder = { DefaultLoadingModalContent(it) }
+    )
+
+    contentBuilder(props)
 }
 
 @Composable

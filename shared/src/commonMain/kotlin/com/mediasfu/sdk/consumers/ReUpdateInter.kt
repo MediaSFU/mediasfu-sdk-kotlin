@@ -79,7 +79,7 @@ data class ReUpdateInterOptions(
  *     override val itemPageLimit = 3
  *     override val reorderInterval = 10000
  *     override val fastReorderInterval = 5000
- *     override val eventType = "conference"
+ *     override val eventType = EventType.CONFERENCE
  *     override val participants = listOf(/* participants */)
  *     override val allVideoStreams = listOf(/* streams */)
  *     override val shared = false

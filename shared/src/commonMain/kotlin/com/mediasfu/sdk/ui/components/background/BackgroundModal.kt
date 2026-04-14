@@ -1,6 +1,7 @@
 package com.mediasfu.sdk.ui.components.background
 import com.mediasfu.sdk.util.Logger
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,10 +36,13 @@ import coil3.PlatformContext
 import com.mediasfu.sdk.model.BackgroundType
 import com.mediasfu.sdk.model.PresetBackgrounds
 import com.mediasfu.sdk.model.VirtualBackground
+import com.mediasfu.sdk.ui.components.whiteboard.decodeImageBitmap
+import com.mediasfu.sdk.ui.components.whiteboard.rememberImagePickerLauncher
 import com.mediasfu.sdk.ui.components.display.PlatformVideoRenderer
 import com.mediasfu.sdk.webrtc.MediaStream
 import com.mediasfu.sdk.webrtc.MediaStreamTrack
 import com.mediasfu.sdk.webrtc.WebRtcDevice
+import kotlinx.datetime.Clock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -122,7 +126,7 @@ data class BackgroundModalOptions(
  *
  * Platform Support:
  * - ✅ Android: Full support via ML Kit Selfie Segmentation
- * - ✅ iOS: Full support via ML Kit Selfie Segmentation
+ * - ⚠️ iOS: Camera preview works, but virtual background processing depends on native segmentation support
  * - ❌ Web: Not supported (no ML Kit)
  */
 @Composable
@@ -150,10 +154,26 @@ fun BackgroundModal(
     
     var isProcessing by remember { mutableStateOf(false) }
     var selectedTab by remember { mutableIntStateOf(0) }
-    var customBackgrounds by remember { mutableStateOf(options.customBackgrounds ?: emptyList()) }
+    var customBackgrounds by remember(options.customBackgrounds, params.selectedBackground) {
+        mutableStateOf(seedCustomBackgrounds(options.customBackgrounds, params.selectedBackground))
+    }
 
-    // Platform support check (simplified - in actual impl would check actual platform)
-    val isPlatformSupported = true // Will be properly implemented in platform-specific code
+    val launchImagePicker = rememberImagePickerLauncher { result ->
+        if (result == null) return@rememberImagePickerLauncher
+
+        val uploadedBackground = createCustomBackgroundFromPickerResult(result)
+        customBackgrounds = (customBackgrounds + uploadedBackground)
+            .distinctBy { it.id }
+        selectedBackground = uploadedBackground
+
+        params.showAlert?.invoke(
+            "Custom background added",
+            "success",
+            2000
+        )
+    }
+
+    val isPlatformSupported = com.mediasfu.sdk.background.VirtualBackgroundProcessorFactory.isSupported()
 
     // Tab titles
     val tabs = buildList {
@@ -171,6 +191,16 @@ fun BackgroundModal(
         val bg = selectedBackground ?: run {
             return
         }
+
+        if (bg.type != BackgroundType.NONE && !isPlatformSupported) {
+            params.showAlert?.invoke(
+                "Virtual background processing is not available on this platform build yet.",
+                "danger",
+                3000
+            )
+            return
+        }
+
         isProcessing = true
 
         try {
@@ -303,7 +333,7 @@ fun BackgroundModal(
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
-                                text = "Virtual backgrounds are only supported on mobile devices (Android/iOS).",
+                                text = "Virtual background processing is not available on this platform build yet. You can still save a background for later.",
                                 color = Color(0xFFE65100),
                                 fontSize = 13.sp
                             )
@@ -374,14 +404,16 @@ fun BackgroundModal(
                                 customBackgrounds = customBackgrounds,
                                 selectedBackground = selectedBackground,
                                 onSelectBackground = ::selectBackground,
-                                allowCustomUpload = options.allowCustomUpload
+                                allowCustomUpload = options.allowCustomUpload,
+                                onUploadImage = launchImagePicker
                             )
                         }
                         3 -> CustomImagesTab(
                             customBackgrounds = customBackgrounds,
                             selectedBackground = selectedBackground,
                             onSelectBackground = ::selectBackground,
-                            allowCustomUpload = options.allowCustomUpload
+                            allowCustomUpload = options.allowCustomUpload,
+                            onUploadImage = launchImagePicker
                         )
                     }
                 }
@@ -430,7 +462,9 @@ fun BackgroundModal(
                                     applyBackground()
                                 }
                             },
-                            enabled = !isProcessing && isPlatformSupported
+                            enabled = !isProcessing &&
+                                selectedBackground != null &&
+                                (selectedBackground?.type == BackgroundType.NONE || isPlatformSupported)
                         ) {
                             if (isProcessing) {
                                 CircularProgressIndicator(
@@ -663,14 +697,13 @@ private fun CustomImagesTab(
     customBackgrounds: List<VirtualBackground>,
     selectedBackground: VirtualBackground?,
     onSelectBackground: (VirtualBackground) -> Unit,
-    allowCustomUpload: Boolean
+    allowCustomUpload: Boolean,
+    onUploadImage: () -> Unit
 ) {
     Column(modifier = Modifier.padding(16.dp)) {
         if (allowCustomUpload) {
             OutlinedButton(
-                onClick = {
-                    // TODO: Implement image picker
-                },
+                onClick = onUploadImage,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Add, contentDescription = null)
@@ -717,19 +750,88 @@ private fun CustomImagesTab(
                         isSelected = selectedBackground?.id == bg.id,
                         onClick = { onSelectBackground(bg) }
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color(0xFFE0E0E0)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(bg.name, fontSize = 10.sp)
-                        }
+                        CustomBackgroundThumbnail(background = bg)
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun CustomBackgroundThumbnail(background: VirtualBackground) {
+    val imageBitmap = remember(background.id, background.imageBytes) {
+        background.imageBytes?.let(::decodeImageBitmap)
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFE0E0E0)),
+        contentAlignment = Alignment.Center
+    ) {
+        when {
+            imageBitmap != null -> {
+                Image(
+                    bitmap = imageBitmap,
+                    contentDescription = background.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
+            !background.imageUrl.isNullOrBlank() || !background.thumbnailUrl.isNullOrBlank() -> {
+                AsyncImage(
+                    model = background.thumbnailUrl ?: background.imageUrl,
+                    contentDescription = background.name,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+            }
+            else -> {
+                Text(background.name, fontSize = 10.sp, textAlign = TextAlign.Center)
+            }
+        }
+    }
+}
+
+private fun seedCustomBackgrounds(
+    supplied: List<VirtualBackground>?,
+    selectedBackground: VirtualBackground?
+): List<VirtualBackground> {
+    val seeded = mutableListOf<VirtualBackground>()
+    supplied?.let { seeded += it }
+    if (selectedBackground != null &&
+        selectedBackground.type == BackgroundType.IMAGE &&
+        !selectedBackground.isPreset &&
+        selectedBackground.imageBytes != null
+    ) {
+        seeded += selectedBackground
+    }
+    return seeded.distinctBy { it.id }
+}
+
+private fun createCustomBackgroundFromPickerResult(
+    result: com.mediasfu.sdk.ui.components.whiteboard.WhiteboardImageResult
+): VirtualBackground {
+    val source = result.imageSrc?.substringAfterLast('/')?.substringAfterLast('\\')
+    val displayName = source
+        ?.substringBeforeLast('.')
+        ?.takeIf { it.isNotBlank() }
+        ?.replace('_', ' ')
+        ?.replace('-', ' ')
+        ?.replaceFirstChar { it.uppercase() }
+        ?: "Custom Image"
+
+    val uniqueId = "custom_${Clock.System.now().toEpochMilliseconds()}_${displayName.hashCode()}"
+
+    return VirtualBackground.image(
+        id = uniqueId,
+        name = displayName,
+        imageUrl = result.imageSrc,
+        imageBytes = result.imageData,
+        thumbnailUrl = result.imageSrc,
+        isPreset = false
+    )
 }
 
 @Composable

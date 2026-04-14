@@ -5,6 +5,7 @@ import com.mediasfu.sdk.socket.SocketManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.mediasfu.sdk.util.toLooseBoolean
 
 /**
  * Requests permission to start screen sharing or initiates screen sharing if in local UI mode.
@@ -87,9 +88,9 @@ suspend fun requestScreenShareImpl(
         socket.emitWithAck("requestScreenShare", emptyMap()) { responseData ->
             try {
                 val responseMap = responseData as? Map<*, *>
-                val allowScreenShare = responseMap?.get("allowScreenShare") as? Boolean
+                val allowScreenShare = responseMap?.get("allowScreenShare")
 
-                when (allowScreenShare) {
+                when (allowScreenShare?.toLooseBoolean(default = true)) {
                     false -> showAlert?.invoke(
                         "You are not allowed to share screen",
                         "danger",

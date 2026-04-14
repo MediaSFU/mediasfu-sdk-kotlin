@@ -2212,7 +2212,7 @@ class AndroidWebRtcDevice private constructor(
     private inner class AndroidWebRtcProducer(
         private val nativeProducer: Producer,
         override val source: ProducerSource
-    ) : WebRtcProducer {
+    ) : WebRtcProducer, OutboundAudioStatsProvider {
 
         private val closed = AtomicBoolean(false)
 
@@ -2260,6 +2260,32 @@ class AndroidWebRtcDevice private constructor(
                 Logger.d("AndroidWebRtcDevice", "MediaSFU - AndroidWebRtcProducer.replaceTrack: Failed to replace track -> ${error.message}")
             }
         }
+
+        override suspend fun getOutboundAudioLevel(): Double? {
+            if (closed.get() || kind != MediaKind.AUDIO) return null
+
+            val statsJson = runCatching {
+                nativeProducer.javaClass
+                    .getMethod("getStats")
+                    .invoke(nativeProducer) as? String
+            }.getOrNull() ?: return null
+
+            val statsArray = runCatching { JSONArray(statsJson) }.getOrNull() ?: return null
+            return parseOutboundAudioLevel(statsArray)
+        }
+    }
+
+    private fun parseOutboundAudioLevel(statsArray: JSONArray): Double? {
+        for (index in 0 until statsArray.length()) {
+            val entry = statsArray.optJSONObject(index) ?: continue
+            val type = entry.optString("type")
+            when (type) {
+                "media-source", "outbound-rtp", "track" -> {
+                    entry.optDoubleOrNullCompat("audioLevel")?.let { return it }
+                }
+            }
+        }
+        return null
     }
 
     private fun logRtpParametersSummary(

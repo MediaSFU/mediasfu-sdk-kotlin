@@ -117,6 +117,14 @@ interface SocketManager {
      * @param event The event name to stop listening for
      */
     fun off(event: String)
+
+    /**
+     * Check whether an event handler is currently registered for a specific event.
+     *
+     * @param event The event name to inspect
+     * @return true if a handler has been registered, false otherwise
+     */
+    fun hasListener(event: String): Boolean
     
     /**
      * Remove all event handlers.

@@ -1,6 +1,7 @@
 package com.mediasfu.sdk.model
 
 import androidx.compose.ui.graphics.Color
+import com.mediasfu.sdk.util.toLooseBoolean
 import kotlinx.serialization.Serializable
 
 /**
@@ -141,7 +142,7 @@ data class VirtualBackground(
                 color = colorValue?.let { Color(it) },
                 blurIntensity = (map["blurIntensity"] as? Number)?.toFloat() ?: 0.5f,
                 videoUrl = map["videoUrl"] as? String,
-                isPreset = map["isPreset"] as? Boolean ?: false
+                isPreset = map["isPreset"].toLooseBoolean()
             )
         }
     }

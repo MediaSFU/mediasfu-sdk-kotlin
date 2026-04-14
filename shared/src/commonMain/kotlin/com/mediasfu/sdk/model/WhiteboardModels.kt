@@ -2,6 +2,7 @@ package com.mediasfu.sdk.model
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import com.mediasfu.sdk.util.toLooseBoolean
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 
@@ -134,7 +135,7 @@ data class WhiteboardUser(
         fun fromMap(map: Map<String, Any?>): WhiteboardUser {
             return WhiteboardUser(
                 name = map["name"] as? String ?: "",
-                useBoard = map["useBoard"] as? Boolean ?: false
+                useBoard = map["useBoard"].toLooseBoolean()
             )
         }
     }

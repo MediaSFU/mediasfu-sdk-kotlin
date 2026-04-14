@@ -7,7 +7,7 @@ import com.mediasfu.sdk.model.EventType
  */
 data class AutoAdjustOptions(
     val n: Int,
-    val eventType: Any?, // EventType
+    val eventType: EventType,
     val shareScreenStarted: Boolean,
     val shared: Boolean
 )
@@ -32,10 +32,7 @@ suspend fun autoAdjust(
 ): Result<List<Int>> {
     return try {
         val n = options.n
-        val normalizedEventType = when (val raw = options.eventType) {
-            is EventType -> raw.name.lowercase()
-            else -> raw?.toString()?.lowercase()
-        }
+        val normalizedEventType = options.eventType.name.lowercase()
         val shareActive = options.shareScreenStarted || options.shared
 
         var val1 = 6

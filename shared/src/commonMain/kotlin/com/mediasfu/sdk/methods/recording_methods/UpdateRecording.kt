@@ -7,6 +7,9 @@ import com.mediasfu.sdk.model.ShowAlert
 import com.mediasfu.sdk.model.UserRecordingParams
 import com.mediasfu.sdk.model.toTransportMap
 import com.mediasfu.sdk.socket.SocketManager
+import com.mediasfu.sdk.util.toLooseBoolean
+import com.mediasfu.sdk.util.toLooseInt
+import com.mediasfu.sdk.util.toStringAnyMap
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -203,14 +206,14 @@ suspend fun updateRecording(options: UpdateRecordingOptions) {
             // Emit socket event and wait for acknowledgment
             val result = suspendCancellableCoroutine<Map<String, Any>> { continuation ->
                 socketRef.emitWithAck(action, mapOf("roomName" to roomName)) { data ->
-                    continuation.resume(data as Map<String, Any>)
+                    continuation.resume(data.toStringAnyMap())
                 }
             }
 
-            val success = result["success"] as? Boolean ?: false
+            val success = result["success"].toLooseBoolean()
             val reason = result["reason"] as? String ?: ""
             val recordState = result["recordState"] as? String ?: ""
-            val pauseCount = result["pauseCount"] as? Int ?: 0
+            val pauseCount = result["pauseCount"].toLooseInt()
 
             pauseRecordCount = pauseCount
             updatePauseRecordCount(pauseRecordCount)
@@ -280,11 +283,11 @@ suspend fun updateRecording(options: UpdateRecordingOptions) {
                 "roomName" to roomName,
                 "userRecordingParams" to userRecordingParams.toTransportMap()
             )) { data ->
-                    continuation.resume(data as Map<String, Any>)
+                    continuation.resume(data.toStringAnyMap())
                 }
             }
 
-            val success = result["success"] as? Boolean ?: false
+            val success = result["success"].toLooseBoolean()
             val reason = result["reason"] as? String ?: ""
 
             if (success) {

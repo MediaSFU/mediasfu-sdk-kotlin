@@ -49,7 +49,7 @@ class GetDomainsTest {
         val options = GetDomainsOptions(
             domains = listOf("domain1.com", "domain2.com"),
             altDomains = AltDomains(
-                altDomains = mapOf(
+                data = mapOf(
                     "domain1.com" to "alt1.domain.com",
                     "domain2.com" to "alt2.domain.com"
                 )

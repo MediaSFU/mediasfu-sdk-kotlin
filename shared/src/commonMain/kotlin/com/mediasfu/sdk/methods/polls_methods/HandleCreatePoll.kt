@@ -6,6 +6,8 @@ import com.mediasfu.sdk.model.ShowAlert
 import com.mediasfu.sdk.model.call
 import com.mediasfu.sdk.model.toTransportMap
 import com.mediasfu.sdk.socket.SocketManager
+import com.mediasfu.sdk.util.toLooseBoolean
+import com.mediasfu.sdk.util.toStringAnyMap
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
@@ -53,11 +55,11 @@ suspend fun handleCreatePoll(options: HandleCreatePollOptions) {
                 "createPoll",
                 mapOf("roomName" to options.roomName, "poll" to pollMap)
             ) { response ->
-                continuation.resume(response as Map<String, Any>)
+                continuation.resume(response.toStringAnyMap())
             }
         }
         
-        if (result["success"] as? Boolean == true) {
+        if (result["success"].toLooseBoolean()) {
             options.showAlert.call(
                 message = "Poll created successfully",
                 type = "success",

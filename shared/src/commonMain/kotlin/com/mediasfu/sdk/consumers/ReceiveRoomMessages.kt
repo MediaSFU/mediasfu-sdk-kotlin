@@ -1,5 +1,6 @@
 package com.mediasfu.sdk.consumers
 import com.mediasfu.sdk.util.Logger
+import com.mediasfu.sdk.util.toLooseBoolean
 
 import com.mediasfu.sdk.socket.SocketManager
 
@@ -23,7 +24,7 @@ data class Message(
                 sender = map["sender"] as? String ?: "",
                 content = map["content"] as? String ?: "",
                 timestamp = (map["timestamp"] as? Number)?.toLong() ?: 0L,
-                group = map["group"] as? Boolean ?: false,
+                group = map["group"].toLooseBoolean(),
                 message = map["message"] as? String ?: ""
             )
         }

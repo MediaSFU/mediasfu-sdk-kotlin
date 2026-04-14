@@ -1,5 +1,6 @@
 plugins {
     kotlin("multiplatform")
+    kotlin("native.cocoapods")
     id("com.android.library")
     kotlin("plugin.serialization")
     id("org.jetbrains.compose")
@@ -18,6 +19,21 @@ kotlin {
     androidTarget {
         publishLibraryVariants("release")
     }
+
+    cocoapods {
+        version = project.findProperty("pomVersion")?.toString() ?: "1.0.1"
+        summary = "MediaSFU Kotlin Multiplatform SDK"
+        homepage = "https://github.com/MediaSFU/mediasfu-sdk-kotlin"
+        ios.deploymentTarget = "14.1"
+
+        framework {
+            baseName = "MediaSFUSDK"
+            isStatic = true
+        }
+
+        pod("WebRTC")
+    }
+
     iosX64()
     iosArm64()
     iosSimulatorArm64()
@@ -30,6 +46,7 @@ kotlin {
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
                 implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.6.1")
                 implementation("io.ktor:ktor-client-core:2.3.11")
+                implementation("io.ktor:ktor-client-websockets:2.3.11")
                 implementation("io.ktor:ktor-client-content-negotiation:2.3.11")
                 implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.11")
                 implementation("io.ktor:ktor-client-logging:2.3.11")
@@ -47,16 +64,15 @@ kotlin {
                 implementation(compose.materialIconsExtended)
                 implementation(compose.components.resources)
 
-                // Coil for network image loading
+                // Coil for multiplatform network image loading
                 implementation("io.coil-kt.coil3:coil-compose:3.0.4")
-                implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
+                implementation("io.coil-kt.coil3:coil-network-ktor2:3.0.4")
             }
         }
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
-                implementation("io.mockk:mockk:1.13.12")
             }
         }
         val androidMain by getting {
@@ -75,7 +91,11 @@ kotlin {
                 implementation("androidx.activity:activity-compose:1.9.3")
             }
         }
-        val androidUnitTest by getting
+        val androidUnitTest by getting {
+            dependencies {
+                implementation("io.mockk:mockk:1.13.12")
+            }
+        }
         val iosX64Main by getting
         val iosArm64Main by getting
         val iosSimulatorArm64Main by getting

@@ -1,17 +1,28 @@
 package com.mediasfu.sdk.ui.mediasfu
 
 import com.mediasfu.sdk.methods.MediasfuParameters
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class ModalStateTest {
+    private fun createModalState(
+        parameters: MediasfuParameters,
+        onNotify: () -> Unit
+    ): ModalState = ModalState(
+        parameters = parameters,
+        notifier = onNotify,
+        coroutineScope = CoroutineScope(SupervisorJob())
+    )
+
     @Test
     fun `setSettingsVisibility updates state and parameters`() {
         val parameters = MediasfuParameters()
         var notifications = 0
-        val modalState = ModalState(parameters) { notifications += 1 }
+        val modalState = createModalState(parameters) { notifications += 1 }
 
         assertFalse(parameters.isSettingsModalVisible)
         assertFalse(modalState.isSettingsVisible)
@@ -33,7 +44,7 @@ class ModalStateTest {
     fun `setScreenboardVisibility mirrors backing parameters`() {
         val parameters = MediasfuParameters()
         var notifications = 0
-        val modalState = ModalState(parameters) { notifications += 1 }
+        val modalState = createModalState(parameters) { notifications += 1 }
 
         modalState.setScreenboardVisibility(true)
         assertTrue(modalState.isScreenboardVisible)
@@ -49,7 +60,7 @@ class ModalStateTest {
     fun `setConfirmExitVisibility mirrors backing parameters`() {
         val parameters = MediasfuParameters()
         var notifications = 0
-        val modalState = ModalState(parameters) { notifications += 1 }
+        val modalState = createModalState(parameters) { notifications += 1 }
 
         modalState.setConfirmExitVisibility(true)
         assertTrue(modalState.isConfirmExitVisible)
@@ -65,7 +76,7 @@ class ModalStateTest {
     fun `setConfirmHereVisibility mirrors backing parameters`() {
         val parameters = MediasfuParameters()
         var notifications = 0
-        val modalState = ModalState(parameters) { notifications += 1 }
+        val modalState = createModalState(parameters) { notifications += 1 }
 
         modalState.setConfirmHereVisibility(true)
         assertTrue(modalState.isConfirmHereVisible)
@@ -81,7 +92,7 @@ class ModalStateTest {
     fun `setShareEventVisibility mirrors backing parameters`() {
         val parameters = MediasfuParameters()
         var notifications = 0
-        val modalState = ModalState(parameters) { notifications += 1 }
+        val modalState = createModalState(parameters) { notifications += 1 }
 
         modalState.setShareEventVisibility(true)
         assertTrue(modalState.isShareEventVisible)
@@ -113,7 +124,7 @@ class ModalStateTest {
             isScreenboardModalVisible = true
         }
         var notifications = 0
-        val modalState = ModalState(parameters) { notifications += 1 }.apply {
+        val modalState = createModalState(parameters) { notifications += 1 }.apply {
             isMenuVisible = true
             isRecordingVisible = true
             isSettingsVisible = true

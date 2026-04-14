@@ -4,7 +4,6 @@ import com.mediasfu.sdk.model.AllMembersRestOptions
 import com.mediasfu.sdk.model.CoHostResponsibility
 import com.mediasfu.sdk.model.Participant
 import com.mediasfu.sdk.model.Request
-import com.mediasfu.sdk.model.Settings
 import com.mediasfu.sdk.model.WaitingRoomParticipant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -36,7 +35,7 @@ class AllMembersRestTest {
 
         val options = AllMembersRestOptions(
             members = members,
-            settings = Settings(listOf("mute", "allow", "block", "disable")),
+            settings = listOf("mute", "allow", "block", "disable"),
             coHost = "NewHost",
             coHostRes = listOf(CoHostResponsibility(name = "manage", value = true, dedicated = false)),
             parameters = params,
@@ -89,7 +88,7 @@ class AllMembersRestTest {
 
         val options = AllMembersRestOptions(
             members = members,
-            settings = Settings(listOf("allow", "allow", "allow", "allow")),
+            settings = listOf("allow", "allow", "allow", "allow"),
             coHost = "Host",
             coHostRes = emptyList(),
             parameters = params,

@@ -12,6 +12,7 @@ import com.mediasfu.sdk.model.SocketLike
 open class TestSocketManager : SocketManager {
     protected var connectedState: Boolean = true
     private var identifier: String? = "test-socket"
+    private val eventHandlers = mutableMapOf<String, suspend (Map<String, Any?>) -> Unit>()
 
     override val id: String?
         get() = identifier
@@ -62,15 +63,17 @@ open class TestSocketManager : SocketManager {
     }
 
     override fun on(event: String, handler: suspend (Map<String, Any?>) -> Unit) {
-        // no-op
+        eventHandlers[event] = handler
     }
 
     override fun off(event: String) {
-        // no-op
+        eventHandlers.remove(event)
     }
 
+    override fun hasListener(event: String): Boolean = eventHandlers.containsKey(event)
+
     override fun offAll() {
-        // no-op
+        eventHandlers.clear()
     }
 
     override fun onConnect(handler: suspend () -> Unit) {

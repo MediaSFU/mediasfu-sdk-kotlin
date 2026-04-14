@@ -717,7 +717,7 @@ suspend fun joinEventRoom(options: JoinEventRoomOptions): Result<CreateJoinLocal
 
         ackResult.fold(
             onSuccess = { response ->
-                val success = response["success"] as? Boolean ?: false
+                val success = response["success"].asBoolean() ?: false
                 val secret = response["secret"] as? String ?: ""
                 val reason = response["reason"] as? String
                 val url = response["url"] as? String
@@ -797,7 +797,7 @@ suspend fun createLocalRoom(options: CreateLocalRoomOptions): Result<CreateJoinL
 
         ackResult.fold(
             onSuccess = { response ->
-                val success = response["success"] as? Boolean ?: false
+                val success = response["success"].asBoolean() ?: false
                 val secret = response["secret"] as? String ?: ""
                 val reason = response["reason"] as? String
                 val url = response["url"] as? String

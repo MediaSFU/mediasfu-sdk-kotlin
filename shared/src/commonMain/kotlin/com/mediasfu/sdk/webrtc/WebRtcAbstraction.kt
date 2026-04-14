@@ -313,6 +313,13 @@ interface AudioStatsProvider {
 }
 
 /**
+ * Optional capability for providing outbound audio statistics from a producer.
+ */
+interface OutboundAudioStatsProvider {
+    suspend fun getOutboundAudioLevel(): Double?
+}
+
+/**
  * Snapshot of inbound audio statistics for a consumer.
  */
 data class AudioInboundStats(

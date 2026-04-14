@@ -23,6 +23,18 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlin.math.min
 
+private fun Any?.toLooseBoolean(): Boolean? = when (this) {
+    null -> null
+    is Boolean -> this
+    is Number -> this.toInt() != 0
+    is String -> when {
+        this.equals("true", ignoreCase = true) || this == "1" -> true
+        this.equals("false", ignoreCase = true) || this == "0" -> false
+        else -> null
+    }
+    else -> null
+}
+
 /**
  * Breakout Rooms Modal - Complete management interface for breakout rooms
  *
@@ -40,7 +52,13 @@ fun BreakoutRoomsModal(state: MediasfuGenericState) {
     val props = state.createBreakoutRoomsModalProps()
     if (!props.isVisible) return
 
-    DefaultBreakoutRoomsModalContent(props)
+    val overrideContent = state.options.uiOverrides.breakoutRoomsModal
+    val contentBuilder = withOverride(
+        override = overrideContent,
+        baseBuilder = { DefaultBreakoutRoomsModalContent(it) }
+    )
+
+    contentBuilder(props)
 }
 
 /**
@@ -542,7 +560,7 @@ private fun rememberBreakoutHandlers(
                         callback = { ack ->
                             @Suppress("UNCHECKED_CAST")
                             val response = ack as? Map<String, Any?>
-                            val success = response?.get("success") as? Boolean ?: false
+                            val success = response?.get("success").toLooseBoolean() ?: false
                             if (success) {
                                 props.parameters.showAlert?.invoke(
                                     message = "Breakout rooms active",
@@ -583,7 +601,7 @@ private fun rememberBreakoutHandlers(
                         callback = { ack ->
                             @Suppress("UNCHECKED_CAST")
                             val response = ack as? Map<String, Any?>
-                            val success = response?.get("success") as? Boolean ?: false
+                            val success = response?.get("success").toLooseBoolean() ?: false
                             if (success) {
                                 props.parameters.showAlert?.invoke(
                                     message = "Breakout rooms stopped",

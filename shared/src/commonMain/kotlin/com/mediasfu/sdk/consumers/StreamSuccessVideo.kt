@@ -171,6 +171,8 @@ suspend fun streamSuccessVideo(options: StreamSuccessVideoOptions) {
         val updateVideoParams = parameters.updateVideoParams
         val updateLocalStream = parameters.updateLocalStream
         val updateLocalStreamVideo = parameters.updateLocalStreamVideo
+        val updateDefVideoID = parameters.updateDefVideoID
+        val updateUserDefaultVideoInputDevice = parameters.updateUserDefaultVideoInputDevice
         val updateUpdateMainWindow = parameters.updateUpdateMainWindow
 
         val prepopulateUserMedia = parameters.prepopulateUserMedia
@@ -202,6 +204,16 @@ suspend fun streamSuccessVideo(options: StreamSuccessVideoOptions) {
                 stream = incomingStream,
                 track = incomingTrack
             )
+        }
+
+        val resolvedVideoDeviceId = runCatching {
+            (parameters.localStream ?: incomingStream).getVideoTracks().firstOrNull()?.id
+                ?: incomingTrack?.id
+                ?: ""
+        }.getOrDefault("")
+        if (resolvedVideoDeviceId.isNotEmpty()) {
+            updateDefVideoID(resolvedVideoDeviceId)
+            updateUserDefaultVideoInputDevice(resolvedVideoDeviceId)
         }
 
         if (preparedVideoParams != null) {

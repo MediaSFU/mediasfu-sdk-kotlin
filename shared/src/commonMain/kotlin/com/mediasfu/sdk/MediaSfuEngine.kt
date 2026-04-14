@@ -742,7 +742,7 @@ class MediaSfuEngine(
 	// Additional consumer methods
 	suspend fun autoAdjustLayout(
 		n: Int,
-		eventType: Any? = null,
+		eventType: com.mediasfu.sdk.model.EventType = parameters.eventType,
 		shareScreenStarted: Boolean = false,
 		shared: Boolean = false
 	): Result<List<Int>> {

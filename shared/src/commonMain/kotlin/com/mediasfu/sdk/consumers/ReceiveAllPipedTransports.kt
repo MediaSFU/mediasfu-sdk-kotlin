@@ -92,7 +92,7 @@ suspend fun receiveAllPipedTransportsImpl(
 
         try {
             val responseMap = response as? Map<*, *>
-            val producersExist = responseMap?.get("producersExist") as? Boolean ?: false
+            val producersExist = responseMap?.get("producersExist").toLooseBoolean()
 
             if (producersExist) {
                 // Retrieve piped producers for each level if producers exist

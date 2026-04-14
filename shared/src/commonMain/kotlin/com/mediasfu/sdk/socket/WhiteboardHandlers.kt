@@ -241,6 +241,7 @@ data class WhiteboardUpdatedOptions(
     val updateShapes: (List<WhiteboardShape>) -> Unit,
     val updateWhiteboardStarted: (Boolean) -> Unit,
     val updateWhiteboardEnded: (Boolean) -> Unit,
+    val updateCanStartWhiteboard: (Boolean) -> Unit,
     val shapes: List<WhiteboardShape>
 )
 
@@ -252,7 +253,7 @@ fun handleWhiteboardUpdated(options: WhiteboardUpdatedOptions) {
     options.whiteboardUsers?.let { usersList ->
         val users = usersList.mapNotNull { userMap ->
             val name = userMap["name"] as? String ?: return@mapNotNull null
-            val useBoard = userMap["useBoard"] as? Boolean ?: true
+            val useBoard = userMap["useBoard"].toLooseBooleanOrDefault(true)
             WhiteboardUser(name = name, useBoard = useBoard)
         }
         options.updateWhiteboardUsers(users)
@@ -270,15 +271,17 @@ fun handleWhiteboardUpdated(options: WhiteboardUpdatedOptions) {
     }
 
     // Update status
-    options.status?.let { status ->
+    options.status?.lowercase()?.let { status ->
         when (status) {
             "started" -> {
                 options.updateWhiteboardStarted(true)
                 options.updateWhiteboardEnded(false)
+                options.updateCanStartWhiteboard(false)
             }
             "ended", "stopped" -> {
                 options.updateWhiteboardStarted(false)
                 options.updateWhiteboardEnded(true)
+                options.updateCanStartWhiteboard(true)
             }
         }
     }
@@ -291,7 +294,8 @@ data class WhiteboardStartedOptions(
     val whiteboardUsers: List<Map<String, Any?>>?,
     val updateWhiteboardUsers: (List<WhiteboardUser>) -> Unit,
     val updateWhiteboardStarted: (Boolean) -> Unit,
-    val updateWhiteboardEnded: (Boolean) -> Unit
+    val updateWhiteboardEnded: (Boolean) -> Unit,
+    val updateCanStartWhiteboard: (Boolean) -> Unit
 )
 
 /**
@@ -300,11 +304,12 @@ data class WhiteboardStartedOptions(
 fun handleWhiteboardStarted(options: WhiteboardStartedOptions) {
     options.updateWhiteboardStarted(true)
     options.updateWhiteboardEnded(false)
+    options.updateCanStartWhiteboard(false)
 
     options.whiteboardUsers?.let { usersList ->
         val users = usersList.mapNotNull { userMap ->
             val name = userMap["name"] as? String ?: return@mapNotNull null
-            val useBoard = userMap["useBoard"] as? Boolean ?: true
+            val useBoard = userMap["useBoard"].toLooseBooleanOrDefault(true)
             WhiteboardUser(name = name, useBoard = useBoard)
         }
         options.updateWhiteboardUsers(users)
@@ -317,6 +322,7 @@ fun handleWhiteboardStarted(options: WhiteboardStartedOptions) {
 data class WhiteboardEndedOptions(
     val updateWhiteboardStarted: (Boolean) -> Unit,
     val updateWhiteboardEnded: (Boolean) -> Unit,
+    val updateCanStartWhiteboard: (Boolean) -> Unit,
     val updateShapes: (List<WhiteboardShape>) -> Unit
 )
 
@@ -326,6 +332,7 @@ data class WhiteboardEndedOptions(
 fun handleWhiteboardEnded(options: WhiteboardEndedOptions) {
     options.updateWhiteboardStarted(false)
     options.updateWhiteboardEnded(true)
+    options.updateCanStartWhiteboard(true)
     options.updateShapes(emptyList())
 }
 
@@ -376,6 +383,17 @@ private fun parseColor(colorValue: Any?): Color {
         }
         else -> Color.Black
     }
+}
+
+private fun Any?.toLooseBooleanOrDefault(default: Boolean): Boolean = when (this) {
+    is Boolean -> this
+    is Number -> this.toInt() != 0
+    is String -> when {
+        this.equals("true", ignoreCase = true) || this == "1" -> true
+        this.equals("false", ignoreCase = true) || this == "0" -> false
+        else -> default
+    }
+    else -> default
 }
 
 private fun parseLineType(lineTypeValue: Any?): LineType {

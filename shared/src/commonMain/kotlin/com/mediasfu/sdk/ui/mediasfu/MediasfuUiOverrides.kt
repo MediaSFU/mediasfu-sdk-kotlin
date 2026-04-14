@@ -12,6 +12,12 @@ import com.mediasfu.sdk.model.ShowAlert
 import com.mediasfu.sdk.model.WaitingRoomParticipant
 import com.mediasfu.sdk.methods.message_methods.SendMessageOptions
 import com.mediasfu.sdk.socket.SocketManager
+import com.mediasfu.sdk.ui.components.cohost.CoHostModalOptions
+import com.mediasfu.sdk.ui.components.breakout.BreakoutRoomsModalOptions
+import com.mediasfu.sdk.ui.components.display.LoadingModalOptions
+import com.mediasfu.sdk.ui.components.display_settings.DisplaySettingsModalOptions
+import com.mediasfu.sdk.ui.components.media_settings.MediaSettingsModalOptions
+import com.mediasfu.sdk.ui.components.recording.RecordingModalOptions
 import com.mediasfu.sdk.ui.components.event_settings.EventSettingsModalOptions
 import com.mediasfu.sdk.ui.components.whiteboard.ConfigureWhiteboardModalOptions
 import com.mediasfu.sdk.ui.components.whiteboard.WhiteboardModalOptions
@@ -27,6 +33,12 @@ data class MediasfuUiOverrides(
     val menuModal: ComponentOverride<MenuModalProps>? = null,
     val participantsModal: ComponentOverride<ParticipantsModalProps>? = null,
     val messagesModal: ComponentOverride<MessagesModalProps>? = null,
+    val coHostModal: ComponentOverride<CoHostModalOptions>? = null,
+    val breakoutRoomsModal: ComponentOverride<BreakoutRoomsModalOptions>? = null,
+    val mediaSettingsModal: ComponentOverride<MediaSettingsModalOptions>? = null,
+    val displaySettingsModal: ComponentOverride<DisplaySettingsModalOptions>? = null,
+    val loadingModal: ComponentOverride<LoadingModalOptions>? = null,
+    val recordingModal: ComponentOverride<RecordingModalOptions>? = null,
     val eventSettingsModal: ComponentOverride<EventSettingsModalOptions>? = null,
     val confirmExitModal: ComponentOverride<ConfirmExitModalProps>? = null,
     val confirmHereModal: ComponentOverride<ConfirmHereModalProps>? = null,

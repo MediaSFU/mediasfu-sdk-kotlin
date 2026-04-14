@@ -1,5 +1,6 @@
 package com.mediasfu.sdk.consumers
 import com.mediasfu.sdk.util.Logger
+import com.mediasfu.sdk.model.EventType
 
 /**
  * Parameters interface for calculating grid estimates
@@ -9,7 +10,7 @@ interface GetEstimateParameters {
     val screenPageLimit: Int
     val shareScreenStarted: Boolean
     val shared: Boolean
-    val eventType: Any? // EventType enum
+    val eventType: EventType
     val removeAltGrid: Boolean
     val isWideScreen: Boolean
     val isMediumScreen: Boolean
@@ -54,14 +55,14 @@ data class GetEstimateOptions(
  *         override val screenPageLimit = 12
  *         override val shareScreenStarted = false
  *         override val shared = false
- *         override val eventType = "conference"
+ *         override val eventType = EventType.CONFERENCE
  *         override val removeAltGrid = false
-        override val isWideScreen = true
-        override val isMediumScreen = false
-        override val updateRemoveAltGrid = { _: Boolean -> }
-        override val calculateRowsAndColumns = { opts: CalculateRowsAndColumnsOptions ->
-            calculateRowsAndColumns(opts)
-        }
+ *         override val isWideScreen = true
+ *         override val isMediumScreen = false
+ *         override val updateRemoveAltGrid = { _: Boolean -> }
+ *         override val calculateRowsAndColumns = { opts: CalculateRowsAndColumnsOptions ->
+ *             calculateRowsAndColumns(opts)
+ *         }
  *     }
  * )
  * val result = getEstimate(options) // Returns [12, 3, 4] for example
@@ -76,7 +77,7 @@ fun getEstimate(options: GetEstimateOptions): List<Int> {
         val screenPageLimit = parameters.screenPageLimit
         val shareScreenStarted = parameters.shareScreenStarted
         val shared = parameters.shared
-        val eventType = parameters.eventType?.toString()?.lowercase() ?: ""
+        val eventType = parameters.eventType.name.lowercase()
         var removeAltGrid = parameters.removeAltGrid
         val isWideScreen = parameters.isWideScreen
         val isMediumScreen = parameters.isMediumScreen

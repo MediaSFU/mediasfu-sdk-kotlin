@@ -1,5 +1,7 @@
 package com.mediasfu.sdk.methods.recording_methods
 import com.mediasfu.sdk.util.Logger
+import com.mediasfu.sdk.util.toLooseBoolean
+import com.mediasfu.sdk.util.toStringAnyMap
 
 import com.mediasfu.sdk.consumers.RePortOptions
 import com.mediasfu.sdk.consumers.RePortParameters
@@ -190,12 +192,12 @@ suspend fun startRecording(options: StartRecordingOptions): Boolean? {
                 "roomName" to parameters.roomName,
                 "userRecordingParams" to parameters.userRecordingParams.toTransportMap()
             )) { data ->
-                continuation.resume(data as Map<String, Any>)
+                continuation.resume(data.toStringAnyMap())
             }
         }
 
-        val success = result["success"] as Boolean
-        val reason = result["reason"] as String
+        val success = result["success"].toLooseBoolean()
+        val reason = result["reason"]?.toString() ?: "unknown reason"
 
         if (success) {
             recordStarted = true
