@@ -1,0 +1,23 @@
+{
+  "name": "com.mediasfu.unity",
+  "displayName": "MediaSFU Unity",
+  "version": "0.1.0-preview.1",
+  "unity": "2022.3",
+  "description": "MediaSFU Unity SDK package for room workflows, Socket.IO signaling, and MediaSFU cloud/community session orchestration.",
+  "keywords": [
+    "mediasfu",
+    "webrtc",
+    "video",
+    "conference",
+    "unity"
+  ],
+  "author": {
+    "name": "MediaSFU",
+    "url": "https://www.mediasfu.com/"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "com.mediasfu.mediasoup-client-unity": "0.1.0-preview.1",
+    "com.unity.nuget.newtonsoft-json": "3.2.2"
+  }
+}
