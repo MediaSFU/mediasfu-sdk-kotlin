@@ -1,0 +1,75 @@
+platform :ios, '15.0'
+use_frameworks!
+
+workspace 'MediaSFUSampleApp'
+
+target 'MediaSFUSampleApp' do
+  project 'MediaSFUSampleApp.xcodeproj'
+
+  pod 'WebRTC', :path => '../ios-local-pods/WebRTC'
+  pod 'shared', :path => '../shared'
+end
+
+def native_bridge_package_mode?
+  ENV['MEDIA_SFU_ENABLE_IOS_NATIVE_BRIDGE_PACKAGE'] == '1'
+end
+
+def remove_app_webrtc_support_files(support_dir)
+  support_path = Pathname(support_dir)
+  return unless support_path.exist?
+
+  frameworks_script = support_path + 'Pods-MediaSFUSampleApp-frameworks.sh'
+
+  if frameworks_script.exist?
+    filtered_content = frameworks_script.readlines.reject { |line| line.include?('WebRTC.framework') }.join
+    filtered_content.gsub!(/(if \[\[ "\$CONFIGURATION" == "[^"]+" \]\]; then)\n(?:\s*\n)*fi/, "\\1\n  :\nfi")
+    frameworks_script.open('w') { |file| file.write(filtered_content) }
+  end
+
+  filelist_patterns = [
+    (support_path + 'Pods-MediaSFUSampleApp-frameworks-*-input-files.xcfilelist').to_s,
+    (support_path + 'Pods-MediaSFUSampleApp-frameworks-*-output-files.xcfilelist').to_s,
+  ]
+  filelist_patterns.flat_map { |pattern| Dir[pattern] }.uniq.each do |file_path|
+    path = Pathname(file_path)
+    next unless path.exist?
+
+    filtered_lines = path.readlines.reject { |line| line.include?('WebRTC.framework') }
+    path.open('w') { |file| file.write(filtered_lines.join) }
+  end
+
+  xcconfig_patterns = [
+    (support_path + 'Pods-MediaSFUSampleApp.*.xcconfig').to_s,
+  ]
+  xcconfig_patterns.flat_map { |pattern| Dir[pattern] }.uniq.each do |file_path|
+    path = Pathname(file_path)
+    next unless path.exist?
+
+    content = path.read
+    content.gsub!(/\s-framework\s+"WebRTC"/, '')
+    content.gsub!(/\s-framework\s+WebRTC\b/, '')
+    path.open('w') { |file| file.write(content) }
+  end
+end
+
+def remove_app_webrtc_embed_from_cocoapods(installer)
+  return unless native_bridge_package_mode?
+
+  support_dir = installer.sandbox.root + 'Target Support Files/Pods-MediaSFUSampleApp'
+  remove_app_webrtc_support_files(support_dir)
+end
+
+post_install do |installer|
+  remove_app_webrtc_embed_from_cocoapods(installer)
+end
+
+post_integrate do |installer|
+  remove_app_webrtc_embed_from_cocoapods(installer)
+end
+
+at_exit do
+  next unless native_bridge_package_mode?
+
+  support_dir = Pathname(__dir__) + 'Pods/Target Support Files/Pods-MediaSFUSampleApp'
+  remove_app_webrtc_support_files(support_dir)
+end

@@ -1,0 +1,16 @@
+# CocoaPods — generated; run `pod install` to regenerate
+Pods/
+Podfile.lock
+
+# Xcode user-specific data
+xcuserdata/
+*.xcuserdatad/
+
+# Build logs (generated locally; not source)
+*.log
+build_output.txt
+xcodebuild_output.txt
+xcodebuild_output.log
+
+# DerivedData
+DerivedData/

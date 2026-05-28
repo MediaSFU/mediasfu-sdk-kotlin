@@ -1,0 +1,86 @@
+name: Unity Live Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      unity_app_path:
+        description: Path to Unity.app on the self-hosted macOS runner
+        required: false
+        default: /Applications/Unity/Hub/Editor/2022.3.62f3/Unity.app
+        type: string
+      project_path:
+        description: Validation project path relative to the repository root or absolute on the runner
+        required: false
+        default: unity-validation/MediaSfuUnityValidation
+        type: string
+      base_url:
+        description: MediaSFU cloud base URL
+        required: false
+        default: https://staging.mediasfu.com
+        type: string
+      timeout_seconds:
+        description: Live validation timeout in seconds
+        required: false
+        default: '45'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unity-live-validation
+  cancel-in-progress: false
+
+jobs:
+  live-validation:
+    name: Live Cloud Validation
+    runs-on:
+      - self-hosted
+      - macOS
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Android Unity backend unit test
+        shell: bash
+        run: |
+          ./gradlew :shared:testDebugUnitTest --tests com.mediasfu.sdk.unity.AndroidUnityWebRtcOperationHostTest
+
+      - name: Validate required secrets
+        shell: bash
+        env:
+          MEDIASFU_UNITY_API_USERNAME: ${{ secrets.MEDIASFU_UNITY_API_USERNAME }}
+          MEDIASFU_UNITY_API_KEY: ${{ secrets.MEDIASFU_UNITY_API_KEY }}
+        run: |
+          if [[ -z "${MEDIASFU_UNITY_API_USERNAME:-}" || -z "${MEDIASFU_UNITY_API_KEY:-}" ]]; then
+            echo "::error::Set MEDIASFU_UNITY_API_USERNAME and MEDIASFU_UNITY_API_KEY secrets before running this workflow."
+            exit 1
+          fi
+
+      - name: Run Unity live validation
+        shell: bash
+        env:
+          MEDIASFU_UNITY_API_USERNAME: ${{ secrets.MEDIASFU_UNITY_API_USERNAME }}
+          MEDIASFU_UNITY_API_KEY: ${{ secrets.MEDIASFU_UNITY_API_KEY }}
+          UNITY_APP_PATH: ${{ inputs.unity_app_path }}
+          MEDIASFU_UNITY_PROJECT_PATH: ${{ inputs.project_path }}
+          MEDIASFU_UNITY_BASE_URL: ${{ inputs.base_url }}
+          MEDIASFU_UNITY_LIVE_TIMEOUT_SECONDS: ${{ inputs.timeout_seconds }}
+        run: |
+          bash ./scripts/run_unity_live_validation.sh
+
+      - name: Append summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Unity Live Validation"
+            echo "- Runner: ${RUNNER_NAME}"
+            echo "- Android backend unit test: com.mediasfu.sdk.unity.AndroidUnityWebRtcOperationHostTest"
+            echo "- Unity app: ${{ inputs.unity_app_path }}"
+            echo "- Project path: ${{ inputs.project_path }}"
+            echo "- Base URL: ${{ inputs.base_url }}"
+            echo "- Timeout seconds: ${{ inputs.timeout_seconds }}"
+          } >> "$GITHUB_STEP_SUMMARY"

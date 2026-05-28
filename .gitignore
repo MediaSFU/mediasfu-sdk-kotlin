@@ -80,6 +80,10 @@ SESSION_SUMMARY_*.md
 # iOS sample app internal setup doc (contains local absolute paths and private team IDs)
 ios-sample-app/XCODE_SETUP.md
 
+# iOS sample app internal development checklists (not for public release)
+ios-sample-app/API_DISCOVERY_CHECKLIST.md
+ios-sample-app/POST_DISCOVERY_IMPLEMENTATION_CHECKLIST.md
+
 # iOS sample app build/test logs and artifacts (may contain captured credentials)
 ios-sample-app/*.log
 ios-sample-app/*.txt
@@ -105,3 +109,8 @@ ios-local-pods/
 # Private/internal scripts not for public release
 scripts/install_xcode_15_3_and_rebuild.sh
 scripts/ios_rebuild_after_xcode_switch.sh
+
+# unity-native-bridge build artifacts (CMake build outputs)
+unity-native-bridge/build/
+unity-native-bridge/build-android/
+unity-native-bridge/build-ios/

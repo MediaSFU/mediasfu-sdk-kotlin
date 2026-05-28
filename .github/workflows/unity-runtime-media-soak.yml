@@ -1,0 +1,115 @@
+name: Unity Runtime Media Soak
+
+on:
+  workflow_dispatch:
+    inputs:
+      unity_app_path:
+        description: Path to Unity.app on the self-hosted macOS runner
+        required: false
+        default: /Applications/Unity/Hub/Editor/2022.3.62f3/Unity.app
+        type: string
+      project_path:
+        description: Validation project path relative to the repository root or absolute on the runner
+        required: false
+        default: unity-validation/MediaSfuUnityValidation
+        type: string
+      base_url:
+        description: MediaSFU cloud base URL
+        required: false
+        default: https://staging.mediasfu.com
+        type: string
+      timeout_seconds:
+        description: Per-run runtime media timeout in seconds
+        required: false
+        default: '240'
+        type: string
+      runs:
+        description: Number of runtime media passes to run
+        required: false
+        default: '3'
+        type: string
+      fail_fast:
+        description: Stop after the first failed runtime media pass
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unity-runtime-media-soak
+  cancel-in-progress: false
+
+jobs:
+  runtime-media-soak:
+    name: Runtime Media Soak
+    runs-on:
+      - self-hosted
+      - macOS
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Android Unity backend unit test
+        shell: bash
+        run: |
+          ./gradlew :shared:testDebugUnitTest --tests com.mediasfu.sdk.unity.AndroidUnityWebRtcOperationHostTest
+
+      - name: Validate required secrets
+        shell: bash
+        env:
+          MEDIASFU_UNITY_API_USERNAME: ${{ secrets.MEDIASFU_UNITY_API_USERNAME }}
+          MEDIASFU_UNITY_API_KEY: ${{ secrets.MEDIASFU_UNITY_API_KEY }}
+        run: |
+          if [[ -z "${MEDIASFU_UNITY_API_USERNAME:-}" || -z "${MEDIASFU_UNITY_API_KEY:-}" ]]; then
+            echo "::error::Set MEDIASFU_UNITY_API_USERNAME and MEDIASFU_UNITY_API_KEY secrets before running this workflow."
+            exit 1
+          fi
+
+      - name: Run Unity runtime media soak
+        shell: bash
+        env:
+          MEDIASFU_UNITY_API_USERNAME: ${{ secrets.MEDIASFU_UNITY_API_USERNAME }}
+          MEDIASFU_UNITY_API_KEY: ${{ secrets.MEDIASFU_UNITY_API_KEY }}
+          FAIL_FAST: ${{ inputs.fail_fast }}
+        run: |
+          summary_file="$(mktemp)"
+          echo "SOAK_SUMMARY_FILE=$summary_file" >> "$GITHUB_ENV"
+
+          extra_args=()
+          if [[ "$FAIL_FAST" == "true" ]]; then
+            extra_args+=(--fail-fast)
+          fi
+
+          bash ./scripts/run_unity_runtime_media_soak.sh \
+            --runs "${{ inputs.runs }}" \
+            --unity-app "${{ inputs.unity_app_path }}" \
+            --project-path "${{ inputs.project_path }}" \
+            --base-url "${{ inputs.base_url }}" \
+            --timeout-seconds "${{ inputs.timeout_seconds }}" \
+            "${extra_args[@]}" | tee "$summary_file"
+
+      - name: Append summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Unity Runtime Media Soak"
+            echo "- Runner: ${RUNNER_NAME}"
+            echo "- Android backend unit test: com.mediasfu.sdk.unity.AndroidUnityWebRtcOperationHostTest"
+            echo "- Unity app: ${{ inputs.unity_app_path }}"
+            echo "- Project path: ${{ inputs.project_path }}"
+            echo "- Base URL: ${{ inputs.base_url }}"
+            echo "- Timeout seconds: ${{ inputs.timeout_seconds }}"
+            echo "- Runs: ${{ inputs.runs }}"
+            echo "- Fail fast: ${{ inputs.fail_fast }}"
+            if [[ -n "${SOAK_SUMMARY_FILE:-}" && -f "${SOAK_SUMMARY_FILE}" ]]; then
+              echo
+              echo '```text'
+              cat "${SOAK_SUMMARY_FILE}"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
