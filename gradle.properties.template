@@ -7,21 +7,19 @@ android.nonTransitiveRClass=true
 # =================================================================
 # MediaSFU SDK Kotlin - Publishing Configuration
 # =================================================================
-POM_VERSION=1.0.0
-POM_GROUP=com.mediasfu
-POM_ARTIFACT_ID=mediasfu-sdk
-POM_NAME=MediaSFU Kotlin Multiplatform SDK
-POM_DESCRIPTION=Production-ready Kotlin Multiplatform SDK for real-time communication with MediaSFU
-POM_URL=https://github.com/MediaSFU/mediasfu-sdk-kotlin
-POM_SCM_URL=https://github.com/MediaSFU/mediasfu-sdk-kotlin
-POM_SCM_CONNECTION=scm:git@github.com:MediaSFU/mediasfu-sdk-kotlin.git
-POM_SCM_DEV_CONNECTION=scm:git@github.com:MediaSFU/mediasfu-sdk-kotlin.git
-POM_LICENCE_NAME=MIT License
-POM_LICENCE_URL=https://opensource.org/licenses/mit-license.php
-POM_LICENCE_DIST=repo
-POM_DEVELOPER_ID=mediasfu
-POM_DEVELOPER_NAME=MediaSFU Team
-POM_DEVELOPER_EMAIL=info@mediasfu.com
+pomVersion=1.0.2
+pomGroup=com.mediasfu
+pomArtifactId=mediasfu-sdk
+pomName=MediaSFU Kotlin Multiplatform SDK
+pomDescription=Production-ready Kotlin Multiplatform SDK for real-time communication with MediaSFU
+pomUrl=https://github.com/MediaSFU/mediasfu-sdk-kotlin
+pomScmUrl=https://github.com/MediaSFU/mediasfu-sdk-kotlin
+pomScmConnection=scm:git@github.com:MediaSFU/mediasfu-sdk-kotlin.git
+pomScmDeveloperConnection=scm:git@github.com:MediaSFU/mediasfu-sdk-kotlin.git
+pomLicenseName=MIT License
+pomLicenseUrl=https://opensource.org/licenses/mit-license.php
+pomDeveloperName=MediaSFU Team
+pomDeveloperEmail=info@mediasfu.com
 
 # =================================================================
 # Maven Central Portal credentials (get from https://central.sonatype.com/)

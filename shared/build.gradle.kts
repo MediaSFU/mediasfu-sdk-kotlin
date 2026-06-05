@@ -11,6 +11,8 @@ plugins {
     signing
 }
 
+val sdkVersion = providers.gradleProperty("pomVersion").orElse("1.0.2").get()
+
 repositories {
     google()
     mavenCentral()
@@ -24,7 +26,7 @@ kotlin {
     }
 
     cocoapods {
-        version = project.findProperty("pomVersion")?.toString() ?: "1.0.1"
+        version = sdkVersion
         summary = "MediaSFU Kotlin Multiplatform SDK"
         homepage = "https://github.com/MediaSFU/mediasfu-sdk-kotlin"
         ios.deploymentTarget = "14.1"
@@ -150,7 +152,7 @@ mavenPublishing {
     publishToMavenCentral(com.vanniktech.maven.publish.SonatypeHost.CENTRAL_PORTAL)
     signAllPublications()
 
-    coordinates("com.mediasfu", "mediasfu-sdk", "1.0.1")
+    coordinates("com.mediasfu", "mediasfu-sdk", sdkVersion)
 
     pom {
         name.set("MediaSFU Kotlin Multiplatform SDK")

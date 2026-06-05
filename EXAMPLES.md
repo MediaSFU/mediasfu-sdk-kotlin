@@ -58,7 +58,7 @@ These examples use the `shared` module directly. In your own app, add the SDK de
 
 ```kotlin
 dependencies {
-    implementation("com.mediasfu:mediasfu-sdk-android:1.0.0")
+    implementation("com.mediasfu:mediasfu-sdk-android:1.0.1")
 }
 ```
 
