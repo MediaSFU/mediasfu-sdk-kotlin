@@ -1,5 +1,6 @@
 package com.mediasfu.sdk.consumers
 import com.mediasfu.sdk.util.Logger
+import com.mediasfu.sdk.util.MediaSFURuntimeProbe
 
 import com.mediasfu.sdk.socket.SocketManager
 
@@ -89,12 +90,76 @@ suspend fun receiveAllPipedTransportsImpl(
             event = emitName,
             data = details
         )
+        Logger.d(
+            "ReceiveAllPipedTrans",
+            "ack event=$emitName community=$community room='${parameters.roomName}' member='${parameters.member}' responseType=${response?.let { it::class.simpleName } ?: "null"}"
+        )
 
         try {
             val responseMap = response as? Map<*, *>
-            val producersExist = responseMap?.get("producersExist").toLooseBoolean()
+            val responseList = response as? List<*>
 
-            if (producersExist) {
+            fun countListValue(raw: Any?): Int? = when (raw) {
+                is List<*> -> raw.size
+                else -> null
+            }
+
+            val nestedProducerList = responseMap
+                ?.let { map -> listOf("producers", "producerIds", "data", "result", "payload")
+                    .asSequence()
+                    .mapNotNull { key -> map[key] }
+                    .firstOrNull { it is List<*> }
+                }
+
+            val producerCount = when {
+                responseMap != null -> when (val raw = responseMap["producers"]) {
+                    is List<*> -> raw.size
+                    else -> countListValue(nestedProducerList)
+                }
+                responseList != null -> responseList.size
+                else -> null
+            }
+
+            val producerIdsCount = when {
+                responseMap != null -> when (val raw = responseMap["producerIds"]) {
+                    is List<*> -> raw.size
+                    else -> countListValue(nestedProducerList)
+                }
+                else -> null
+            }
+
+            val producersExistFlag = responseMap?.get("producersExist").toLooseBoolean()
+            val producersExist = producersExistFlag || (producerCount ?: 0) > 0 || (producerIdsCount ?: 0) > 0
+
+            val onlyProducersExistKey = responseMap != null && responseMap.keys
+                .map { it.toString() }
+                .all { it == "producersExist" }
+
+            // Some server lanes only return { producersExist: false } here even when
+            // producers are available via getProducers* calls, so attempt a fallback query.
+            val shouldAttemptProducerFetch = producersExist || onlyProducersExistKey
+
+            val responseShape = when {
+                responseMap != null -> "map(keys=" + responseMap.keys
+                    .map { it.toString() }
+                    .sorted()
+                    .joinToString(",") + ")"
+                responseList != null -> "list(size=${responseList.size})"
+                else -> "none"
+            }
+
+            Logger.d(
+                "ReceiveAllPipedTrans",
+                "receive-all ack producersExist=$producersExist producersCount=${producerCount ?: -1} producerIdsCount=${producerIdsCount ?: -1} shape=$responseShape"
+            )
+
+            MediaSFURuntimeProbe.recordConsumerSignalStage(
+                "receive-all-ack",
+                "",
+                "community=${if (community) 1 else 0},producers=${if (producersExist) 1 else 0},pCount=${producerCount ?: -1},pidCount=${producerIdsCount ?: -1},shape=$responseShape,fallback=${if (onlyProducersExistKey) 1 else 0}"
+            )
+
+            if (shouldAttemptProducerFetch) {
                 // Retrieve piped producers for each level if producers exist
                 for (islevel in levels) {
                     val optionsGetPipedProducersAlt = GetPipedProducersAltOptions(
@@ -105,6 +170,11 @@ suspend fun receiveAllPipedTransportsImpl(
                     )
                     parameters.getPipedProducersAlt(optionsGetPipedProducersAlt)
                 }
+            } else {
+                Logger.w(
+                    "ReceiveAllPipedTrans",
+                    "No producers in receive-all ack event=$emitName community=$community room='${parameters.roomName}' member='${parameters.member}'"
+                )
             }
         } catch (e: Exception) {
             Logger.e("ReceiveAllPipedTrans", "Error processing piped transports response: ${e.message}")
@@ -114,4 +184,3 @@ suspend fun receiveAllPipedTransportsImpl(
         throw error
     }
 }
-

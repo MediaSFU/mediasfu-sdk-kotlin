@@ -43,9 +43,8 @@ import com.mediasfu.sdk.webrtc.MediaStream
 import com.mediasfu.sdk.webrtc.MediaStreamTrack
 import com.mediasfu.sdk.webrtc.WebRtcDevice
 import kotlinx.datetime.Clock
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 /**
  * Parameters for the BackgroundModal widget.
@@ -110,6 +109,17 @@ data class BackgroundModalOptions(
     val showPreview: Boolean = true
 )
 
+internal fun shouldProcessBackgroundPreview(
+    hasEffectiveVideoStream: Boolean,
+    selectedBackground: VirtualBackground?,
+    isPlatformSupported: Boolean
+): Boolean {
+    return hasEffectiveVideoStream &&
+        isPlatformSupported &&
+        selectedBackground != null &&
+        selectedBackground.type != BackgroundType.NONE
+}
+
 /**
  * BackgroundModal - Modal for selecting virtual backgrounds.
  *
@@ -145,6 +155,7 @@ fun BackgroundModal(
     }
 
     val params = options.parameters
+    val modalScope = rememberCoroutineScope()
     
     // Initialize selectedBackground from params.selectedBackground when modal opens
     // This ensures the previously applied background is auto-selected when reopening
@@ -204,22 +215,51 @@ fun BackgroundModal(
         isProcessing = true
 
         try {
-            params.updateSelectedBackground(bg)
-            params.updateBackgroundHasChanged(true)
-
-            if (bg.type != BackgroundType.NONE) {
-                params.updateKeepBackground(true)
-            } else {
-                params.updateKeepBackground(false)
+            if (bg.type != BackgroundType.NONE && params.backgroundProcessor == null) {
+                params.updateBackgroundProcessor?.invoke(
+                    com.mediasfu.sdk.background.VirtualBackgroundProcessorFactory.create(platformContext)
+                )
             }
 
-            params.onBackgroundApply?.invoke(bg)
+            val backgroundEnabled = bg.type != BackgroundType.NONE
 
-            params.showAlert?.invoke(
-                "Background applied successfully",
-                "success",
-                2000
-            )
+            params.updateSelectedBackground(bg)
+            params.updateBackgroundHasChanged(true)
+            params.updateKeepBackground(backgroundEnabled)
+
+            if (!params.videoAlreadyOn) {
+                params.showAlert?.invoke(
+                    if (backgroundEnabled) {
+                        "Background saved. It will be applied when you turn on your camera."
+                    } else {
+                        "Background cleared."
+                    },
+                    "success",
+                    3000
+                )
+                options.onClose()
+                return
+            }
+
+            // Wrap the apply with a timeout so that a slow/stuck produce() call
+            // on the native bridge never freezes the spinner indefinitely.
+            val applied = kotlinx.coroutines.withTimeoutOrNull(8_000L) {
+                params.onBackgroundApply?.invoke(bg)
+            }
+
+            if (applied == null) {
+                params.showAlert?.invoke(
+                    "Background saved – still applying in background",
+                    "warning",
+                    3000
+                )
+            } else {
+                params.showAlert?.invoke(
+                    "Background applied successfully",
+                    "success",
+                    2000
+                )
+            }
 
             options.onClose()
         } catch (e: Exception) {
@@ -256,7 +296,7 @@ fun BackgroundModal(
         // When camera turns on later, the background will be reapplied with the new stream
         val existingProcessor = params.backgroundProcessor
         if (existingProcessor != null && existingProcessor.isProcessing) {
-            kotlinx.coroutines.GlobalScope.launch {
+            modalScope.launch {
                 try {
                     existingProcessor.stopProcessing()
                 } catch (e: Exception) {
@@ -265,8 +305,17 @@ fun BackgroundModal(
             }
         }
         
-        // Update the selected background state without applying
+        // Update the selected background state without applying to the room
+        // producer. This confirms the user's saved-for-later choice so
+        // streamSuccessVideo can auto-apply it when video is produced later.
+        if (bg.type != BackgroundType.NONE && params.backgroundProcessor == null) {
+            params.updateBackgroundProcessor?.invoke(
+                com.mediasfu.sdk.background.VirtualBackgroundProcessorFactory.create(platformContext)
+            )
+        }
+
         params.updateSelectedBackground(bg)
+        params.updateBackgroundHasChanged(bg.type != BackgroundType.NONE)
         
         // Mark that background has been selected (but not applied yet)
         if (bg.type != BackgroundType.NONE) {
@@ -383,27 +432,33 @@ fun BackgroundModal(
                 }
 
                 // Tab content
+                // Clicking a background selects it for local preview only.
+                // The VideoPreviewSection reacts to selectedBackground and shows the effect.
+                // The actual room-level apply happens only when the user taps "Apply".
+                val onClickBackground: (VirtualBackground) -> Unit = { bg ->
+                    selectBackground(bg)
+                }
                 Box(modifier = Modifier.weight(1f)) {
                     when (selectedTab) {
                         0 -> PresetImagesTab(
                             selectedBackground = selectedBackground,
-                            onSelectBackground = ::selectBackground,
+                            onSelectBackground = onClickBackground,
                             imageLoader = imageLoader
                         )
                         1 -> BlurTab(
                             selectedBackground = selectedBackground,
-                            onSelectBackground = ::selectBackground
+                            onSelectBackground = onClickBackground
                         )
                         2 -> if (options.showColorPicker) {
                             ColorsTab(
                                 selectedBackground = selectedBackground,
-                                onSelectBackground = ::selectBackground
+                                onSelectBackground = onClickBackground
                             )
                         } else {
                             CustomImagesTab(
                                 customBackgrounds = customBackgrounds,
                                 selectedBackground = selectedBackground,
-                                onSelectBackground = ::selectBackground,
+                                onSelectBackground = onClickBackground,
                                 allowCustomUpload = options.allowCustomUpload,
                                 onUploadImage = launchImagePicker
                             )
@@ -411,7 +466,7 @@ fun BackgroundModal(
                         3 -> CustomImagesTab(
                             customBackgrounds = customBackgrounds,
                             selectedBackground = selectedBackground,
-                            onSelectBackground = ::selectBackground,
+                            onSelectBackground = onClickBackground,
                             allowCustomUpload = options.allowCustomUpload,
                             onUploadImage = launchImagePicker
                         )
@@ -911,18 +966,23 @@ private fun VideoPreviewSection(
     var cameraInitError by remember { mutableStateOf<String?>(null) }
     val initScope = rememberCoroutineScope()
     
-    // Determine which stream to use: existing local stream or our initialized preview stream
-    val effectiveStream = remember(localStreamVideo, previewStream, videoAlreadyOn) {
-        if (videoAlreadyOn && localStreamVideo != null) {
-            localStreamVideo
-        } else {
-            previewStream
-        }
+    val localVideoTrack = remember(localStreamVideo) {
+        localStreamVideo?.getVideoTracks()?.firstOrNull()
+    }
+    val hasActiveRoomVideoTrack = localVideoTrack?.enabled == true && localStreamVideo?.active == true
+    val shouldUseRoomStream = hasActiveRoomVideoTrack || (videoAlreadyOn && localVideoTrack != null)
+
+    // Prefer the actual room stream whenever it exists. Do not rely solely on
+    // videoAlreadyOn here: if that flag is stale false, starting a temporary
+    // iOS camera preview would replace the active room capturer and freeze the
+    // transmitted/video-card media.
+    val effectiveStream = remember(localStreamVideo, previewStream, shouldUseRoomStream) {
+        if (shouldUseRoomStream) localStreamVideo else previewStream
     }
     
     // Initialize camera when video is not already on
-    LaunchedEffect(videoAlreadyOn, device) {
-        if (!videoAlreadyOn && device != null && previewStream == null && !isInitializingCamera) {
+    LaunchedEffect(videoAlreadyOn, shouldUseRoomStream, device) {
+        if (!shouldUseRoomStream && device != null && previewStream == null && !isInitializingCamera) {
             isInitializingCamera = true
             cameraInitError = null
             
@@ -976,77 +1036,89 @@ private fun VideoPreviewSection(
     // Get platform context for processor creation
     val platformContext = LocalPlatformContext.current
     
-    // Create/reuse processor for PREVIEW only
-    // This processor is separate from the main stream processor
+    // Create/reuse processor for PREVIEW only. Do not publish it to the
+    // production apply path: active-room VB and saved-for-later VB have their
+    // own lifecycle, while this processor is disposable modal UI state.
     val previewProcessor = remember(platformContext) {
-        val p = com.mediasfu.sdk.background.VirtualBackgroundProcessorFactory.create(platformContext)
-        // Store the processor for use in Apply (it will be reused)
-        onProcessorCreated?.invoke(p)
-        p
+        com.mediasfu.sdk.background.VirtualBackgroundProcessorFactory.create(platformContext)
     }
     
     // Track if processor is active
     val isProcessorSupported = com.mediasfu.sdk.background.VirtualBackgroundProcessorFactory.isSupported()
     val hasActiveBackground = selectedBackground != null && selectedBackground.type != BackgroundType.NONE
-    
-    // State for processed frame preview
+
+    // Processed frame preview. This is intentionally preview-only: Apply uses the
+    // platform processor lifecycle, while selecting thumbnails must not modify the
+    // live producer track before the user confirms.
     var processedBitmap by remember { mutableStateOf<Any?>(null) }
     var isProcessing by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    
+
     // Track the last background we started processing with
     var lastProcessedBackgroundId by remember { mutableStateOf<String?>(null) }
-    
-    // Start/update processing for preview when background changes
-    LaunchedEffect(selectedBackground, effectiveStream, previewProcessor) {
+    val shouldProcessPreview = shouldProcessBackgroundPreview(
+        hasEffectiveVideoStream = effectiveStream != null,
+        selectedBackground = selectedBackground,
+        isPlatformSupported = isProcessorSupported
+    )
+
+    // Start/update processing for preview when background or stream changes
+    LaunchedEffect(selectedBackground, effectiveStream, previewProcessor, shouldProcessPreview) {
         val processor = previewProcessor
-        if (processor == null || effectiveStream == null) {
+        if (!shouldProcessPreview || processor == null || effectiveStream == null) {
+            if (processor?.isProcessing == true) {
+                try {
+                    processor.stopProcessing()
+                } catch (e: Exception) {
+                    Logger.e("BackgroundModal", "MediaSFU - VideoPreviewSection: Error stopping processor: ${e.message}")
+                }
+            }
             processedBitmap = null
             isProcessing = false
             return@LaunchedEffect
         }
-        
-        // Define the frame callback for preview - always use this
-        val previewCallback: (com.mediasfu.sdk.background.ProcessedFrame) -> Unit = { frame ->
-            // Update preview with processed frame
-            processedBitmap = frame.imageData
+
+        val backgroundToProcess = selectedBackground
+        if (backgroundToProcess == null || backgroundToProcess.type == BackgroundType.NONE) {
+            processedBitmap = null
+            isProcessing = false
+            return@LaunchedEffect
         }
-        
-        if (hasActiveBackground && selectedBackground != null) {
-            
+
+        val previewCallback: (com.mediasfu.sdk.background.ProcessedFrame) -> Unit = { frame ->
+            processedBitmap = frame.imageData
+            isProcessing = false
+        }
+
+        if (hasActiveBackground) {
             if (!processor.isProcessing) {
-                // Start new processing for preview
+                // Preview processing only: attach a temporary frame renderer and
+                // update this modal from processed frame snapshots.
                 isProcessing = true
-                lastProcessedBackgroundId = selectedBackground.id
+                lastProcessedBackgroundId = backgroundToProcess.id
                 try {
                     processor.startProcessing(
                         inputStream = effectiveStream,
-                        background = selectedBackground,
+                        background = backgroundToProcess,
                         onProcessedFrame = previewCallback
                     )
                 } catch (e: Exception) {
                     Logger.e("BackgroundModal", "MediaSFU - VideoPreviewSection: Error starting processor: ${e.message}")
                     isProcessing = false
                 }
-            } else if (lastProcessedBackgroundId != selectedBackground.id) {
-                // Processor already running but background changed - UPDATE the background
-                lastProcessedBackgroundId = selectedBackground.id
+            } else if (lastProcessedBackgroundId != backgroundToProcess.id) {
+                // Processor already running – just swap the background in real-time.
+                lastProcessedBackgroundId = backgroundToProcess.id
                 try {
-                    // Update the background in real-time while processing continues
-                    processor.updateBackground(selectedBackground)
-                    // Make sure callback is set for preview
+                    processor.updateBackground(backgroundToProcess)
                     processor.setFrameCallback(previewCallback)
                 } catch (e: Exception) {
                     Logger.e("BackgroundModal", "MediaSFU - VideoPreviewSection: Error updating background: ${e.message}")
                 }
             } else {
-                // Same background, just ensure callback is set
                 processor.setFrameCallback(previewCallback)
-                isProcessing = true
             }
         } else {
-            // No background selected or NONE selected
-            // Stop preview processing and clear the preview
+            // NONE selected – stop processor and fall back to raw video
             if (processor.isProcessing) {
                 try {
                     processor.stopProcessing()
@@ -1060,12 +1132,25 @@ private fun VideoPreviewSection(
         }
     }
     
+    val currentVideoAlreadyOn by rememberUpdatedState(videoAlreadyOn)
+    val currentSelectedBackground by rememberUpdatedState(selectedBackground)
+
     // Clean up on dispose - stop preview processing
     DisposableEffect(previewProcessor) {
         onDispose {
-            if (previewProcessor?.isProcessing == true) {
-                // Don't stop here - let the processor continue for production
-                // The Apply button will manage the lifecycle
+            val isVideoOn = currentVideoAlreadyOn
+            val bg = currentSelectedBackground
+            val hasVB = bg != null && bg.type != com.mediasfu.sdk.model.BackgroundType.NONE
+            if (!(isVideoOn && hasVB)) {
+                if (previewProcessor?.isProcessing == true) {
+                    try {
+                        runBlocking {
+                            previewProcessor.stopProcessing()
+                        }
+                    } catch (e: Exception) {
+                        Logger.e("BackgroundModal", "MediaSFU - VideoPreviewSection: Error stopping processor on dispose: ${e.message}")
+                    }
+                }
             }
         }
     }
@@ -1128,23 +1213,20 @@ private fun VideoPreviewSection(
                         )
                     }
                 }
+                hasActiveBackground && processedBitmap != null -> {
+                    ProcessedFrameView(
+                        bitmap = processedBitmap,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
                 videoTrack != null -> {
-                    // Show either processed preview or raw video
-                    if (hasActiveBackground && processedBitmap != null) {
-                        // Show processed frame using platform-specific bitmap rendering
-                        ProcessedFrameView(
-                            bitmap = processedBitmap,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        // Show the live video preview (unprocessed)
-                        PlatformVideoRenderer(
-                            track = videoTrack,
-                            doMirror = true,
-                            forceFullDisplay = true,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
+                    // Raw camera feed (no background active or processor not ready yet)
+                    PlatformVideoRenderer(
+                        track = videoTrack,
+                        doMirror = true,
+                        forceFullDisplay = true,
+                        modifier = Modifier.fillMaxSize()
+                    )
                 }
                 !videoAlreadyOn && device != null -> {
                     // Camera is off but we have a device - show helpful message about Save for Later
@@ -1323,4 +1405,3 @@ expect fun ProcessedFrameView(
     bitmap: Any?,
     modifier: Modifier = Modifier
 )
-

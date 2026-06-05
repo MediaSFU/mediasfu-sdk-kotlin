@@ -6,6 +6,7 @@ import com.mediasfu.sdk.model.ShowAlert
 import com.mediasfu.sdk.model.VirtualBackground
 import com.mediasfu.sdk.model.call
 import com.mediasfu.sdk.methods.utils.producer.ProducerOptionsType
+import com.mediasfu.sdk.methods.utils.producer.VParams
 import com.mediasfu.sdk.socket.SocketManager
 import com.mediasfu.sdk.webrtc.MediaStream
 import com.mediasfu.sdk.webrtc.WebRtcTransport
@@ -78,6 +79,13 @@ interface StreamSuccessVideoParameters :
     // Note: keepBackground is already defined in PrepopulateUserMediaParameters (parent interface)
     val selectedBackground: VirtualBackground?
         get() = null
+
+    /**
+     * Tracks whether the user confirmed a background choice in this session,
+     * either by applying it to active video or saving it for later.
+     */
+    val backgroundHasChanged: Boolean
+        get() = false
     
     /**
      * Callback to automatically apply a saved background when camera turns on.
@@ -149,6 +157,7 @@ suspend fun streamSuccessVideo(options: StreamSuccessVideoOptions) {
         return
     }
     val parameters = options.parameters.getUpdatedAllParams()
+    val wasVideoAlreadyOn = parameters.videoAlreadyOn
 
     try {
         val participants = parameters.participants
@@ -199,12 +208,10 @@ suspend fun streamSuccessVideo(options: StreamSuccessVideoOptions) {
         }
 
         // Prepare producer options so transports can connect/produce
-        val preparedVideoParams = (parameters.params ?: parameters.vParams)?.let { base ->
-            base.copy(
-                stream = incomingStream,
-                track = incomingTrack
-            )
-        }
+        val preparedVideoParams = (videoParams ?: parameters.params ?: parameters.vParams ?: VParams.getVideoParams()).copy(
+            stream = incomingStream,
+            track = incomingTrack
+        )
 
         val resolvedVideoDeviceId = runCatching {
             (parameters.localStream ?: incomingStream).getVideoTracks().firstOrNull()?.id
@@ -216,20 +223,15 @@ suspend fun streamSuccessVideo(options: StreamSuccessVideoOptions) {
             updateUserDefaultVideoInputDevice(resolvedVideoDeviceId)
         }
 
-        if (preparedVideoParams != null) {
-            videoParams = preparedVideoParams
-            updateVideoParams(preparedVideoParams)
-        } else if (videoParams == null) {
-        }
+        videoParams = preparedVideoParams
+        updateVideoParams(preparedVideoParams)
 
         // Mark camera as allowed (permission granted, camera started successfully)
         // This is required for SwitchVideo to work properly
         parameters.updateAllowed(true)
 
-        if (!videoAlreadyOn) {
-            updateVideoAlreadyOn(true)
-            videoAlreadyOn = true
-        }
+        var videoTransportReady = transportCreated
+        var videoProduceReady = transportCreatedVideo
 
         if (!transportCreated) {
             val optionsCreate = CreateSendTransportOptions(
@@ -243,8 +245,14 @@ suspend fun streamSuccessVideo(options: StreamSuccessVideoOptions) {
                 Logger.e("StreamSuccessVideo", "MediaSFU - streamSuccessVideo: create send transport failed -> ${error?.message}")
                 throw error ?: CreateSendTransportException("Failed to create video transport")
             }
-            transportCreated = true
-            updateTransportCreated(true)
+            val refreshed = parameters.getUpdatedAllParams()
+            videoTransportReady = refreshed.transportCreated
+            videoProduceReady = refreshed.transportCreatedVideo || refreshed.videoProducer != null
+            if (!videoTransportReady || !videoProduceReady) {
+                throw IllegalStateException("Video transport did not become ready after create")
+            }
+            transportCreated = videoTransportReady
+            updateTransportCreated(videoTransportReady)
         } else {
             // Transport already exists - close existing video producer and create new one
             // This is critical for camera switching - matching Flutter/React behavior
@@ -272,8 +280,21 @@ suspend fun streamSuccessVideo(options: StreamSuccessVideoOptions) {
                 Logger.e("StreamSuccessVideo", "MediaSFU - streamSuccessVideo: connect send transport failed -> ${error?.message}")
                 throw error ?: ConnectSendTransportVideoException("Failed to connect video transport")
             }
-            transportCreatedVideo = true
-            updateTransportCreatedVideo(true)
+            val refreshed = parameters.getUpdatedAllParams()
+            videoTransportReady = refreshed.transportCreated
+            videoProduceReady = refreshed.transportCreatedVideo || refreshed.videoProducer != null
+            if (!videoTransportReady || !videoProduceReady) {
+                throw IllegalStateException("Video transport did not become ready after connect")
+            }
+            transportCreated = videoTransportReady
+            transportCreatedVideo = videoProduceReady
+            updateTransportCreated(videoTransportReady)
+            updateTransportCreatedVideo(videoProduceReady)
+        }
+
+        if (!videoAlreadyOn) {
+            updateVideoAlreadyOn(true)
+            videoAlreadyOn = true
         }
 
         if (videoAction) {
@@ -300,8 +321,10 @@ suspend fun streamSuccessVideo(options: StreamSuccessVideoOptions) {
             updateUpdateMainWindow(false)
         }
 
-        transportCreatedVideo = true
-        updateTransportCreatedVideo(true)
+        transportCreated = videoTransportReady
+        transportCreatedVideo = videoProduceReady
+        updateTransportCreated(videoTransportReady)
+        updateTransportCreatedVideo(videoProduceReady)
 
         // Reupdate the screen display (matching Flutter behavior)
         val reorderStreams = parameters.reorderStreams
@@ -314,14 +337,15 @@ suspend fun streamSuccessVideo(options: StreamSuccessVideoOptions) {
         }
 
         // === AUTO-APPLY SAVED BACKGROUND ===
-        // Check if user has a saved background that should be auto-applied
-        // This matches React behavior: when keepBackground=true and selectedBackground is set,
-        // automatically apply the background to the new stream
+        // React/Flutter only re-enter the background path after the user
+        // confirmed a background choice. keepBackground alone is too loose when
+        // stale session state survives between manual app flows.
         val keepBackground = parameters.keepBackground
+        val backgroundWasConfirmed = parameters.backgroundHasChanged
         val savedBackground = parameters.selectedBackground
         val onAutoApplyBackground = parameters.onAutoApplyBackground
         
-        if (keepBackground && savedBackground != null && 
+        if (keepBackground && backgroundWasConfirmed && savedBackground != null &&
             savedBackground.type != com.mediasfu.sdk.model.BackgroundType.NONE &&
             onAutoApplyBackground != null) {
             try {
@@ -334,6 +358,10 @@ suspend fun streamSuccessVideo(options: StreamSuccessVideoOptions) {
 
     } catch (error: Exception) {
         Logger.e("StreamSuccessVideo", "MediaSFU - streamSuccessVideo error: ${error.message}")
+        if (!wasVideoAlreadyOn) {
+            parameters.updateVideoAlreadyOn(false)
+            parameters.updateTransportCreatedVideo(false)
+        }
         parameters.showAlert.call(
             message = "Error setting up video stream: ${error.message}",
             type = "danger",

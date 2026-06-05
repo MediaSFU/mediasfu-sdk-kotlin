@@ -1,10 +1,13 @@
 // CreateSendTransport.kt
 package com.mediasfu.sdk.consumers
 
+import com.mediasfu.sdk.util.Logger
 import com.mediasfu.sdk.webrtc.*
 import com.mediasfu.sdk.webrtc.ortc.OrtcUtils
 import com.mediasfu.sdk.socket.SocketManager
 import com.mediasfu.sdk.util.toStringAnyMap
+import com.mediasfu.sdk.util.MediaSFURuntimeProbe
+import kotlinx.datetime.Clock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -110,6 +113,15 @@ suspend fun createSendTransport(options: CreateSendTransportOptions): Result<Uni
 
         val device = parameters.device
             ?: return Result.failure(CreateSendTransportException("Device is null"))
+
+        ensureDeviceLoadedForSendTransport(parameters, device).getOrElse { error ->
+            return Result.failure(
+                CreateSendTransportException(
+                    "Device is not ready for send transport creation: ${error.message}",
+                    error
+                )
+            )
+        }
         
         val extendedCaps = resolveExtendedRtpCapabilities(parameters)
         val requiredKinds = requiredMediaKinds(options.option)
@@ -236,18 +248,30 @@ private suspend fun createLocalSendTransport(options: CreateSendTransportOptions
                 }
             }
             "video" -> {
-                // Video requires the combined interface since videoParams is defined there
-                val combinedParams = parameters as? ConnectSendTransportParameters
-                if (combinedParams != null) {
-                    val vParams = combinedParams.videoParams
-                    if (vParams != null) {
-                        val videoOptions = ConnectSendTransportVideoOptions(
-                            targetOption = "local",
-                            videoParams = vParams,
-                            parameters = combinedParams,
-                            videoConstraints = options.videoConstraints
+                val videoParams = parameters as? ConnectSendTransportVideoParameters
+                val refreshedParams = videoParams?.getUpdatedAllParams()
+                if (refreshedParams != null) {
+                    MediaSFURuntimeProbe.recordProducerSignalStage(
+                        "create-video-connect",
+                        "video",
+                        "target=local stream=${refreshedParams.localStreamVideo?.id ?: refreshedParams.localStream?.id ?: "none"} params=${refreshedParams.resolveVideoProducerOptions() != null}"
+                    )
+                    val videoOptions = ConnectSendTransportVideoOptions(
+                        targetOption = "local",
+                        videoParams = refreshedParams.resolveVideoProducerOptions(),
+                        parameters = refreshedParams,
+                        videoConstraints = options.videoConstraints
+                    )
+                    connectSendTransportVideo(videoOptions).getOrElse { error ->
+                        MediaSFURuntimeProbe.recordProducerSignalStage(
+                            "producer-failed",
+                            "video",
+                            "target=local error=${error.message ?: "unknown"}"
                         )
-                        connectSendTransportVideo(videoOptions)
+                        throw CreateSendTransportException(
+                            "Failed to connect local video transport after create: ${error.message}",
+                            error
+                        )
                     }
                 }
             }
@@ -345,18 +369,30 @@ private suspend fun createRemoteSendTransport(
                 }
             }
             "video" -> {
-                // Video requires the combined interface since videoParams is defined there
-                val combinedParams = parameters as? ConnectSendTransportParameters
-                if (combinedParams != null) {
-                    val vParams = combinedParams.videoParams
-                    if (vParams != null) {
-                        val videoOptions = ConnectSendTransportVideoOptions(
-                            targetOption = "remote",
-                            videoParams = vParams,
-                            parameters = combinedParams,
-                            videoConstraints = options.videoConstraints
+                val videoParams = parameters as? ConnectSendTransportVideoParameters
+                val refreshedParams = videoParams?.getUpdatedAllParams()
+                if (refreshedParams != null) {
+                    MediaSFURuntimeProbe.recordProducerSignalStage(
+                        "create-video-connect",
+                        "video",
+                        "target=remote stream=${refreshedParams.localStreamVideo?.id ?: refreshedParams.localStream?.id ?: "none"} params=${refreshedParams.resolveVideoProducerOptions() != null}"
+                    )
+                    val videoOptions = ConnectSendTransportVideoOptions(
+                        targetOption = "remote",
+                        videoParams = refreshedParams.resolveVideoProducerOptions(),
+                        parameters = refreshedParams,
+                        videoConstraints = options.videoConstraints
+                    )
+                    connectSendTransportVideo(videoOptions).getOrElse { error ->
+                        MediaSFURuntimeProbe.recordProducerSignalStage(
+                            "producer-failed",
+                            "video",
+                            "target=remote error=${error.message ?: "unknown"}"
                         )
-                        connectSendTransportVideo(videoOptions)
+                        throw CreateSendTransportException(
+                            "Failed to connect remote video transport after create: ${error.message}",
+                            error
+                        )
                     }
                 }
             }
@@ -398,6 +434,12 @@ private suspend fun createRemoteSendTransport(
     }
 }
 
+private fun ConnectSendTransportVideoParameters.resolveVideoProducerOptions() = when (this) {
+    is ConnectSendTransportParameters -> videoParams
+    is StreamSuccessVideoParameters -> videoParams
+    else -> null
+}
+
 internal fun resolveExtendedRtpCapabilities(
     parameters: SendTransportSessionParameters
 ): OrtcUtils.ExtendedRtpCapabilities? {
@@ -413,6 +455,32 @@ internal fun resolveExtendedRtpCapabilities(
         OrtcUtils.getExtendedRtpCapabilities(localCaps, remoteCaps)
     }.getOrNull()?.also { computed ->
         parameters.updateExtendedRtpCapabilities?.invoke(computed)
+    }
+}
+
+private suspend fun ensureDeviceLoadedForSendTransport(
+    parameters: SendTransportSessionParameters,
+    device: WebRtcDevice
+): Result<Unit> {
+    val routerCaps = parameters.routerRtpCapabilities ?: parameters.rtpCapabilities
+        ?: return Result.success(Unit)
+
+    findFirstNullTypePath(routerCaps)?.let { nullTypePath ->
+        Logger.e(
+            "CreateSendTransport",
+            "device-load routerRtpCapabilities contains null type at path=$nullTypePath"
+        )
+    }
+
+    val needsInitialLoad =
+        device.currentRtpCapabilities() == null || parameters.extendedRtpCapabilities == null
+
+    if (!needsInitialLoad) {
+        return Result.success(Unit)
+    }
+
+    return runCatching {
+        device.load(routerCaps).getOrThrow()
     }
 }
 
@@ -432,37 +500,86 @@ private fun setupSendTransportHandlers(
     member: String
 ) {
     transport.onConnect { connectData ->
-        launchTransport {
-            try {
-                // Get dtlsParameters - DO NOT override the role!
-                // The native mediasoup-client-android defaults to "server" role for send transport.
-                // This means the client is the DTLS server, and the SFU becomes the DTLS client.
-                val dtlsMap = connectData.dtlsParameters.toMap()
+        val startedAtMs = Clock.System.now().toEpochMilliseconds()
+        try {
+            val dtlsMap = connectData.dtlsParameters.toMap()
+            Logger.i(
+                "CreateSendTransport",
+                "transport-connect start transportId=${transport.id} role=${dtlsMap["role"] ?: "unknown"} fingerprints=${(dtlsMap["fingerprints"] as? List<*>)?.size ?: 0}"
+            )
 
-                socket.emit(
-                    "transport-connect",
-                    mapOf("dtlsParameters" to dtlsMap)
-                )
-                connectData.callback()
-            } catch (error: Exception) {
-                connectData.errback(error)
+            val payload = mapOf("dtlsParameters" to dtlsMap)
+            launchTransport {
+                runCatching { socket.emit("transport-connect", payload) }
+                    .onFailure { error ->
+                        Logger.w(
+                            "CreateSendTransport",
+                            "transport-connect emit failed transportId=${transport.id}: ${error.message}"
+                        )
+                    }
             }
+            connectData.callback()
+            Logger.i(
+                "CreateSendTransport",
+                "transport-connect callback transportId=${transport.id} latencyMs=${Clock.System.now().toEpochMilliseconds() - startedAtMs}"
+            )
+        } catch (error: Exception) {
+            Logger.e(
+                "CreateSendTransport",
+                "transport-connect failed transportId=${transport.id} latencyMs=${Clock.System.now().toEpochMilliseconds() - startedAtMs}: ${error.message}"
+            )
+            connectData.errback(error)
         }
     }
 
     transport.onProduce { produceData ->
+        val startedAtMs = Clock.System.now().toEpochMilliseconds()
         val rtpMap = produceData.rtpParameters.toMap()
+        val callbackKind = produceData.kind.name.lowercase()
+        val produceKind = resolveProduceKind(callbackKind, produceData.appData)
+        if (produceKind != callbackKind) {
+            Logger.w(
+                "CreateSendTransport",
+                "transport-produce kind override native=$callbackKind effective=$produceKind transportId=${transport.id}"
+            )
+        }
+        MediaSFURuntimeProbe.recordProducerSignalStage(
+            "produce-entered",
+            produceKind,
+            "transport=${transport.id}"
+        )
         
         // Normalize string numbers to actual numbers (e.g., apt: "96" -> apt: 96)
         val normalizedRtpMap = normalizeRtpNumbers(rtpMap) as? Map<String, Any?> ?: rtpMap
         
         // Add missing rtcpFeedback to codecs (native Android library strips these)
-        val fixedRtpMap = addRtcpFeedbackToCodecs(normalizedRtpMap, produceData.kind.name)
+        val fixedRtpMap = sanitizeRtpParametersForSignaling(
+            addRtcpFeedbackToCodecs(normalizedRtpMap, produceKind)
+        )
+
+        // Filter out urn:3gpp:video-orientation to prevent rotated video on iOS endpoints
+        val originalHeaderExtensions = fixedRtpMap["headerExtensions"] as? List<*>
+        val filteredHeaderExtensions = originalHeaderExtensions?.filter { ext ->
+            val extMap = ext as? Map<*, *>
+            extMap?.get("uri")?.toString() != "urn:3gpp:video-orientation"
+        }
+        val cleanRtpMap = fixedRtpMap.toMutableMap().apply {
+            if (filteredHeaderExtensions != null) {
+                put("headerExtensions", filteredHeaderExtensions)
+            }
+        }
+
+        findFirstNullTypePath(cleanRtpMap)?.let { nullTypePath ->
+            Logger.e(
+                "CreateSendTransport",
+                "transport-produce payload contains null type at path=$nullTypePath kind=$produceKind transportId=${transport.id}"
+            )
+        }
         
         val payload = mutableMapOf<String, Any?>(
             "transportId" to transport.id,
-            "kind" to produceData.kind.name.lowercase(),
-            "rtpParameters" to fixedRtpMap,
+            "kind" to produceKind,
+            "rtpParameters" to cleanRtpMap,
             "islevel" to islevel,
             "name" to member
         )
@@ -470,20 +587,78 @@ private fun setupSendTransportHandlers(
             payload["appData"] = it
         }
 
+        Logger.i(
+            "CreateSendTransport",
+            "transport-produce start transportId=${transport.id} kind=$produceKind codecs=${(cleanRtpMap["codecs"] as? List<*>)?.size ?: 0} encodings=${(cleanRtpMap["encodings"] as? List<*>)?.size ?: 0} hasAppData=${produceData.appData != null}"
+        )
+        // === DIAGNOSTIC: Verify urn:3gpp:video-orientation is excluded from produce RTP params ===
+        val produceHeaderExts = (cleanRtpMap["headerExtensions"] as? List<*>)
+            ?.mapNotNull { (it as? Map<*, *>)?.get("uri")?.toString() }
+            ?: emptyList()
+        val hasVideoOrientation = produceHeaderExts.any { it == "urn:3gpp:video-orientation" }
+        Logger.w(
+            "CreateSendTransport",
+            "ORIENTATION-CHECK transport-produce transportId=${transport.id} kind=$produceKind hasVideoOrientation=$hasVideoOrientation headerExtUris=$produceHeaderExts"
+        )
+        MediaSFURuntimeProbe.recordProducerSignalStage(
+            "produce-request",
+            produceKind,
+            describeProduceRequest(
+                transportId = transport.id,
+                kind = produceKind,
+                rtpMap = fixedRtpMap,
+                appData = produceData.appData
+            )
+        )
+
         try {
             socket.emitWithAck("transport-produce", payload) { response ->
                 handleProduceAck(
                     response,
-                    onSuccess = { id: String? -> produceData.callback(id) },
-                    onError = { error: Throwable -> produceData.errback(error) }
+                    onSuccess = { id: String? ->
+                        val latencyMs = Clock.System.now().toEpochMilliseconds() - startedAtMs
+                        Logger.i(
+                            "CreateSendTransport",
+                            "transport-produce ack transportId=${transport.id} producerId=${id ?: "null"} latencyMs=$latencyMs"
+                        )
+                        MediaSFURuntimeProbe.recordProducerSignalStage(
+                            "produce-ack-ok",
+                            produceKind,
+                            "id=${id ?: "null"},ms=$latencyMs"
+                        )
+                        produceData.callback(id)
+                    },
+                    onError = { error: Throwable ->
+                        val latencyMs = Clock.System.now().toEpochMilliseconds() - startedAtMs
+                        Logger.e(
+                            "CreateSendTransport",
+                            "transport-produce ack failed transportId=${transport.id} latencyMs=$latencyMs: ${error.message}"
+                        )
+                        MediaSFURuntimeProbe.recordProducerSignalStage(
+                            "produce-ack-error",
+                            produceKind,
+                            error.message.orEmpty()
+                        )
+                        produceData.errback(error)
+                    }
                 )
             }
         } catch (error: Exception) {
+            Logger.e(
+                "CreateSendTransport",
+                "transport-produce emit failed transportId=${transport.id} latencyMs=${Clock.System.now().toEpochMilliseconds() - startedAtMs}: ${error.message}"
+            )
+            MediaSFURuntimeProbe.recordProducerSignalStage(
+                "produce-exception",
+                produceKind,
+                error.message.orEmpty()
+            )
             produceData.errback(error)
         }
     }
 
     transport.onConnectionStateChange { state ->
+        Logger.i("CreateSendTransport", "transport-state transportId=${transport.id} state=$state")
         when (state.lowercase()) {
             "failed" -> transport.close()
             "closed" -> { /* Transport shut down */ }
@@ -522,6 +697,60 @@ private fun handleProduceAck(
 private fun launchTransport(block: suspend () -> Unit) {
     CoroutineScope(Dispatchers.Default).launch {
         block()
+    }
+}
+
+private fun resolveProduceKind(nativeKind: String, appData: Map<String, Any?>?): String {
+    val explicitKind = listOf("kind", "mediaKind", "mediaTag", "source")
+        .firstNotNullOfOrNull { key -> appData?.get(key)?.toString()?.trim()?.lowercase()?.takeIf { it.isNotBlank() } }
+
+    return when (explicitKind) {
+        "audio", "mic", "microphone" -> "audio"
+        "video", "camera", "screen", "screenshare", "screen-share" -> "video"
+        else -> nativeKind
+    }
+}
+
+private fun describeProduceRequest(
+    transportId: String,
+    kind: String,
+    rtpMap: Map<String, Any?>,
+    appData: Any?
+): String {
+    val codecs = rtpMap["codecs"] as? List<*>
+    val encodings = rtpMap["encodings"] as? List<*>
+    val headerExtensions = rtpMap["headerExtensions"] as? List<*>
+    val appDataMap = appData as? Map<*, *>
+    val appDataKeys = appDataMap
+        ?.keys
+        ?.mapNotNull { it?.toString() }
+        ?.sorted()
+        .orEmpty()
+    val appDataSource = appDataMap?.get("source")?.toString().orEmpty()
+    val appDataMediaTag = appDataMap?.get("mediaTag")?.toString().orEmpty()
+    val appDataTrackId = appDataMap?.containsKey("trackId") == true
+
+    return buildString {
+        append("transport=")
+        append(transportId)
+        append(",kind=")
+        append(kind)
+        append(",codecs=")
+        append(codecs?.size ?: 0)
+        append(",encodings=")
+        append(encodings?.size ?: 0)
+        append(",headerExt=")
+        append(headerExtensions?.size ?: 0)
+        append(",appDataPresent=")
+        append(appData != null)
+        append(",appDataKeys=")
+        append(appDataKeys.joinToString("|"))
+        append(",appDataSource=")
+        append(appDataSource.ifBlank { "none" })
+        append(",appDataMediaTag=")
+        append(appDataMediaTag.ifBlank { "none" })
+        append(",appDataTrackId=")
+        append(appDataTrackId)
     }
 }
 
@@ -566,6 +795,71 @@ private fun addRtcpFeedbackToCodecs(rtpMap: Map<String, Any?>, kind: String): Ma
     val fixedRtpMap = rtpMap.toMutableMap()
     fixedRtpMap["codecs"] = fixedCodecs
     return fixedRtpMap
+}
+
+private fun sanitizeRtpParametersForSignaling(rtpMap: Map<String, Any?>): Map<String, Any?> {
+    val codecs = (rtpMap["codecs"] as? List<*>)?.map { codecObj ->
+        val codec = codecObj as? Map<*, *> ?: return@map codecObj
+        val mutableCodec = codec
+            .filterKeys { it is String }
+            .mapKeys { it.key as String }
+            .toMutableMap()
+
+        val feedback = (mutableCodec["rtcpFeedback"] as? List<*>)
+            ?.mapNotNull { item ->
+                val feedbackMap = item as? Map<*, *> ?: return@mapNotNull null
+                val type = feedbackMap["type"]?.toString()?.trim().orEmpty()
+                if (type.isBlank()) return@mapNotNull null
+
+                mapOf(
+                    "type" to type,
+                    "parameter" to feedbackMap["parameter"]?.toString().orEmpty()
+                )
+            }
+            ?: emptyList()
+
+        mutableCodec["rtcpFeedback"] = feedback
+        deepPruneNulls(mutableCodec)
+    } ?: emptyList()
+
+    val sanitized = rtpMap.toMutableMap()
+    sanitized["codecs"] = codecs
+    return (deepPruneNulls(sanitized) as? Map<String, Any?>) ?: sanitized
+}
+
+private fun deepPruneNulls(value: Any?): Any? = when (value) {
+    is Map<*, *> -> value.entries
+        .mapNotNull { entry ->
+            val key = entry.key as? String ?: return@mapNotNull null
+            val pruned = deepPruneNulls(entry.value) ?: return@mapNotNull null
+            key to pruned
+        }
+        .toMap()
+    is List<*> -> value.mapNotNull { deepPruneNulls(it) }
+    else -> value
+}
+
+private fun findFirstNullTypePath(value: Any?, path: String = ""): String? = when (value) {
+    is Map<*, *> -> {
+        value.entries.forEach { entry ->
+            val key = entry.key as? String ?: return@forEach
+            val childPath = if (path.isEmpty()) key else "$path.$key"
+            if (key == "type" && entry.value == null) {
+                return childPath
+            }
+
+            findFirstNullTypePath(entry.value, childPath)?.let { return it }
+        }
+        null
+    }
+    is List<*> -> {
+        value.forEachIndexed { index, item ->
+            val childPath = "$path[$index]"
+            findFirstNullTypePath(item, childPath)?.let { return it }
+        }
+        null
+    }
+    else -> null
 }
 
 /**

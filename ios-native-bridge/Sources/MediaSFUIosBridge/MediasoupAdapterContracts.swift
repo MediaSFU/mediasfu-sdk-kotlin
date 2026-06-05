@@ -5,6 +5,14 @@ public protocol MediaSFUDeviceAdapter {
     func createRecvTransport(params: [String: Any?]) throws -> MediaSFURecvTransportAdapter
 }
 
+public protocol MediaSFULoadableDeviceAdapter: MediaSFUDeviceAdapter {
+    func load(routerRtpCapabilitiesJson: String) throws
+}
+
+public protocol MediaSFUCurrentRtpCapabilitiesProvider {
+    func currentRtpCapabilitiesJson() -> String?
+}
+
 public protocol MediaSFUTransportAdapter: AnyObject {
     var id: String { get }
     var connectionState: String { get }
@@ -18,6 +26,8 @@ public protocol MediaSFUSendTransportAdapter: MediaSFUTransportAdapter {
     func produce(
         track: MediaSFUNativeTrack,
         encodingsJson: String?,
+        codecOptionsJson: String?,
+        codecJson: String?,
         appDataJson: String?
     ) throws -> MediaSFUProducerAdapter
 }
@@ -49,4 +59,5 @@ public protocol MediaSFUConsumerAdapter: AnyObject {
     func close()
     func pause()
     func resume()
+    func getStatsJson() -> String?
 }

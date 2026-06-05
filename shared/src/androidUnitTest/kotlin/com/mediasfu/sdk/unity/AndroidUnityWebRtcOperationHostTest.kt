@@ -402,6 +402,7 @@ class AndroidUnityWebRtcOperationHostTest {
             track: MediaStreamTrack,
             encodings: List<RtpEncodingParameters>,
             codecOptions: ProducerCodecOptions?,
+            codec: RtpCodecCapability?,
             appData: Map<String, Any?>?
         ): WebRtcProducer {
             if (type != TransportType.SEND) {

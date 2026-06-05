@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -19,14 +20,15 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -62,7 +64,7 @@ fun RecordingModal(state: MediasfuGenericState) {
 private fun DefaultRecordingModalContent(props: com.mediasfu.sdk.ui.components.recording.RecordingModalOptions) {
     val parameters = props.parameters
     val recordPaused = parameters.recordPaused
-    
+
     AlertDialog(
         onDismissRequest = props.onClose,
         title = {
@@ -95,12 +97,13 @@ private fun DefaultRecordingModalContent(props: com.mediasfu.sdk.ui.components.r
                         )
                     },
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF4CAF50)
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 ) {
                     Text("Confirm")
                 }
-                
+
                 if (!recordPaused) {
                     Button(
                         onClick = {
@@ -111,7 +114,8 @@ private fun DefaultRecordingModalContent(props: com.mediasfu.sdk.ui.components.r
                             )
                         },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFF44336)
+                            containerColor = Color(0xFFEF4444),
+                            contentColor = Color.White
                         )
                     ) {
                         Text("Start")
@@ -145,17 +149,14 @@ fun RecordingModalContentBody(
             .verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Standard Panel
         StandardPanelSection(parameters, eventType)
-        
-        Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
-        
-        // Advanced Panel
+
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+
         AdvancedPanelSection(parameters, eventType)
-        
-        // Optional action buttons for unified modal
+
         if (showActionButtons) {
-            Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -170,12 +171,13 @@ fun RecordingModalContentBody(
                     },
                     modifier = Modifier.weight(1f),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF4CAF50)
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 ) {
                     Text("Confirm")
                 }
-                
+
                 if (!recordPaused) {
                     Button(
                         onClick = {
@@ -187,7 +189,8 @@ fun RecordingModalContentBody(
                         },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFFF44336)
+                            containerColor = Color(0xFFEF4444),
+                            contentColor = Color.White
                         )
                     ) {
                         Text("Start")
@@ -203,18 +206,17 @@ private fun StandardPanelSection(
     parameters: com.mediasfu.sdk.ui.components.recording.RecordingModalParameters,
     eventType: String
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Standard Settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        
-        // Media Options
+    RecordingSectionCard(
+        title = "Standard Settings",
+        subtitle = "Pick the core recording sources and output mode."
+    ) {
         DropdownOption(
             label = "Media Options:",
             value = parameters.recordingMediaOptions,
             options = listOf("video" to "Record Video", "audio" to "Record Audio Only"),
             onValueChange = { parameters.updateRecordingMediaOptions(it) }
         )
-        
-        // Specific Audios (not for broadcast)
+
         if (eventType != "broadcast") {
             DropdownOption(
                 label = "Specific Audios:",
@@ -226,8 +228,7 @@ private fun StandardPanelSection(
                 ),
                 onValueChange = { parameters.updateRecordingAudioOptions(it) }
             )
-            
-            // Specific Videos
+
             DropdownOption(
                 label = "Specific Videos:",
                 value = parameters.recordingVideoOptions,
@@ -238,8 +239,7 @@ private fun StandardPanelSection(
                 onValueChange = { parameters.updateRecordingVideoOptions(it) }
             )
         }
-        
-        // Add HLS
+
         DropdownOption(
             label = "Add HLS:",
             value = if (parameters.recordingAddHLS) "true" else "false",
@@ -255,11 +255,11 @@ private fun AdvancedPanelSection(
     eventType: String
 ) {
     var customTextValue by remember { mutableStateOf(parameters.recordingCustomText) }
-    
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Advanced Settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        
-        // Video Type
+
+    RecordingSectionCard(
+        title = "Advanced Settings",
+        subtitle = "Tune layout, overlays, colors, and orientation."
+    ) {
         DropdownOption(
             label = "Video Type:",
             value = parameters.recordingVideoType,
@@ -270,8 +270,7 @@ private fun AdvancedPanelSection(
             ),
             onValueChange = { parameters.updateRecordingVideoType(it) }
         )
-        
-        // Display Type (not for broadcast)
+
         if (eventType != "broadcast") {
             DropdownOption(
                 label = "Display Type:",
@@ -285,30 +284,26 @@ private fun AdvancedPanelSection(
                 onValueChange = { parameters.updateRecordingDisplayType(it) }
             )
         }
-        
-        // Background Color
+
         ColorPickerOption(
             label = "Background Color:",
             color = parameters.recordingBackgroundColor,
             onColorChange = { parameters.updateRecordingBackgroundColor(it) }
         )
-        
-        // Add Text
+
         DropdownOption(
             label = "Add Text:",
             value = if (parameters.recordingAddText) "true" else "false",
             options = listOf("true" to "True", "false" to "False"),
             onValueChange = { parameters.updateRecordingAddText(it == "true") }
         )
-        
-        // Custom Text (if Add Text is true)
+
         if (parameters.recordingAddText) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Custom Text:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                 OutlinedTextField(
                     value = customTextValue,
                     onValueChange = { newValue ->
-                        // Validate: alphanumeric and spaces only, max 40 chars
                         if (newValue.length <= 40 && (newValue.isEmpty() || newValue.matches(Regex("^[a-zA-Z0-9\\s]*$")))) {
                             customTextValue = newValue
                             parameters.updateRecordingCustomText(newValue)
@@ -316,10 +311,20 @@ private fun AdvancedPanelSection(
                     },
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("Enter custom text (max 40 chars)") },
-                    singleLine = true
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                        disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 )
-                
-                // Custom Text Position
+
                 DropdownOption(
                     label = "Custom Text Position:",
                     value = parameters.recordingCustomTextPosition,
@@ -330,8 +335,7 @@ private fun AdvancedPanelSection(
                     ),
                     onValueChange = { parameters.updateRecordingCustomTextPosition(it) }
                 )
-                
-                // Custom Text Color
+
                 ColorPickerOption(
                     label = "Custom Text Color:",
                     color = parameters.recordingCustomTextColor,
@@ -339,23 +343,20 @@ private fun AdvancedPanelSection(
                 )
             }
         }
-        
-        // Add Name Tags
+
         DropdownOption(
             label = "Add Name Tags:",
             value = if (parameters.recordingNameTags) "true" else "false",
             options = listOf("true" to "True", "false" to "False"),
             onValueChange = { parameters.updateRecordingNameTags(it == "true") }
         )
-        
-        // Name Tags Color
+
         ColorPickerOption(
             label = "Name Tags Color:",
             color = parameters.recordingNameTagsColor,
             onColorChange = { parameters.updateRecordingNameTagsColor(it) }
         )
-        
-        // Orientation (Video)
+
         DropdownOption(
             label = "Orientation (Video):",
             value = parameters.recordingOrientationVideo,
@@ -370,6 +371,34 @@ private fun AdvancedPanelSection(
 }
 
 @Composable
+private fun RecordingSectionCard(
+    title: String,
+    subtitle: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        tonalElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            content()
+        }
+    }
+}
+
+@Composable
 private fun DropdownOption(
     label: String,
     value: String,
@@ -377,13 +406,18 @@ private fun DropdownOption(
     onValueChange: (String) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    
+
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         Box {
             OutlinedButton(
                 onClick = { expanded = true },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -391,7 +425,7 @@ private fun DropdownOption(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        options.find { it.first == value }?.second ?: value,
+                        text = options.find { it.first == value }?.second ?: value,
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.Start
                     )
@@ -425,15 +459,20 @@ private fun ColorPickerOption(
     var showColorDialog by remember { mutableStateOf(false) }
     val currentColor = try {
         parseColor(color)
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         Color.Black
     }
-    
+
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(label, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
         OutlinedButton(
             onClick = { showColorDialog = true },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -456,7 +495,7 @@ private fun ColorPickerOption(
             }
         }
     }
-    
+
     if (showColorDialog) {
         SimpleColorPickerDialog(
             currentColor = color,
@@ -489,19 +528,19 @@ private fun SimpleColorPickerDialog(
         "#808080" to "Gray",
         "#83c0e9" to "Sky Blue"
     )
-    
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Select Color") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 commonColors.forEach { (colorHex, colorName) ->
-                    val color = try {
+                    val swatch = try {
                         parseColor(colorHex)
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         Color.Black
                     }
-                    
+
                     Surface(
                         onClick = { onColorSelected(colorHex) },
                         modifier = Modifier.fillMaxWidth(),
@@ -520,13 +559,17 @@ private fun SimpleColorPickerDialog(
                         ) {
                             Surface(
                                 modifier = Modifier.size(32.dp),
-                                color = color,
+                                color = swatch,
                                 shape = RoundedCornerShape(4.dp),
                                 border = BorderStroke(1.dp, Color.Gray)
                             ) {}
                             Column {
                                 Text(colorName, fontWeight = FontWeight.Medium)
-                                Text(colorHex, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    text = colorHex,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
@@ -546,7 +589,7 @@ private fun parseColor(colorString: String): Color {
         val hex = colorString.removePrefix("#")
         val fullHex = if (hex.length == 6) "FF$hex" else hex
         Color(fullHex.toLong(16))
-    } catch (e: Exception) {
+    } catch (_: Exception) {
         Color.Black
     }
 }

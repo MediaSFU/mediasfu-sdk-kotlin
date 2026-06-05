@@ -14,6 +14,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Parameters interface for connecting screen send transports.
@@ -226,18 +227,20 @@ suspend fun connectSendTransportScreen(
                 val codecOptions = effectiveParams.codecOptions ?: defaultScreenParams.codecOptions
 
                 val appData = mapOf(
-                    "kind" to "video",
-                    "source" to "screen",
-                    "trackId" to trackForProduction.id
+                    "mediaTag" to "screen-video",
+                    "source" to "screen"
                 )
 
                 val remoteProducer = runCatching {
-                    producerTransport.produce(
-                        track = trackForProduction,
-                        encodings = encodings,
-                        codecOptions = codecOptions,
-                        appData = appData
-                    )
+                    withContext(Dispatchers.Default) {
+                        producerTransport.produce(
+                            track = trackForProduction,
+                            encodings = encodings,
+                            codecOptions = codecOptions,
+                            codec = effectiveParams.codec,
+                            appData = appData
+                        )
+                    }
                 }.onFailure { error ->
                     parameters.showAlert?.invoke(
                         "Unable to start screen share: ${error.message}",

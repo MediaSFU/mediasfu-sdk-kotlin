@@ -97,21 +97,128 @@ internal fun parseRtpParametersBridgeJson(json: String): RtpParameters {
     )
 }
 
+internal fun parseRtpCapabilitiesBridgeJson(json: String): RtpCapabilities {
+    val jsonObject = mediaSfuJson.parseToJsonElement(json).jsonObject
+
+    val codecs = jsonObject["codecs"]?.jsonArray?.mapNotNull { item ->
+        val codecObject = item as? JsonObject ?: return@mapNotNull null
+        val kind = codecObject["kind"]?.jsonPrimitive?.contentOrNull?.toMediaKindOrNull() ?: return@mapNotNull null
+        val mimeType = codecObject["mimeType"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+        val clockRate = codecObject["clockRate"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+        val preferredPayloadType = codecObject["preferredPayloadType"]?.jsonPrimitive?.intOrNull
+        val channels = codecObject["channels"]?.jsonPrimitive?.intOrNull
+        val parameters = codecObject["parameters"]?.jsonObject
+            ?.mapNotNull { (key, value) ->
+                val normalized = jsonElementToAny(value)?.toString() ?: return@mapNotNull null
+                key to normalized
+            }
+            ?.toMap()
+            ?: emptyMap()
+        val rtcpFeedback = codecObject["rtcpFeedback"]?.jsonArray?.mapNotNull { feedbackItem ->
+            val feedbackObject = feedbackItem as? JsonObject ?: return@mapNotNull null
+            val type = feedbackObject["type"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            RtcpFeedback(
+                type = type,
+                parameter = feedbackObject["parameter"]?.jsonPrimitive?.contentOrNull
+            )
+        } ?: emptyList()
+
+        RtpCodecCapability(
+            kind = kind,
+            mimeType = mimeType,
+            preferredPayloadType = preferredPayloadType,
+            clockRate = clockRate,
+            channels = channels,
+            parameters = parameters,
+            rtcpFeedback = rtcpFeedback
+        )
+    } ?: emptyList()
+
+    val headerExtensions = jsonObject["headerExtensions"]?.jsonArray?.mapNotNull { item ->
+        val extObject = item as? JsonObject ?: return@mapNotNull null
+        val uri = extObject["uri"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+        val preferredId = extObject["preferredId"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+        RtpHeaderExtension(
+            kind = extObject["kind"]?.jsonPrimitive?.contentOrNull?.toMediaKindOrNull(),
+            uri = uri,
+            preferredId = preferredId,
+            preferredEncrypt = extObject["preferredEncrypt"]?.jsonPrimitive?.booleanOrNull ?: false,
+            direction = extObject["direction"]?.jsonPrimitive?.contentOrNull?.toHeaderDirectionOrNull()
+        )
+    } ?: emptyList()
+
+    val fecMechanisms = jsonObject["fecMechanisms"]?.jsonArray?.mapNotNull { item ->
+        item.jsonPrimitive.contentOrNull
+    } ?: emptyList()
+
+    return RtpCapabilities(
+        codecs = codecs,
+        headerExtensions = headerExtensions,
+        fecMechanisms = fecMechanisms
+    )
+}
+
 internal fun parseAppDataBridgeJson(json: String?): Map<String, Any?>? {
     if (json.isNullOrBlank()) return null
     val element = runCatching { mediaSfuJson.parseToJsonElement(json) }.getOrNull() ?: return null
     return (element as? JsonObject)?.let(::jsonObjectToAnyMap)
 }
 
+/**
+ * Serializes [RtpCapabilities] to the JSON format expected by the native iOS mediasoup device
+ * load call. Unlike [RtpCapabilities.debugJson], this function:
+ *  - Emits enum values (kind, direction) as lowercase strings ("audio"/"video", "sendrecv" etc.)
+ *  - Keeps codec parameters as JSON strings (the C++ native layer expects Map<String,String>
+ *    parameter values; converting to numbers causes type_error.302 in nlohmann/json).
+ */
+internal fun RtpCapabilities.toIosBridgeLoadJson(): String {
+    val codecMaps: List<Map<String, Any?>> = codecs.map { codec ->
+        // parameters are stored as Map<String,String> in the Kotlin model; keep them as strings
+        val paramMap: Map<String, Any?> = codec.parameters
+        val fbList: List<Map<String, Any?>> = codec.rtcpFeedback.map { fb ->
+            mutableMapOf<String, Any?>("type" to fb.type).apply {
+                if (!fb.parameter.isNullOrBlank()) this["parameter"] = fb.parameter
+            }
+        }
+        mutableMapOf<String, Any?>(
+            "kind" to codec.kind.name.lowercase(),
+            "mimeType" to codec.mimeType,
+            "clockRate" to codec.clockRate,
+            "preferredPayloadType" to codec.preferredPayloadType,
+            "channels" to codec.channels
+        ).apply {
+            if (paramMap.isNotEmpty()) this["parameters"] = paramMap
+            if (fbList.isNotEmpty()) this["rtcpFeedback"] = fbList
+        }
+    }
+    val extMaps: List<Map<String, Any?>> = headerExtensions.map { ext ->
+        mutableMapOf<String, Any?>(
+            "uri" to ext.uri,
+            "preferredId" to ext.preferredId,
+            "preferredEncrypt" to ext.preferredEncrypt
+        ).apply {
+            ext.kind?.let { this["kind"] = it.name.lowercase() }
+            ext.direction?.let { this["direction"] = it.name.lowercase() }
+        }
+    }
+    return mapToJsonElement(
+        mapOf(
+            "codecs" to codecMaps,
+            "headerExtensions" to extMaps,
+            "fecMechanisms" to fecMechanisms
+        )
+    ).toString()
+}
+
 private fun mapToJsonElement(map: Map<*, *>): JsonObject {
     return JsonObject(
         map.entries
-            .filter { it.key is String }
+            .filter { it.key is String && it.value != null }
             .associate { (key, value) -> key as String to wrapJsonValue(value) }
     )
 }
 
-private fun listToJsonElement(list: List<*>): JsonArray = JsonArray(list.map(::wrapJsonValue))
+private fun listToJsonElement(list: List<*>): JsonArray = JsonArray(list.filterNotNull().map(::wrapJsonValue))
 
 private fun wrapJsonValue(value: Any?): JsonElement = when (value) {
     null -> JsonNull
@@ -167,3 +274,12 @@ private val JsonPrimitive.booleanOrNull: Boolean?
         "false" -> false
         else -> null
     }
+
+private fun String.toMediaKindOrNull(): MediaKind? = when (lowercase()) {
+    "audio" -> MediaKind.AUDIO
+    "video" -> MediaKind.VIDEO
+    else -> null
+}
+
+private fun String.toHeaderDirectionOrNull(): RtpHeaderDirection? =
+    runCatching { RtpHeaderDirection.valueOf(uppercase()) }.getOrNull()

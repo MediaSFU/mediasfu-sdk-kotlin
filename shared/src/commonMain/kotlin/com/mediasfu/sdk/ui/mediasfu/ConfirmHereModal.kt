@@ -56,7 +56,7 @@ private fun DefaultConfirmHereModalContent(props: ConfirmHereModalProps) {
 
     AlertDialog(
         onDismissRequest = props.onDismiss,
-        title = { Text("Are You Still There?") },
+        title = { Text("Are You Still Here?") },
         text = {
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -78,7 +78,7 @@ private fun DefaultConfirmHereModalContent(props: ConfirmHereModalProps) {
         },
         confirmButton = {
             TextButton(onClick = props.onConfirm) {
-                Text("I'm here")
+                Text("I'm Here")
             }
         }
     )

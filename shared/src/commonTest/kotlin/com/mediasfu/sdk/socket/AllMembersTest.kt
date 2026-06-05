@@ -46,6 +46,7 @@ class FakeAllMembersParameters : AllMembersRestParameters {
     var hostFirstSwitchState: Boolean = false
     var waitingRoomListState: List<WaitingRoomParticipant> = emptyList()
     var isLevelState: String = "1"
+    var memberState: String = "guest"
     var roomRecvIpsState: List<String> = emptyList()
     var consumeSocketsState: List<ConsumeSocket> = emptyList()
     var totalReqWaitState: Int = 0
@@ -153,6 +154,9 @@ class FakeAllMembersParameters : AllMembersRestParameters {
 
     override val isLevel: String
         get() = isLevelState
+
+    override val member: String
+        get() = memberState
 
     override val adminVidID: String
         get() = adminVidIDState
@@ -342,6 +346,9 @@ class FakeAllMembersParameters : AllMembersRestParameters {
             chatSettingState = it
             chatSettingUpdates += it
         }
+
+    override val updateIslevel: (String) -> Unit
+        get() = { isLevelState = it }
 
     override val updateMainHeightWidth: (Double) -> Unit
         get() = {

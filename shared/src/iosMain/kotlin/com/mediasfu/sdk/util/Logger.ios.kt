@@ -6,7 +6,15 @@ import platform.Foundation.NSLog
  * iOS implementation of Logger using NSLog
  */
 actual object Logger {
-    actual var isDebugEnabled: Boolean = false
+    actual var isDebugEnabled: Boolean = true
+
+    fun enableDebugMode() {
+        isDebugEnabled = true
+    }
+
+    fun disableDebugMode() {
+        isDebugEnabled = false
+    }
     
     actual fun d(tag: String, message: String) {
         if (isDebugEnabled) {

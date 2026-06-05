@@ -169,6 +169,7 @@ class MediasfuParameters :
     override var newLimitedStreams: List<Stream> = emptyList()
     var validated: Boolean = false
     override var roomName: String = ""
+    override var eventType: EventType = EventType.CONFERENCE
     override var member: String = ""
     var adminPasscode: String = ""
     override var islevel: String = "1"
@@ -186,7 +187,6 @@ class MediasfuParameters :
     var confirmedToRecord: Boolean = false
     override var meetingDisplayType: String = "media"
     override var meetingVideoOptimized: Boolean = false
-    override var eventType: EventType = EventType.WEBINAR
     override var participants: List<Participant> = emptyList()
     var filteredParticipants: List<Participant> = emptyList()
     var onParticipantsUpdated: ((List<Participant>) -> Unit)? = null
@@ -1562,9 +1562,20 @@ class MediasfuParameters :
      */
     override fun updateParticipants(participants: List<Participant>) {
         this.participants = participants
-        val sampleNames = participants.take(5).joinToString { participant ->
-            participant.name.ifBlank { "(unnamed)" }
+
+        participants.firstOrNull { participant ->
+            (participant.isHost || participant.isAdmin || participant.islevel == "2") &&
+                participant.name.isNotBlank()
+        }?.name?.let { resolvedHost ->
+            hostLabel = resolvedHost
         }
+
+        participants.firstOrNull { participant ->
+            member.isNotBlank() && participant.name.equals(member, ignoreCase = true)
+        }?.let { currentParticipant ->
+            youAreHost = currentParticipant.isHost || currentParticipant.isAdmin || currentParticipant.islevel == "2"
+        }
+
         onParticipantsUpdated?.invoke(participants)
     }
 
@@ -1886,6 +1897,10 @@ class MediasfuParameters :
         isConfigureWhiteboardModalVisible = false
         virtualStream = null
         keepBackground = false
+        selectedBackground = null
+        isBackgroundModalVisible = false
+        backgroundHasChanged = false
+        processedStream = null
         annotateScreenStream = false
         audioLevel = 0.0
         showAlertHandler = null

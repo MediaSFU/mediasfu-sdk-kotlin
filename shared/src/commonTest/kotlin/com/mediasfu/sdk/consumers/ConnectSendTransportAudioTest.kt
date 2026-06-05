@@ -4,6 +4,8 @@ package com.mediasfu.sdk.consumers
 import com.mediasfu.sdk.testutil.TestConnectSendTransportAudioParameters
 import com.mediasfu.sdk.testutil.TestMediaStream
 import com.mediasfu.sdk.testutil.TestMediaStreamTrack
+import com.mediasfu.sdk.testutil.TestWebRtcTransport
+import com.mediasfu.sdk.methods.utils.producer.ProducerOptionsType
 import com.mediasfu.sdk.webrtc.MediaKind
 import com.mediasfu.sdk.webrtc.MediaStreamTrack
 import com.mediasfu.sdk.webrtc.OutboundAudioStatsProvider
@@ -46,6 +48,46 @@ class ConnectSendTransportAudioTest {
         assertTrue(parameters.transportCreatedAudio)
         assertFalse(parameters.micAction)
         assertTrue(parameters.audioAlreadyOnUpdates.contains(true))
+    }
+
+    @Test
+    fun testConnectSendTransportAudioUsesAudioParamsTrackWhenOptionStreamHasNoAudio() = runTest {
+        val remoteTransport = TestWebRtcTransport("remote-transport")
+        val parameters = TestConnectSendTransportAudioParameters(
+            initialProducerTransport = remoteTransport,
+            initialAudioProducer = null,
+            initialLocalAudioProducer = null
+        )
+        val audioTrack = TestMediaStreamTrack(kind = "audio")
+        val audioStream = TestMediaStream(
+            id = "audio-source",
+            audioTracks = listOf(audioTrack)
+        )
+        val combinedVideoStream = TestMediaStream(
+            id = "combined-video",
+            videoTracks = listOf(TestMediaStreamTrack(kind = "video"))
+        )
+
+        parameters.updateLocalStream(combinedVideoStream)
+        parameters.updateLocalStreamAudio(audioStream)
+        parameters.updateAudioParams(
+            ProducerOptionsType(
+                track = audioTrack,
+                stream = audioStream
+            )
+        )
+
+        val result = connectSendTransportAudio(
+            ConnectSendTransportAudioOptions(
+                stream = combinedVideoStream,
+                parameters = parameters,
+                targetOption = "remote"
+            )
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals(audioTrack, remoteTransport.produceCalls.single().track)
+        assertEquals(audioStream, parameters.currentLocalStreamAudio)
     }
     
     @Test

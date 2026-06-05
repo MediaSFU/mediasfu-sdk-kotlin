@@ -14,10 +14,19 @@ const {
   CLICK_SETTLE_MS = '0',
   CLICK_REPEAT_MS = '5000',
   WAIT_FOR_TEXT = '',
+  POST_READY_DELAY_MS = '0',
   MEETING_ID_VALUE = '',
   DISPLAY_NAME_VALUE = '',
   DEBUG_FIELDS = '0',
   REQUIRE_PRODUCE_TAGS = '',
+  REQUIRE_REMOTE_VIDEO = '0',
+  MIN_REMOTE_VIDEOS = '1',
+  REMOTE_VIDEO_MUST_BE_NONBLANK = '1',
+  ALLOW_DOM_ACTIVE_TAG_FALLBACK = '0',
+  KEEP_ALIVE_CLICK_LABELS = "I'm Here,I’m Here",
+  KEEP_ALIVE_CLICK_REPEAT_MS = '15000',
+  // CRITICAL: keep a small post-join delay before auto-producing media.
+  // The web refs behave more reliably when the room and transports settle first.
   PRODUCE_START_DELAY_MS = '2000',
   PRODUCE_RETRY_AFTER_MS = '12000',
 } = process.env;
@@ -36,18 +45,37 @@ const clickLabels = String(CLICK_LABELS)
   .map(value => value.trim())
   .filter(Boolean);
 const waitForText = String(WAIT_FOR_TEXT).trim();
+const postReadyDelayMs = Number.parseInt(POST_READY_DELAY_MS, 10);
 const meetingIdValue = String(MEETING_ID_VALUE).trim();
 const displayNameValue = String(DISPLAY_NAME_VALUE).trim();
 const debugFields = ['1', 'true', 'yes', 'on'].includes(String(DEBUG_FIELDS).trim().toLowerCase());
+const requireRemoteVideo = ['1', 'true', 'yes', 'on'].includes(String(REQUIRE_REMOTE_VIDEO).trim().toLowerCase());
+const minRemoteVideos = Number.parseInt(MIN_REMOTE_VIDEOS, 10);
+const remoteVideoMustBeNonBlank = ['1', 'true', 'yes', 'on'].includes(
+  String(REMOTE_VIDEO_MUST_BE_NONBLANK).trim().toLowerCase()
+);
 const requiredProduceTags = String(REQUIRE_PRODUCE_TAGS)
   .split(',')
   .map(value => value.trim().toLowerCase())
   .filter(Boolean);
+const keepAliveClickLabels = String(KEEP_ALIVE_CLICK_LABELS)
+  .split(',')
+  .map(value => value.trim())
+  .filter(Boolean);
+const allowDomActiveTagFallback = ['1', 'true', 'yes', 'on'].includes(
+  String(ALLOW_DOM_ACTIVE_TAG_FALLBACK).trim().toLowerCase()
+);
+const keepAliveClickRepeatMs = Number.parseInt(KEEP_ALIVE_CLICK_REPEAT_MS, 10);
 const produceStartDelayMs = Number.parseInt(PRODUCE_START_DELAY_MS, 10);
 const produceRetryAfterMs = Number.parseInt(PRODUCE_RETRY_AFTER_MS, 10);
 
 if (!Number.isFinite(minActiveVideos) || minActiveVideos < 0) {
   console.error(`Invalid MIN_ACTIVE_VIDEOS: ${MIN_ACTIVE_VIDEOS}`);
+  process.exit(1);
+}
+
+if (!Number.isFinite(minRemoteVideos) || minRemoteVideos < 0) {
+  console.error(`Invalid MIN_REMOTE_VIDEOS: ${MIN_REMOTE_VIDEOS}`);
   process.exit(1);
 }
 
@@ -66,8 +94,18 @@ if (!Number.isFinite(clickRepeatMs) || clickRepeatMs < 0) {
   process.exit(1);
 }
 
+if (!Number.isFinite(postReadyDelayMs) || postReadyDelayMs < 0) {
+  console.error(`Invalid POST_READY_DELAY_MS: ${POST_READY_DELAY_MS}`);
+  process.exit(1);
+}
+
 if (!Number.isFinite(produceRetryAfterMs) || produceRetryAfterMs < 0) {
   console.error(`Invalid PRODUCE_RETRY_AFTER_MS: ${PRODUCE_RETRY_AFTER_MS}`);
+  process.exit(1);
+}
+
+if (!Number.isFinite(keepAliveClickRepeatMs) || keepAliveClickRepeatMs < 0) {
+  console.error(`Invalid KEEP_ALIVE_CLICK_REPEAT_MS: ${KEEP_ALIVE_CLICK_REPEAT_MS}`);
   process.exit(1);
 }
 
@@ -294,10 +332,12 @@ async function main() {
     };
   };
 
-  const producerTagsReady = () => {
+  const producerTagsReady = (domActiveTags = []) => {
     if (requiredProduceTags.length === 0) return true;
     const summary = summarizeProducerEvidence();
-    return requiredProduceTags.every(tag => (summary.ackCounts[tag] || 0) > 0);
+    return requiredProduceTags.every(tag =>
+      (summary.ackCounts[tag] || 0) > 0 || (allowDomActiveTagFallback && domActiveTags.includes(tag))
+    );
   };
 
   ws.onmessage = event => {
@@ -355,6 +395,8 @@ async function main() {
       expression: `(() => {
         const shouldClick = ${autoClick ? 'true' : 'false'};
         const clickLabels = ${JSON.stringify(clickLabels)};
+        const keepAliveClickLabels = ${JSON.stringify(keepAliveClickLabels)};
+        const keepAliveClickRepeatMs = ${keepAliveClickRepeatMs};
         const clickSettleMs = ${clickSettleMs};
         const clickRepeatMs = ${clickRepeatMs};
         const waitForText = ${JSON.stringify(waitForText)};
@@ -362,12 +404,14 @@ async function main() {
         const displayNameValue = ${JSON.stringify(displayNameValue)};
         const debugFields = ${debugFields ? 'true' : 'false'};
         const missingProduceTags = ${JSON.stringify(missingProduceTags)};
+        const localDisplayName = ${JSON.stringify(displayNameValue.toLowerCase())};
         const produceStartDelayMs = ${produceStartDelayMs};
         const produceRetryAfterMs = ${produceRetryAfterMs};
         const now = Date.now();
         window.__mediasfuProbeState = window.__mediasfuProbeState || {
           startedAt: now,
           lastLabelClickAt: 0,
+          lastKeepAliveClickAt: 0,
           lastMeetingSubmitAt: 0,
           lastDisplayNameSubmitAt: 0,
           lastProducerResetByTag: {},
@@ -420,6 +464,15 @@ async function main() {
           return !button.disabled && visible(button) && (text === label || text.includes(label));
         });
         const findButton = label => findButtons(label)[0];
+        const keepAliveButton = keepAliveClickLabels.map(findButton).find(Boolean);
+        if (
+          shouldClick
+          && keepAliveButton
+          && now - (probeState.lastKeepAliveClickAt || 0) >= keepAliveClickRepeatMs
+        ) {
+          keepAliveButton.click();
+          probeState.lastKeepAliveClickAt = now;
+        }
         const findField = regex => Array.from(document.querySelectorAll('input, textarea')).find(element => {
           return visible(element) && regex.test(describeField(element));
         });
@@ -484,6 +537,37 @@ async function main() {
         const inRoomElapsedMs = probeState.inRoomAt ? now - probeState.inRoomAt : 0;
         const productionReady = Boolean(probeState.inRoomAt) && inRoomElapsedMs >= produceStartDelayMs;
 
+        const tourContainers = Array.from(document.querySelectorAll('div, section, aside, article')).filter(element =>
+          visible(element)
+          && (element.innerText || '').includes("Don't show this tour again")
+          && (element.innerText || '').includes("Step ")
+        );
+        for (const tourContainer of tourContainers) {
+          const checkbox = tourContainer.querySelector('input[type="checkbox"]');
+          if (checkbox && !checkbox.checked) checkbox.click();
+          const closeBtn = Array.from(tourContainer.querySelectorAll('button, a, [role="button"]')).find(button =>
+            (button.getAttribute('aria-label') || '').includes('Close')
+            || (button.className || '').toLowerCase().includes('close')
+            || ((button.innerHTML || '').includes('<svg') && !button.innerText.trim())
+          );
+          if (closeBtn) {
+            closeBtn.click();
+          }
+          let currentEl = tourContainer;
+          while (currentEl && currentEl.tagName && currentEl.tagName.toLowerCase() !== 'body') {
+            try {
+              const style = window.getComputedStyle(currentEl);
+              if (style.position === 'absolute' || style.position === 'fixed') {
+                currentEl.style.display = 'none';
+              }
+            } catch (e) {}
+            currentEl = currentEl.parentElement;
+          }
+        }
+        document.querySelectorAll('.modal-backdrop, [class*="backdrop"], [class*="overlay"]').forEach(element => {
+          if (visible(element)) element.style.display = 'none';
+        });
+
         if (shouldClick && productionReady) {
           const clickFirstAvailable = labels => {
             const button = labels.map(findButton).find(Boolean);
@@ -494,11 +578,14 @@ async function main() {
             return false;
           };
 
+          let clickedMissingControl = false;
           if (missingProduceTags.includes('audio')) {
-            clickFirstAvailable(['Unmute']);
-          } else if (missingProduceTags.includes('video')) {
-            clickFirstAvailable(['Video On']);
-          } else {
+            clickedMissingControl = clickFirstAvailable(['Unmute']) || clickedMissingControl;
+          }
+          if (missingProduceTags.includes('video')) {
+            clickedMissingControl = clickFirstAvailable(['Video On']) || clickedMissingControl;
+          }
+          if (!clickedMissingControl) {
             for (const label of ['Unmute', 'Video On']) {
               const button = findButton(label);
               if (button) {
@@ -542,21 +629,143 @@ async function main() {
           }
         }
 
+        const buttonTexts = Array.from(document.querySelectorAll('button'))
+          .filter(visible)
+          .map(button => normalizeText(button.innerText || button.textContent || ''))
+          .filter(Boolean);
         const bodyText = document.body.innerText.slice(0, 1000);
         const inRoom = /People|End|Share Screen|Video Off|Mute/.test(bodyText)
           && !/Enter your Meeting ID to continue/.test(bodyText);
 
-        const allVideos = Array.from(document.querySelectorAll('video')).map(video => ({
-          paused: video.paused,
-          readyState: video.readyState,
-          width: video.videoWidth,
-          height: video.videoHeight,
-          srcObject: Boolean(video.srcObject)
-        }));
+        const videoContextText = video => {
+          const chunks = [];
+          let element = video;
+          for (let depth = 0; element && depth < 5; depth += 1) {
+            const text = normalizeText(element.innerText || element.textContent || '');
+            if (text) chunks.push(text);
+            const aria = normalizeText(element.getAttribute?.('aria-label') || element.getAttribute?.('title') || '');
+            if (aria) chunks.push(aria);
+            element = element.parentElement;
+          }
+          return normalizeText(chunks.join(' ')).slice(0, 300);
+        };
 
-        const activeVideos = allVideos.filter(video =>
-          video.readyState >= 2 && video.width > 0 && video.height > 0 && video.srcObject
-        );
+        const sampleVideoPixels = video => {
+          if (video.readyState < 2 || video.videoWidth <= 0 || video.videoHeight <= 0) {
+            return { sampled: false, nonblank: false, reason: 'not-ready' };
+          }
+
+          try {
+            const canvas = document.createElement('canvas');
+            const sampleWidth = 12;
+            const sampleHeight = 12;
+            canvas.width = sampleWidth;
+            canvas.height = sampleHeight;
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, sampleWidth, sampleHeight);
+            const data = context.getImageData(0, 0, sampleWidth, sampleHeight).data;
+            let alphaPixels = 0;
+            let lumaSum = 0;
+            let lumaSquaredSum = 0;
+            let minLuma = 255;
+            let maxLuma = 0;
+
+            for (let index = 0; index < data.length; index += 4) {
+              const alpha = data[index + 3];
+              if (alpha <= 8) continue;
+              alphaPixels += 1;
+              const luma = (data[index] * 0.2126) + (data[index + 1] * 0.7152) + (data[index + 2] * 0.0722);
+              lumaSum += luma;
+              lumaSquaredSum += luma * luma;
+              minLuma = Math.min(minLuma, luma);
+              maxLuma = Math.max(maxLuma, luma);
+            }
+
+            const pixelCount = sampleWidth * sampleHeight;
+            if (alphaPixels < Math.max(4, pixelCount / 4)) {
+              return { sampled: true, nonblank: false, reason: 'transparent', alphaPixels };
+            }
+
+            const mean = lumaSum / alphaPixels;
+            const variance = Math.max(0, (lumaSquaredSum / alphaPixels) - (mean * mean));
+            const stdDev = Math.sqrt(variance);
+            const span = maxLuma - minLuma;
+            const nearlyFlat = stdDev < 2 && span < 6;
+            const blankExtreme = nearlyFlat && (mean < 5 || mean > 250);
+            return {
+              sampled: true,
+              nonblank: !blankExtreme,
+              mean: Number(mean.toFixed(2)),
+              stdDev: Number(stdDev.toFixed(2)),
+              min: Number(minLuma.toFixed(2)),
+              max: Number(maxLuma.toFixed(2)),
+              alphaPixels,
+              reason: blankExtreme ? 'flat-extreme' : 'ok',
+            };
+          } catch (error) {
+            return {
+              sampled: false,
+              nonblank: false,
+              reason: 'sample-error',
+              error: String(error?.message || error).slice(0, 160),
+            };
+          }
+        };
+
+        const rawVideos = Array.from(document.querySelectorAll('video')).map((video, index) => {
+          const rect = video.getBoundingClientRect();
+          const contextText = videoContextText(video);
+          const lowerContext = contextText.toLowerCase();
+          const srcObject = video.srcObject;
+          const videoTracks = srcObject && typeof srcObject.getVideoTracks === 'function'
+            ? srcObject.getVideoTracks().map(track => ({
+                id: String(track.id || '').slice(0, 80),
+                label: String(track.label || '').slice(0, 80),
+                enabled: track.enabled,
+                muted: track.muted,
+                readyState: track.readyState,
+              }))
+            : [];
+          const active = video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0 && Boolean(srcObject);
+          const localNameMatch = Boolean(localDisplayName && lowerContext.includes(localDisplayName));
+          const localTextMatch = /\\b(local|you|me)\\b/.test(lowerContext);
+          const pixelSample = sampleVideoPixels(video);
+          return {
+            index,
+            paused: video.paused,
+            muted: video.muted,
+            readyState: video.readyState,
+            width: video.videoWidth,
+            height: video.videoHeight,
+            clientWidth: Math.round(rect.width),
+            clientHeight: Math.round(rect.height),
+            srcObject: Boolean(srcObject),
+            active,
+            probablyLocal: false,
+            localNameMatch,
+            localTextMatch,
+            localTrackMatch: false,
+            contextText,
+            videoTracks,
+            pixelSample,
+          };
+        });
+        const localVideoTrackIds = new Set(rawVideos
+          .filter(video => video.localNameMatch || video.localTextMatch)
+          .flatMap(video => video.videoTracks.map(track => track.id))
+          .filter(Boolean));
+        const allVideos = rawVideos.map(video => {
+          const localTrackMatch = video.videoTracks.some(track => localVideoTrackIds.has(track.id));
+          return {
+            ...video,
+            localTrackMatch,
+            probablyLocal: Boolean(video.localNameMatch || video.localTextMatch || localTrackMatch),
+          };
+        });
+
+        const activeVideos = allVideos.filter(video => video.active);
+        const remoteVideos = activeVideos.filter(video => !video.probablyLocal);
+        const renderedRemoteVideos = remoteVideos.filter(video => video.pixelSample?.nonblank);
 
         const debugInputs = debugFields
           ? Array.from(document.querySelectorAll('input, textarea')).map(element => ({
@@ -580,6 +789,20 @@ async function main() {
             })).slice(0, 20)
           : undefined;
 
+        const domActiveTags = [];
+        const keepAlivePromptVisible = keepAliveClickLabels.some(label =>
+          buttonTexts.some(text => text === label || text.includes(label))
+        );
+        if (buttonTexts.some(text => text === 'Mute' || text.includes('Mute'))) {
+          domActiveTags.push('audio');
+        }
+        if (buttonTexts.some(text => text === 'Video Off' || text.includes('Video Off'))) {
+          domActiveTags.push('video');
+        }
+        if (buttonTexts.some(text => text === 'Stop Share' || text === 'Stop sharing' || text.includes('Stop Share') || text.includes('Stop sharing'))) {
+          domActiveTags.push('screen');
+        }
+
         return {
           url: location.href,
           title: document.title,
@@ -587,7 +810,12 @@ async function main() {
           inRoom,
           textReady: !waitForText || bodyText.includes(waitForText),
           activeVideoCount: activeVideos.length,
+          remoteVideoCount: remoteVideos.length,
+          renderedRemoteVideoCount: renderedRemoteVideos.length,
+          remoteVideos,
           allVideos,
+          domActiveTags,
+          keepAlivePromptVisible,
           debugInputs,
           debugButtons
         };
@@ -600,12 +828,27 @@ async function main() {
       snapshot.producerEvidence = summarizeProducerEvidence();
     }
 
-    if (snapshot && snapshot.activeVideoCount >= minActiveVideos && snapshot.textReady !== false && producerTagsReady()) {
+    if (
+      snapshot &&
+      snapshot.activeVideoCount >= minActiveVideos &&
+      (
+        !requireRemoteVideo ||
+        (
+          (remoteVideoMustBeNonBlank ? snapshot.renderedRemoteVideoCount : snapshot.remoteVideoCount) >= minRemoteVideos
+        )
+      ) &&
+      snapshot.textReady !== false &&
+      producerTagsReady(Array.isArray(snapshot.domActiveTags) ? snapshot.domActiveTags : [])
+    ) {
       success = true;
       break;
     }
 
     await delay(1000);
+  }
+
+  if (success && postReadyDelayMs > 0) {
+    await delay(postReadyDelayMs);
   }
 
   const screenshot = await send('Page.captureScreenshot', { format: 'png', fromSurface: true });
@@ -618,8 +861,12 @@ async function main() {
     capturedAt: new Date().toISOString(),
     room: ROOM_NAME,
     minActiveVideos,
+    requireRemoteVideo,
+    minRemoteVideos,
+    remoteVideoMustBeNonBlank,
     timeoutSeconds,
     requiredProduceTags,
+    allowDomActiveTagFallback,
     success,
     snapshot,
   };

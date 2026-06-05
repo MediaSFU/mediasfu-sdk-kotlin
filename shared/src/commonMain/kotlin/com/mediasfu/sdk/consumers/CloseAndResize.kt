@@ -41,6 +41,7 @@ interface CloseAndResizeParameters :
     val updateAllVideoStreams: (List<Stream>) -> Unit
     val updateAllAudioStreams: (List<Stream>) -> Unit
     val updateShareScreenStarted: (Boolean) -> Unit
+    val updateShared: (Boolean) -> Unit
     override val updateUpdateMainWindow: (Boolean) -> Unit
     val updateNewLimitedStreams: (List<Stream>) -> Unit
     val updateOldAllStreams: (List<Stream>) -> Unit
@@ -137,6 +138,7 @@ suspend fun closeAndResize(options: CloseAndResizeOptions) {
         val updateAllVideoStreams = parameters.updateAllVideoStreams
         val updateAllAudioStreams = parameters.updateAllAudioStreams
         val updateShareScreenStarted = parameters.updateShareScreenStarted
+        val updateShared = parameters.updateShared
         val updateUpdateMainWindow = parameters.updateUpdateMainWindow
         val updateNewLimitedStreams = parameters.updateNewLimitedStreams
         val updateOldAllStreams = parameters.updateOldAllStreams
@@ -231,6 +233,7 @@ suspend fun closeAndResize(options: CloseAndResizeOptions) {
                 // Handle screenshare closure
                 shareScreenStarted = false
                 updateShareScreenStarted(false)
+                updateShared(false)
 
                 shareEnded = true
                 updateShareEnded(true)

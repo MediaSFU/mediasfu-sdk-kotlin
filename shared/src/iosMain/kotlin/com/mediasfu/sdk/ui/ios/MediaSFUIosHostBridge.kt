@@ -1,6 +1,10 @@
 package com.mediasfu.sdk.ui.ios
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.ComposeUIViewController
 import com.mediasfu.sdk.methods.MediasfuParameters
@@ -46,6 +50,7 @@ class MediaSFUIosLaunchConfig {
     var autoProceed: Boolean = false
     var useModernTheme: Boolean = true
     var useModernUI: Boolean = true
+    var darkMode: Boolean = true  // Match React default: always dark
 }
 
 /**
@@ -57,6 +62,7 @@ class MediaSFUIosLaunchConfig {
 class MediaSFUIosHostBridge {
     private val bridgeScope = MainScope()
     private var latestOptions: MediasfuGenericOptions? = null
+    private var latestParameters: MediasfuParameters? = null
 
     fun resetRuntimeProbe() {
         MediaSFUIosRuntimeProbeStore.reset()
@@ -65,9 +71,27 @@ class MediaSFUIosHostBridge {
     fun latestRuntimeProbeSummary(): String = MediaSFUIosRuntimeProbeStore.latestSummary()
 
     fun triggerToggleAudio(): Boolean {
-        val handler = latestOptions?.onToggleAudio ?: return false
-        bridgeScope.launch {
-            handler()
+        val handler = latestOptions?.onToggleAudio
+        if (handler == null) {
+            MediaSFURuntimeProbe.recordProducerSignalStage("toggle-missing-handler", "audio", "")
+            return false
+        }
+
+        MediaSFURuntimeProbe.recordProducerSignalStage("toggle-dispatched", "audio", "")
+        bridgeScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            MediaSFURuntimeProbe.recordProducerSignalStage("toggle-bridge-enter", "audio", "")
+            try {
+                MediaSFURuntimeProbe.recordProducerSignalStage("toggle-call-handler", "audio", "")
+                handler()
+                MediaSFURuntimeProbe.recordProducerSignalStage("toggle-handler-return", "audio", "")
+            } catch (error: Throwable) {
+                MediaSFURuntimeProbe.recordProducerSignalStage(
+                    "toggle-exception",
+                    "audio",
+                    error.message.orEmpty()
+                )
+                throw error
+            }
         }
         return true
     }
@@ -99,9 +123,40 @@ class MediaSFUIosHostBridge {
     }
 
     fun triggerToggleScreenShare(): Boolean {
-        val handler = latestOptions?.onToggleScreenShare ?: return false
+        val handler = latestOptions?.onToggleScreenShare
+        if (handler == null) {
+            MediaSFURuntimeProbe.recordProducerSignalStage("toggle-missing-handler", "screen", "")
+            return false
+        }
+
+        MediaSFURuntimeProbe.recordProducerSignalStage("toggle-dispatched", "screen", "")
+        bridgeScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            MediaSFURuntimeProbe.recordProducerSignalStage("toggle-bridge-enter", "screen", "")
+            try {
+                MediaSFURuntimeProbe.recordProducerSignalStage("toggle-call-handler", "screen", "")
+                handler()
+                MediaSFURuntimeProbe.recordProducerSignalStage("toggle-handler-return", "screen", "")
+            } catch (error: Throwable) {
+                MediaSFURuntimeProbe.recordProducerSignalStage(
+                    "toggle-exception",
+                    "screen",
+                    error.message.orEmpty()
+                )
+                throw error
+            }
+        }
+        return true
+    }
+
+    /**
+     * Activate a named modal from outside the Compose UI (e.g., from a UIKit probe button in tests).
+     *
+     * Supported names: media_settings, display_settings, recording, cohost, requests, waiting, confirm_exit
+     */
+    fun triggerShowModal(name: String): Boolean {
+        val handler = latestOptions?.onShowModal ?: return false
         bridgeScope.launch {
-            handler()
+            handler(name)
         }
         return true
     }
@@ -109,6 +164,7 @@ class MediaSFUIosHostBridge {
     fun makeHostViewController(config: MediaSFUIosLaunchConfig): UIViewController {
         val parameters = buildParameters(config)
         val options = buildOptions(config, parameters)
+        latestParameters = parameters
         latestOptions = options
         return makeHostViewController(options)
     }
@@ -136,15 +192,43 @@ class MediaSFUIosHostBridge {
 
     fun makeHostViewController(options: MediasfuGenericOptions): UIViewController {
         latestOptions = options
+        latestParameters = options.sourceParameters
         return ComposeUIViewController {
-            MediasfuGeneric(
-                options = options,
-                modifier = Modifier.fillMaxSize(),
-            )
+            // Consume safe-drawing insets at the iOS host level so MediasfuGeneric
+            // fills edge-to-edge.  The root composable applies
+            // WindowInsets.safeDrawing.asPaddingValues() which would otherwise
+            // produce large black gaps at the top and bottom (status bar + home
+            // indicator areas).  By consuming the insets here the Compose tree
+            // sees zero insets and can fill the full UIViewController bounds.
+            // Android is unaffected — this file is iosMain-only.
+            Box(modifier = Modifier.fillMaxSize().consumeWindowInsets(WindowInsets.safeDrawing)) {
+                MediasfuGeneric(
+                    options = options,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
         }
     }
 
     fun makeLaunchConfig(): MediaSFUIosLaunchConfig = MediaSFUIosLaunchConfig()
+
+    fun latestBackgroundProbeSummary(): String {
+        val parameters = latestParameters
+        val selectedBackground = parameters?.selectedBackground?.name.orEmpty()
+            .replace(";", ",")
+            .replace("\n", " ")
+            .replace("\r", " ")
+            .trim()
+
+        return buildString {
+            append("keepBackground=")
+            append(parameters?.keepBackground ?: false)
+            append(";selectedBackground=")
+            append(selectedBackground)
+            append(";backgroundHasChanged=")
+            append(parameters?.backgroundHasChanged ?: false)
+        }
+    }
 
     private fun buildParameters(config: MediaSFUIosLaunchConfig): MediasfuParameters {
         val trimmedApiUserName = config.apiUserName.trim()
@@ -252,8 +336,14 @@ class MediaSFUIosHostBridge {
                 put("action", "join")
                 put("meetingID", trimmedRoomName)
                 put("userName", trimmedUserName)
-                trimmedAdminPasscode?.let { put("adminPasscode", it) }
-                put("islevel", config.islevel.trim().ifBlank { "0" })
+                // Only include adminPasscode when joining as host (islevel==2).
+                // Passing the admin passcode for any islevel causes the MediaSFU server
+                // to grant host privileges regardless of the islevel field value.
+                val effectiveIslevel = config.islevel.trim().ifBlank { "0" }
+                if (effectiveIslevel == "2") {
+                    trimmedAdminPasscode?.let { put("adminPasscode", it) }
+                }
+                put("islevel", effectiveIslevel)
             }
         } else {
             null
@@ -267,11 +357,6 @@ class MediaSFUIosHostBridge {
             returnUI = noUiCreateOptions == null && noUiJoinOptions == null,
             noUIPreJoinOptionsCreate = noUiCreateOptions,
             noUIPreJoinOptionsJoin = noUiJoinOptions,
-            defaultCreateMode = normalizedAction == "create",
-            defaultDisplayName = trimmedUserName,
-            defaultMeetingId = trimmedRoomName,
-            defaultDurationMinutes = effectiveDuration,
-            defaultCapacity = effectiveCapacity,
             defaultEventType = when (trimmedEventType) {
                 "chat" -> EventType.CHAT
                 "broadcast" -> EventType.BROADCAST
@@ -280,6 +365,7 @@ class MediaSFUIosHostBridge {
             },
             useModernTheme = config.useModernTheme,
             useModernUI = config.useModernUI,
+            darkMode = config.darkMode,
         )
     }
 }

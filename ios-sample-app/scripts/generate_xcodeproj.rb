@@ -46,8 +46,18 @@ def ensure_webrtc_sanitize_phase(target)
     phase.shell_script = <<~SCRIPT
       set -eu
 
-      web_rtc_framework_path="${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/WebRTC.framework"
-      if [[ ! -d "$web_rtc_framework_path" ]]; then
+      web_rtc_framework_path=""
+      for candidate in \
+        "${TARGET_BUILD_DIR}/WebRTC.framework" \
+        "${TARGET_BUILD_DIR}/PackageFrameworks/WebRTC.framework" \
+        "${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/WebRTC.framework"; do
+        if [[ -d "$candidate" ]]; then
+          web_rtc_framework_path="$candidate"
+          break
+        fi
+      done
+
+      if [[ -z "$web_rtc_framework_path" ]]; then
         exit 0
       fi
 

@@ -15,6 +15,7 @@ import com.mediasfu.sdk.methods.MediasfuParameters
 import com.mediasfu.sdk.methods.stream_methods.ClickAudioParameters
 import com.mediasfu.sdk.model.EventType
 import com.mediasfu.sdk.model.Participant
+import com.mediasfu.sdk.model.PermissionConfig
 import com.mediasfu.sdk.model.ShowAlert
 import com.mediasfu.sdk.model.Stream
 import com.mediasfu.sdk.methods.utils.producer.ProducerOptionsType
@@ -71,6 +72,7 @@ private class MediasfuClickAudioParameters(
     override val videoSetting: String get() = backing.videoSetting
     override val screenshareSetting: String get() = backing.screenshareSetting
     override val chatSetting: String get() = backing.chatSetting
+    override val permissionConfig: PermissionConfig? get() = state.permissionConfig.value
     override val updateRequestIntervalSeconds: Int get() = backing.updateRequestIntervalSeconds
 
     // ---------------------------------------------------------------------
@@ -165,8 +167,7 @@ private class MediasfuClickAudioParameters(
 
     override val updateAudioAlreadyOn: (Boolean) -> Unit
         get() = { value ->
-            backing.audioAlreadyOn = value
-            state.media.audioAlreadyOn = value
+            backing.updateAudioAlreadyOn(value)
             state.propagateParameterChanges()
         }
 

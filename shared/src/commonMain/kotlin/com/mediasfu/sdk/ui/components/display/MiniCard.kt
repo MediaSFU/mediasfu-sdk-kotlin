@@ -1,22 +1,40 @@
 package com.mediasfu.sdk.ui.components.display
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
 import com.mediasfu.sdk.model.Participant
 import com.mediasfu.sdk.webrtc.MediaStream
 import com.mediasfu.sdk.ui.*
@@ -124,33 +142,117 @@ class DefaultMiniCard(
 fun MiniCard.renderCompose(
     modifier: Modifier = Modifier
 ) {
-    val initials = getInitials()
-    val style = getContainerStyle()
-    
-    // Extract style values
-    val bgColor = Color((style["backgroundColor"] as? Int) ?: options.backgroundColor)
-    val cornerRadius = if (options.roundedImage) 8.dp else 4.dp
-    val horizontalPadding = 8.dp
-    val label = options.name.trim().ifEmpty { initials }
-    
+    val initials = getInitials().ifEmpty { "?" }
+    val avatarText = remember(options.name) {
+        options.name.ifBlank { "?" }
+    }
+    val imageSource = remember(options.imageSource) { options.imageSource.trim() }
+    var mounted by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (mounted) 1f else 0.8f,
+        animationSpec = tween(durationMillis = 250),
+        label = "miniCardScale"
+    )
+    val alpha by animateFloatAsState(
+        targetValue = if (mounted) 1f else 0f,
+        animationSpec = tween(durationMillis = 250),
+        label = "miniCardAlpha"
+    )
+    val gradientBackground = remember {
+        Brush.linearGradient(
+            colors = listOf(
+                Color(0xFF6366F1),
+                Color(0xFF8B5CF6),
+                Color(0xFFEC4899)
+            ),
+            start = Offset.Zero,
+            end = Offset(640f, 640f)
+        )
+    }
+
+    LaunchedEffect(Unit) {
+        mounted = true
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
-            .clip(RoundedCornerShape(cornerRadius))
-            .background(bgColor),
+            .graphicsLayer(
+                scaleX = scale,
+                scaleY = scale,
+                alpha = alpha
+            ),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = label,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.White,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = horizontalPadding)
-        )
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            val innerSize = minOf(maxWidth * 0.72f, maxHeight * 0.72f, 80.dp)
+            val borderColor = MaterialTheme.colorScheme.primary.copy(alpha = if (imageSource.isBlank()) 0.4f else 0.2f)
+            val cardBackground = if (imageSource.isBlank()) {
+                gradientBackground
+            } else {
+                Brush.linearGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.surface,
+                        MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    start = Offset.Zero,
+                    end = Offset(320f, 320f)
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .size(innerSize)
+                    .shadow(8.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(cardBackground)
+                    .border(1.dp, borderColor, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                if (imageSource.isNotBlank()) {
+                    AsyncImage(
+                        model = imageSource,
+                        contentDescription = options.name.ifBlank { avatarText },
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                if (imageSource.isBlank()) {
+                    Text(
+                        text = avatarText,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = TextStyle(
+                            shadow = Shadow(
+                                color = Color.Black.copy(alpha = 0.3f),
+                                offset = Offset(0f, 1f),
+                                blurRadius = 4f
+                            )
+                        )
+                    )
+                }
+
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawRect(
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                Color(0x26FFFFFF),
+                                Color.Transparent
+                            ),
+                            start = Offset.Zero,
+                            end = Offset(size.width * 0.5f, size.height * 0.5f)
+                        )
+                    )
+                }
+            }
+        }
     }
 }

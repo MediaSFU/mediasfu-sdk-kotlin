@@ -4,6 +4,10 @@ import com.mediasfu.sdk.util.toLooseBoolean
 
 import com.mediasfu.sdk.socket.SocketManager
 import com.mediasfu.sdk.webrtc.WebRtcDevice
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Parameters required by the joinConsumeRoom function.
@@ -107,9 +111,9 @@ suspend fun joinConRoom(options: JoinConRoomOptions): ResponseJoinRoom {
             )
         )
 
-		val responseMap = response as? Map<*, *>
-        val success = responseMap?.get("success").toLooseBoolean()
+        val responseMap = response as? Map<*, *>
         val rtpCapabilities = responseMap?.get("rtpCapabilities")
+        val success = responseMap?.get("success").toLooseBoolean() || rtpCapabilities != null
         return ResponseJoinRoom(success = success, rtpCapabilities = rtpCapabilities)
     } catch (e: Exception) {
         Logger.e("JoinConsumeRoom", "Error joining con room: ${e.message}")
@@ -198,6 +202,12 @@ suspend fun joinConsumeRoom(options: JoinConsumeRoomOptions): ResponseJoinRoom {
                 parameters = parameters
             )
             receiveAllPipedTransports(optionsReceive)
+
+            scheduleReceiveAllPipedTransportsRetry(
+                remoteSock = remoteSock,
+                parametersProvider = { parameters.getUpdatedAllParams() },
+                receiveAllPipedTransports = receiveAllPipedTransports
+            )
         }
 
         return data
@@ -207,3 +217,27 @@ suspend fun joinConsumeRoom(options: JoinConsumeRoomOptions): ResponseJoinRoom {
     }
 }
 
+fun scheduleReceiveAllPipedTransportsRetry(
+    remoteSock: SocketManager,
+    parametersProvider: () -> Any,
+    receiveAllPipedTransports: suspend (ReceiveAllPipedTransportsOptions) -> Unit,
+    delayMs: Long = 30_000L,
+    scope: CoroutineScope = CoroutineScope(Dispatchers.Default)
+) {
+    scope.launch {
+        delay(delayMs)
+        runCatching {
+            receiveAllPipedTransports(
+                ReceiveAllPipedTransportsOptions(
+                    nsock = remoteSock,
+                    parameters = parametersProvider()
+                )
+            )
+        }.onFailure { retryError ->
+            Logger.e(
+                "JoinConsumeRoom",
+                "[joinConsumeRoom] Retry receiveAllPipedTransports error: ${retryError.message}"
+            )
+        }
+    }
+}

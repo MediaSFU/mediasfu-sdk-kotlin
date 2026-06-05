@@ -1,14 +1,19 @@
 package com.mediasfu.sdk.ui.mediasfu
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.mediasfu.sdk.ui.components.display_settings.DisplaySettingsModalOptions
@@ -56,55 +61,72 @@ fun DisplaySettingsModalContentBody(
         modifier = modifier.verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Meeting Display Type Selection
-        Column {
-            Text(
-                text = "Display Option",
-                style = MaterialTheme.typography.titleSmall
-            )
-            Text(
-                text = "Choose which participants to display",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            Column(
-                Modifier.selectableGroup(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                listOf(
-                    Triple("video", "Video Participants", "Show only participants with video on"),
-                    Triple("media", "Media Only", "Show participants with audio or video"),
-                    Triple("all", "All Participants", "Show all participants in the room")
-                ).forEach { (value, label, description) ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .selectable(
-                                selected = meetingDisplayType == value,
-                                onClick = { meetingDisplayType = value },
-                                role = Role.RadioButton
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "Display Option",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    text = "Choose which participants to display",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Column(
+                    Modifier.selectableGroup(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        Triple("video", "Video Only", "Show only participants with video on"),
+                        Triple("media", "Media", "Show participants with audio or video"),
+                        Triple("all", "All Participants", "Show all participants in the room")
+                    ).forEach { (value, label, description) ->
+                        val selected = meetingDisplayType == value
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                                .border(
+                                    width = 1.dp,
+                                    color = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.36f) else MaterialTheme.colorScheme.outlineVariant,
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                                .selectable(
+                                    selected = selected,
+                                    onClick = { meetingDisplayType = value },
+                                    role = Role.RadioButton
+                                )
+                                .padding(horizontal = 12.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            RadioButton(
+                                selected = selected,
+                                onClick = null,
+                                modifier = Modifier.padding(end = 12.dp)
                             )
-                            .padding(vertical = 8.dp),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        RadioButton(
-                            selected = meetingDisplayType == value,
-                            onClick = null,
-                            modifier = Modifier.padding(end = 12.dp)
-                        )
-                        Column {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.bodyLarge
-                            )
-                            Text(
-                                text = description,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Column {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
@@ -113,78 +135,39 @@ fun DisplaySettingsModalContentBody(
 
         HorizontalDivider()
 
-        // Auto Wave Setting
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Auto Wave", style = MaterialTheme.typography.titleSmall)
-                Text(
-                    "Automatically detect and highlight active speakers",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        DisplayToggleRow(
+            title = "Auto Wave",
+            description = "Automatically detect and highlight active speakers",
+            checked = autoWave,
+            onCheckedChange = {
+                autoWave = it
+                props.parameters.updateAutoWave(it)
             }
-            Switch(
-                checked = autoWave,
-                onCheckedChange = {
-                    autoWave = it
-                    props.parameters.updateAutoWave(it)
-                }
-            )
-        }
+        )
 
         HorizontalDivider()
 
-        // Force Full Display Setting
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Force Full Display", style = MaterialTheme.typography.titleSmall)
-                Text(
-                    "Always show all participants regardless of grid size",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        DisplayToggleRow(
+            title = "Force Full Display",
+            description = "Always show all participants regardless of grid size",
+            checked = forceFullDisplay,
+            onCheckedChange = {
+                forceFullDisplay = it
+                props.parameters.updateForceFullDisplay(it)
             }
-            Switch(
-                checked = forceFullDisplay,
-                onCheckedChange = {
-                    forceFullDisplay = it
-                    props.parameters.updateForceFullDisplay(it)
-                }
-            )
-        }
+        )
 
         HorizontalDivider()
 
-        // Meeting Video Optimized Setting
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("Optimize Video", style = MaterialTheme.typography.titleSmall)
-                Text(
-                    "Force only video participants on screen",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+        DisplayToggleRow(
+            title = "Optimize Video",
+            description = "Force only video participants on screen",
+            checked = meetingVideoOptimized,
+            onCheckedChange = {
+                meetingVideoOptimized = it
+                props.parameters.updateMeetingVideoOptimized(it)
             }
-            Switch(
-                checked = meetingVideoOptimized,
-                onCheckedChange = {
-                    meetingVideoOptimized = it
-                    props.parameters.updateMeetingVideoOptimized(it)
-                }
-            )
-        }
+        )
 
         Spacer(modifier = Modifier.height(8.dp))
 
@@ -205,9 +188,49 @@ fun DisplaySettingsModalContentBody(
                 // Close modal after applying settings
                 props.onClose()
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
         ) {
             Text("Apply")
+        }
+    }
+}
+
+@Composable
+private fun DisplayToggleRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                Text(
+                    description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange
+            )
         }
     }
 }

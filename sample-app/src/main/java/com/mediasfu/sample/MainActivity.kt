@@ -686,7 +686,9 @@ private fun MediaSfuSampleScreen() {
                                         duration = duration,
                                         capacity = maxCapacity,
                                         userName = trimmedUserName,
-                                        scheduledDateIso = Instant.now().toString(),
+                                        scheduledDateIso = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).apply { 
+                                            timeZone = java.util.TimeZone.getTimeZone("UTC") 
+                                        }.format(java.util.Date()),
                                         secureCode = secureCode,
                                         waitRoom = waitRoomPreference,
                                         recordingParams = recordingParams,

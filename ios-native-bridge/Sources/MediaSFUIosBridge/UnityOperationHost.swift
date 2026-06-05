@@ -608,6 +608,8 @@ public final class MediaSFUIosUnityWebRtcOperationHost {
                 let producer = try state.transport.produce(
                     track: pendingProduceState.trackResource.track,
                     encodingsJson: nil,
+                    codecOptionsJson: nil,
+                    codecJson: nil,
                     appDataJson: try self.buildProduceAppDataJson(trackKind: payload.trackKind)
                 )
 

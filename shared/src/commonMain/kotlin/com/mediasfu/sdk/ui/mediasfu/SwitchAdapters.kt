@@ -328,8 +328,7 @@ private open class BaseStreamSuccessVideoParameters(
     override val updateVideoAlreadyOn: (Boolean) -> Unit
         get() = { value ->
             if (backing.videoAlreadyOn != value) {
-                backing.videoAlreadyOn = value
-                state.media.videoAlreadyOn = value
+                backing.updateVideoAlreadyOn(value)
                 state.propagateParameterChanges()
             }
         }
@@ -403,6 +402,9 @@ private open class BaseStreamSuccessVideoParameters(
     // Camera permission allowed flag - set to true when camera is successfully started
     override val allowed: Boolean
         get() = backing.allowed
+
+    override val backgroundHasChanged: Boolean
+        get() = backing.backgroundHasChanged
 
     override val updateAllowed: (Boolean) -> Unit
         get() = { value ->
@@ -721,8 +723,7 @@ private open class BaseStreamSuccessAudioSwitchParameters(
     override val updateAudioAlreadyOn: (Boolean) -> Unit
         get() = { value ->
             if (backing.audioAlreadyOn != value) {
-                backing.audioAlreadyOn = value
-                state.media.audioAlreadyOn = value
+                backing.updateAudioAlreadyOn(value)
                 state.propagateParameterChanges()
             }
         }

@@ -14,6 +14,7 @@ import com.mediasfu.sdk.consumers.StreamSuccessVideoParameters
 import com.mediasfu.sdk.consumers.StreamSuccessVideoType
 import com.mediasfu.sdk.model.ShowAlert
 import com.mediasfu.sdk.model.VidCons
+import com.mediasfu.sdk.model.PermissionConfig
 import com.mediasfu.sdk.socket.SocketManager
 import com.mediasfu.sdk.webrtc.MediaStream
 import kotlinx.datetime.Clock
@@ -53,6 +54,7 @@ interface ClickVideoParameters :
     val videoSetting: String
     val screenshareSetting: String
     val chatSetting: String
+    val permissionConfig: PermissionConfig?
     val updateRequestIntervalSeconds: Int
     override val showAlert: ShowAlert?
     override val updateVideoAlreadyOn: (Boolean) -> Unit
@@ -231,7 +233,9 @@ suspend fun clickVideo(options: ClickVideoOptions) {
                 audioSetting = audioSetting,
                 videoSetting = videoSetting,
                 screenshareSetting = screenshareSetting,
-                chatSetting = chatSetting
+                chatSetting = chatSetting,
+                permissionConfig = parameters.permissionConfig,
+                participantLevel = islevel
             )
             response = try {
                 checkPermission(optionsCheck)
@@ -356,6 +360,7 @@ private fun buildMediaConstraints(
                 "facingMode" to (facingMode ?: "user"),
                 "width" to vidConsMap["width"],
                 "height" to vidConsMap["height"],
+                "maxFrameRate" to frameRate,
                 "frameRate" to mapOf("ideal" to frameRate)
             )
         ),
@@ -378,6 +383,7 @@ private fun buildAltMediaConstraints(
             "mandatory" to mapOf(
                 "width" to vidConsMap["width"],
                 "height" to vidConsMap["height"],
+                "maxFrameRate" to frameRate,
                 "frameRate" to mapOf("ideal" to frameRate),
                 "facingMode" to (facingMode ?: "user")
             )

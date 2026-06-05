@@ -38,10 +38,14 @@ public struct MediaSFUTransportCreationOptions: Equatable {
 
 public struct MediaSFUProduceOptions: Equatable {
     public let encodingsJson: String?
+    public let codecOptionsJson: String?
+    public let codecJson: String?
     public let appDataJson: String?
 
-    public init(encodingsJson: String?, appDataJson: String?) {
+    public init(encodingsJson: String?, codecOptionsJson: String?, codecJson: String?, appDataJson: String?) {
         self.encodingsJson = encodingsJson
+        self.codecOptionsJson = codecOptionsJson
+        self.codecJson = codecJson
         self.appDataJson = appDataJson
     }
 }
@@ -139,11 +143,18 @@ final class ClientBackedSendTransportAdapter: MediaSFUSendTransportAdapter {
     func produce(
         track: MediaSFUNativeTrack,
         encodingsJson: String?,
+        codecOptionsJson: String?,
+        codecJson: String?,
         appDataJson: String?
     ) throws -> MediaSFUProducerAdapter {
         let producer = try transport.produce(
             track: track,
-            options: MediaSFUProduceOptions(encodingsJson: encodingsJson, appDataJson: appDataJson)
+            options: MediaSFUProduceOptions(
+                encodingsJson: encodingsJson,
+                codecOptionsJson: codecOptionsJson,
+                codecJson: codecJson,
+                appDataJson: appDataJson
+            )
         )
         return ClientBackedProducerAdapter(producer: producer)
     }
@@ -210,6 +221,7 @@ final class ClientBackedConsumerAdapter: MediaSFUConsumerAdapter {
     func close() { consumer.close() }
     func pause() { consumer.pause() }
     func resume() { consumer.resume() }
+    func getStatsJson() -> String? { return nil }
 }
 
 private func requiredString(_ params: [String: Any?], key: String, context: String) throws -> String {

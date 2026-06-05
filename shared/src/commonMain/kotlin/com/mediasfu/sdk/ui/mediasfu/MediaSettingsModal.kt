@@ -74,17 +74,71 @@ fun MediaSettingsModalContentBody(
         )
     }
 
+    LaunchedEffect(videoInputs, parameters.userDefaultVideoInputDevice) {
+        selectedCamera = parameters.userDefaultVideoInputDevice
+            .takeIf { preferred -> preferred.isNotEmpty() && videoInputs.any { it.deviceId == preferred } }
+            ?: videoInputs.firstOrNull()?.deviceId.orEmpty()
+    }
+
+    LaunchedEffect(audioInputs, parameters.userDefaultAudioInputDevice) {
+        selectedMicrophone = parameters.userDefaultAudioInputDevice
+            .takeIf { preferred -> preferred.isNotEmpty() && audioInputs.any { it.deviceId == preferred } }
+            ?: audioInputs.firstOrNull()?.deviceId.orEmpty()
+    }
+
+    LaunchedEffect(audioOutputs, parameters.userDefaultAudioOutputDevice) {
+        selectedSpeaker = parameters.userDefaultAudioOutputDevice
+            .takeIf { preferred -> preferred.isNotEmpty() && audioOutputs.any { it.deviceId == preferred } }
+            ?: audioOutputs.firstOrNull()?.deviceId.orEmpty()
+    }
+
     Column(
         modifier = modifier.verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Quick Actions (top, matching React reference)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ElevatedButton(
+                onClick = {
+                    props.switchCameraOnPress(
+                        com.mediasfu.sdk.ui.components.media_settings.SwitchVideoAltOptions(
+                            parameters = props.parameters
+                        )
+                    )
+                },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.elevatedButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                )
+            ) {
+                Text("Switch Camera")
+            }
+
+            ElevatedButton(
+                onClick = { props.onVirtualBackgroundPress() },
+                modifier = Modifier.weight(1f),
+                colors = ButtonDefaults.elevatedButtonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            ) {
+                Text("Virtual Background")
+            }
+        }
+
+        HorizontalDivider()
+
         // Camera Selection
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                "Select Camera",
+                "Video Input",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold
             )
@@ -94,7 +148,14 @@ fun MediaSettingsModalContentBody(
             Box(modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(
                     onClick = { if (videoInputs.isNotEmpty()) expandedCamera = true },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                        brush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.outlineVariant)
+                    )
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -142,7 +203,7 @@ fun MediaSettingsModalContentBody(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                "Select Microphone",
+                "Audio Input",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold
             )
@@ -152,7 +213,14 @@ fun MediaSettingsModalContentBody(
             Box(modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(
                     onClick = { if (audioInputs.isNotEmpty()) expandedMic = true },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                        brush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.outlineVariant)
+                    )
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -210,7 +278,14 @@ fun MediaSettingsModalContentBody(
             Box(modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(
                     onClick = { if (audioOutputs.isNotEmpty()) expandedSpeaker = true },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+                        contentColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    border = ButtonDefaults.outlinedButtonBorder.copy(
+                        brush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.outlineVariant)
+                    )
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -251,28 +326,6 @@ fun MediaSettingsModalContentBody(
         }
 
         Spacer(modifier = Modifier.height(8.dp))
-
-        // Switch Camera Button
-        ElevatedButton(
-            onClick = {
-                props.switchCameraOnPress(
-                    com.mediasfu.sdk.ui.components.media_settings.SwitchVideoAltOptions(
-                        parameters = props.parameters
-                    )
-                )
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Switch Camera")
-        }
-
-        // Virtual Background Button
-        ElevatedButton(
-            onClick = { props.onVirtualBackgroundPress() },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("Virtual Background")
-        }
     }
 }
 
@@ -292,13 +345,13 @@ private fun DefaultMediaSettingsModalContent(
                     "Media Settings",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color.Black
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 IconButton(onClick = props.onClose) {
                     Icon(
                         Icons.Default.Close,
                         contentDescription = "Close",
-                        tint = Color.Black
+                        tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
             }

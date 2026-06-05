@@ -228,6 +228,7 @@ interface WebRtcTransport {
         track: MediaStreamTrack,
         encodings: List<RtpEncodingParameters> = emptyList(),
         codecOptions: ProducerCodecOptions? = null,
+        codec: RtpCodecCapability? = null,
         appData: Map<String, Any?>? = null
     ): WebRtcProducer
     
@@ -423,7 +424,17 @@ data class RtpCodecCapability(
     val channels: Int? = null,
     val parameters: Map<String, String> = emptyMap(),
     val rtcpFeedback: List<RtcpFeedback> = emptyList()
-)
+) {
+    fun toMap(): Map<String, Any?> = mapOf(
+        "kind" to kind.name.lowercase(),
+        "mimeType" to mimeType,
+        "preferredPayloadType" to preferredPayloadType,
+        "clockRate" to clockRate,
+        "channels" to channels,
+        "parameters" to parameters,
+        "rtcpFeedback" to rtcpFeedback.map { it.toMap() }
+    )
+}
 
 /**
  * RTP header extension.

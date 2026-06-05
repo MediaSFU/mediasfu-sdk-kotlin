@@ -1,7 +1,9 @@
 package com.mediasfu.sdk.ui.mediasfu
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -74,188 +76,236 @@ fun CoHostModalContentBody(
         modifier = modifier.verticalScroll(scrollState),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // Current Co-Host Status
-        Card(
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            tonalElevation = 0.dp
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 Text(
                     "Current Co-Host",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = if (selectedCohost == "No coHost") "None" else selectedCohost,
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = if (selectedCohost == "No coHost") {
+                        "Pick a moderator to delegate specific meeting controls."
+                    } else {
+                        "Responsibilities below control which parts of the session this co-host can manage."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
 
-        // Co-host Selection
-        Column {
-            Text(
-                text = "Select Co-Host",
-                style = MaterialTheme.typography.titleMedium
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            
-            var expandedCoHost by remember { mutableStateOf(false) }
-            
-            ExposedDropdownMenuBox(
-                expanded = expandedCoHost,
-                onExpandedChange = { expandedCoHost = !expandedCoHost }
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            tonalElevation = 0.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                OutlinedTextField(
-                    value = if (selectedCohost == "No coHost") "No Co-Host" else selectedCohost,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Select Co-Host") },
-                    trailingIcon = { 
-                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCoHost) 
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(),
-                    colors = OutlinedTextFieldDefaults.colors()
+                Text(
+                    text = "Select Co-Host",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
-                
-                ExposedDropdownMenu(
+                Text(
+                    text = "Choose one participant to assist with moderation and room management.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+            var expandedCoHost by remember { mutableStateOf(false) }
+
+                ExposedDropdownMenuBox(
                     expanded = expandedCoHost,
-                    onDismissRequest = { expandedCoHost = false }
+                    onExpandedChange = { expandedCoHost = !expandedCoHost }
                 ) {
-                    // No co-host option
-                    DropdownMenuItem(
-                        text = { Text("No Co-Host") },
-                        onClick = {
-                            selectedCohost = "No coHost"
-                            expandedCoHost = false
-                        }
+                    OutlinedTextField(
+                        value = if (selectedCohost == "No coHost") "No Co-Host" else selectedCohost,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Select Co-Host") },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCoHost)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                            disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                            focusedLabelColor = MaterialTheme.colorScheme.primary,
+                            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
-                    
-                    // Participant options (excluding host - islevel '2')
-                    props.participants.filter { it.islevel != "2" }.forEach { participant ->
+
+                    ExposedDropdownMenu(
+                        expanded = expandedCoHost,
+                        onDismissRequest = { expandedCoHost = false }
+                    ) {
                         DropdownMenuItem(
-                            text = { Text(participant.name) },
+                            text = { Text("No Co-Host") },
                             onClick = {
-                                selectedCohost = participant.name
+                                selectedCohost = "No coHost"
                                 expandedCoHost = false
                             }
                         )
+
+                        props.participants.filter { it.islevel != "2" }.forEach { participant ->
+                            DropdownMenuItem(
+                                text = { Text(participant.name) },
+                                onClick = {
+                                    selectedCohost = participant.name
+                                    expandedCoHost = false
+                                }
+                            )
+                        }
                     }
                 }
             }
         }
 
-        // Co-host Responsibilities (only show if a co-host is selected)
         if (selectedCohost != "No coHost") {
-            HorizontalDivider()
-
-            Column {
-                Text(
-                    text = "Manage Co-Host Responsibilities",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-                
-                // Table Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                tonalElevation = 0.dp
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "Responsibility",
-                        modifier = Modifier.weight(0.6f),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        text = "Manage Co-Host Responsibilities",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Select",
-                        modifier = Modifier.weight(0.3f),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        text = "Enable each area the co-host can manage. Dedicated locks that area to the co-host once assigned.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Text(
-                        text = "Dedicated",
-                        modifier = Modifier.weight(0.3f),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-                
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                
-                // Responsibility rows
-                responsibilities.forEachIndexed { index, responsibility ->
-                    val isChecked = responsibility.value
-                    val isDedicated = responsibility.dedicated
-                    
+
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Responsibility Label
                         Text(
-                            text = formatResponsibilityLabel(responsibility.name),
                             modifier = Modifier.weight(0.6f),
-                            style = MaterialTheme.typography.bodyMedium
+                            text = "Responsibility",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        
-                        // Manage Switch
-                        Box(
+                        Text(
                             modifier = Modifier.weight(0.3f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Switch(
-                                checked = isChecked,
-                                onCheckedChange = { checked ->
-                                    val updatedResponsibilities = responsibilities.toMutableList()
-                                    updatedResponsibilities[index] = CoHostResponsibility(
-                                        name = responsibility.name,
-                                        value = checked,
-                                        dedicated = if (checked) responsibility.dedicated else false
-                                    )
-                                    
-                                    responsibilities = updatedResponsibilities
-                                    props.updateCoHostResponsibility(updatedResponsibilities)
-                                }
-                            )
-                        }
-                        
-                        // Dedicated Switch
-                        Box(
+                            text = "Enabled",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
                             modifier = Modifier.weight(0.3f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Switch(
-                                checked = isDedicated,
-                                enabled = isChecked, // Only enabled when manage is on
-                                onCheckedChange = { dedicated ->
-                                    if (isChecked) {
-                                        val updatedResponsibilities = responsibilities.toMutableList()
-                                        updatedResponsibilities[index] = CoHostResponsibility(
-                                            name = responsibility.name,
-                                            value = responsibility.value,
-                                            dedicated = dedicated
-                                        )
-                                        responsibilities = updatedResponsibilities
-                                        props.updateCoHostResponsibility(updatedResponsibilities)
-                                    }
-                                }
-                            )
-                        }
+                            text = "Dedicated",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
-                    
-                    if (index < responsibilities.size - 1) {
-                        HorizontalDivider()
+
+                    responsibilities.forEachIndexed { index, responsibility ->
+                        val isChecked = responsibility.value
+                        val isDedicated = responsibility.dedicated
+
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                            tonalElevation = 0.dp
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = formatResponsibilityLabel(responsibility.name),
+                                    modifier = Modifier.weight(0.6f),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+
+                                Box(
+                                    modifier = Modifier.weight(0.3f),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Switch(
+                                        checked = isChecked,
+                                        onCheckedChange = { checked ->
+                                            val updatedResponsibilities = responsibilities.toMutableList()
+                                            updatedResponsibilities[index] = CoHostResponsibility(
+                                                name = responsibility.name,
+                                                value = checked,
+                                                dedicated = if (checked) responsibility.dedicated else false
+                                            )
+
+                                            responsibilities = updatedResponsibilities
+                                            props.updateCoHostResponsibility(updatedResponsibilities)
+                                        }
+                                    )
+                                }
+
+                                Box(
+                                    modifier = Modifier.weight(0.3f),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Switch(
+                                        checked = isDedicated,
+                                        enabled = isChecked,
+                                        onCheckedChange = { dedicated ->
+                                            if (isChecked) {
+                                                val updatedResponsibilities = responsibilities.toMutableList()
+                                                updatedResponsibilities[index] = CoHostResponsibility(
+                                                    name = responsibility.name,
+                                                    value = responsibility.value,
+                                                    dedicated = dedicated
+                                                )
+                                                responsibilities = updatedResponsibilities
+                                                props.updateCoHostResponsibility(updatedResponsibilities)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -281,9 +331,13 @@ fun CoHostModalContentBody(
                 )
                 onSave?.invoke()
             },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
         ) {
-            Text("Save")
+            Text("Save Changes")
         }
     }
 }

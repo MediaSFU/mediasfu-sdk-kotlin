@@ -17,6 +17,7 @@ import com.mediasfu.sdk.methods.MediasfuParameters
 import com.mediasfu.sdk.methods.stream_methods.ClickVideoParameters
 import com.mediasfu.sdk.model.EventType
 import com.mediasfu.sdk.model.Participant
+import com.mediasfu.sdk.model.PermissionConfig
 import com.mediasfu.sdk.model.ShowAlert
 import com.mediasfu.sdk.model.Stream
 import com.mediasfu.sdk.model.VidCons
@@ -84,6 +85,7 @@ private class MediasfuClickVideoParameters(
     override val videoSetting: String get() = backing.videoSetting
     override val screenshareSetting: String get() = backing.screenshareSetting
     override val chatSetting: String get() = backing.chatSetting
+    override val permissionConfig: PermissionConfig? get() = state.permissionConfig.value
     override val updateRequestIntervalSeconds: Int get() = backing.updateRequestIntervalSeconds
 
     // ---------------------------------------------------------------------
@@ -173,8 +175,7 @@ private class MediasfuClickVideoParameters(
 
     override val updateAudioAlreadyOn: (Boolean) -> Unit
         get() = { value ->
-            backing.audioAlreadyOn = value
-            state.media.audioAlreadyOn = value
+            backing.updateAudioAlreadyOn(value)
             state.propagateParameterChanges()
         }
 
@@ -300,8 +301,7 @@ private class MediasfuClickVideoParameters(
 
     override val updateVideoAlreadyOn: (Boolean) -> Unit
         get() = { value ->
-            backing.videoAlreadyOn = value
-            state.media.videoAlreadyOn = value
+            backing.updateVideoAlreadyOn(value)
             state.propagateParameterChanges()
         }
 
@@ -466,6 +466,7 @@ private class MediasfuClickVideoParameters(
     override val virtualStream: Any? get() = backing.virtualStream
     override val keepBackground: Boolean get() = backing.keepBackground
     override val selectedBackground: VirtualBackground? get() = backing.selectedBackground
+    override val backgroundHasChanged: Boolean get() = backing.backgroundHasChanged
     override val annotateScreenStream: Boolean get() = backing.annotateScreenStream
 
     override val audioDecibels: List<com.mediasfu.sdk.model.AudioDecibels>
@@ -497,33 +498,38 @@ private class MediasfuClickVideoParameters(
                         val videoTracks = outputStream.getVideoTracks()
                         if (videoTracks.isNotEmpty()) {
                             val newTrack = videoTracks.first()
+                            val outputUsesOriginalTrack = newStream.getVideoTracks().firstOrNull()?.id == newTrack.id
                             
                             // Set the virtual stream in parameters
                             backing.virtualStream = outputStream
                             backing.processedStream = outputStream
                             
-                            // Close existing producer and create new one with processed track
+                            // Close/recreate only for true virtual output tracks. iOS applies
+                            // the background in-place to the camera source, so the existing
+                            // producer should keep publishing the same track.
                             val currentProducer = backing.videoProducer
                             val producerTransport = backing.producerTransport
                             
-                            if (currentProducer != null) {
-                                try {
-                                    currentProducer.close()
-                                    backing.videoProducer = null
-                                    kotlinx.coroutines.delay(500)
-                                } catch (_: Exception) { }
-                            }
-                            
-                            if (producerTransport != null) {
-                                try {
-                                    val newProducer = producerTransport.produce(
-                                        track = newTrack,
-                                        encodings = emptyList(),
-                                        codecOptions = null,
-                                        appData = null
-                                    )
-                                    backing.videoProducer = newProducer
-                                } catch (_: Exception) { }
+                            if (!outputUsesOriginalTrack || currentProducer == null) {
+                                if (currentProducer != null) {
+                                    try {
+                                        currentProducer.close()
+                                        backing.videoProducer = null
+                                        kotlinx.coroutines.delay(500)
+                                    } catch (_: Exception) { }
+                                }
+
+                                if (producerTransport != null) {
+                                    try {
+                                        val newProducer = producerTransport.produce(
+                                            track = newTrack,
+                                            encodings = emptyList(),
+                                            codecOptions = null,
+                                            appData = null
+                                        )
+                                        backing.videoProducer = newProducer
+                                    } catch (_: Exception) { }
+                                }
                             }
                             
                             // Trigger grid refresh with reorderStreams to update youyou stream

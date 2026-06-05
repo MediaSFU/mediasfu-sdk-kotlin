@@ -25,6 +25,8 @@ public protocol MediaSFUNativeSendTransportHandle: MediaSFUNativeTransportHandle
     func produce(
         track: MediaSFUNativeTrack,
         encodingsJson: String?,
+        codecOptionsJson: String?,
+        codecJson: String?,
         appDataJson: String?
     ) -> MediaSFUNativeProducerHandle
 }
@@ -46,6 +48,7 @@ public protocol MediaSFUNativeProducerHandle: AnyObject {
     func pause()
     func resume()
     func replaceTrack(_ track: MediaSFUNativeTrack)
+    func statsJson() -> String?
 }
 
 public protocol MediaSFUNativeConsumerHandle: AnyObject {
@@ -56,6 +59,12 @@ public protocol MediaSFUNativeConsumerHandle: AnyObject {
     func close()
     func pause()
     func resume()
+    func statsJson() -> String?
+}
+
+public protocol MediaSFUNativeLoadableMediasoupBridge: MediaSFUNativeMediasoupBridge {
+    func load(routerRtpCapabilitiesJson: String) throws
+    func currentRtpCapabilitiesJson() -> String?
 }
 
 public typealias MediaSFUNativeConnectListener = (

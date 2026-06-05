@@ -14,3 +14,8 @@ xcodebuild_output.log
 
 # DerivedData
 DerivedData/
+
+# Local diagnostic outputs & test data
+device_app_data/
+runtime-probes/
+

@@ -65,13 +65,22 @@ private extension RealMediaSFUSDKHostAdapter {
         launchConfig.islevel = context.sessionConfig.normalizedIslevel
         let forceValidatedSession = automationFlag(named: "MEDIASFU_FORCE_VALIDATED_SESSION") ||
             automationArgument(named: "--mediasfu-force-validated-session")
-        let autoProceed = automationFlag(named: "MEDIASFU_AUTO_PROCEED") ||
-            automationArgument(named: "--mediasfu-auto-proceed")
+        let probeReturnUI = automationFlag(named: "MEDIASFU_PROBE_RETURN_UI")
+        let probeApplyBackground = automationFlag(named: "MEDIASFU_PROBE_APPLY_BACKGROUND")
+        let explicitAutoProceed = automationBooleanOverride(named: "MEDIASFU_AUTO_PROCEED")
+        // autoProceed=true only when the Swift form has already gathered and validated
+        // everything (automation / probe runs). For a normal user launch the config
+        // arrives blank (empty userName) so we let the KMP Compose pre-join — the
+        // standard MediaSFU branded form with logo, identical to React/Flutter — handle
+        // the pre-join interaction (returnUI=true). When the Swift form was used
+        // (isPrejoinReady=true) we skip the KMP pre-join and auto-join directly.
+        let autoProceed = probeReturnUI ? false : (explicitAutoProceed ?? context.sessionConfig.isPrejoinReady)
         let enableRuntimeProbes = automationFlag(named: "MEDIASFU_ENABLE_RUNTIME_PROBES") ||
             automationArgument(named: "--mediasfu-enable-runtime-probes")
         let probeEnableLocalAudio = automationFlag(named: "MEDIASFU_PROBE_ENABLE_LOCAL_AUDIO")
         let probeEnableLocalVideo = automationFlag(named: "MEDIASFU_PROBE_ENABLE_LOCAL_VIDEO")
         let probeEnableScreenShare = automationFlag(named: "MEDIASFU_PROBE_ENABLE_SCREENSHARE")
+        let includeControlProbes = forceValidatedSession || probeReturnUI || probeApplyBackground
         launchConfig.autoProceed = autoProceed
         setOptionalBooleanLaunchConfigValue(
             launchConfig,
@@ -80,18 +89,10 @@ private extension RealMediaSFUSDKHostAdapter {
             value: forceValidatedSession
         )
         let hostedViewController = hostBridge.makeHostViewController(config: launchConfig)
-        let showWrapperCloseButton = autoProceed ||
-            forceValidatedSession ||
-            enableRuntimeProbes ||
-            probeEnableLocalAudio ||
-            probeEnableLocalVideo ||
-            probeEnableScreenShare
 
         return FrameworkBackedMediaSFUHostShellViewController(
             hostedViewController: hostedViewController,
-            onClose: context.onClose,
-            showWrapperCloseButton: showWrapperCloseButton,
-            includeControlProbes: forceValidatedSession,
+            includeControlProbes: includeControlProbes,
             enableRuntimeProbes: enableRuntimeProbes,
             probeEnableLocalAudio: probeEnableLocalAudio,
             probeEnableLocalVideo: probeEnableLocalVideo,
@@ -150,6 +151,21 @@ private extension RealMediaSFUSDKHostAdapter {
         ProcessInfo.processInfo.arguments.contains(name)
     }
 
+    func automationBooleanOverride(named name: String) -> Bool? {
+        guard let rawValue = SampleAppEnvironment.bootstrapOverrideValue(named: name) else {
+            return nil
+        }
+
+        switch rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "1", "true", "yes", "on":
+            return true
+        case "0", "false", "no", "off":
+            return false
+        default:
+            return nil
+        }
+    }
+
     func automationValue(named name: String) -> String? {
         SampleAppEnvironment.bootstrapOverrideValue(named: name)
     }
@@ -157,8 +173,6 @@ private extension RealMediaSFUSDKHostAdapter {
 
 private final class FrameworkBackedMediaSFUHostShellViewController: UIViewController {
     private let hostedViewController: UIViewController
-    private let onClose: () -> Void
-    private let showWrapperCloseButton: Bool
     private let includeControlProbes: Bool
     private let enableRuntimeProbes: Bool
     private let probeEnableLocalAudio: Bool
@@ -168,7 +182,7 @@ private final class FrameworkBackedMediaSFUHostShellViewController: UIViewContro
     private let runtimeProbeHostBridge: AnyObject?
     private var runtimeProbeTimer: Timer?
     private var scheduledVideoToggleWorkItem: DispatchWorkItem?
-    private weak var closeButton: UIButton?
+    private weak var runtimeProbeElement: UIView?
     private var audioToggleLastRequestedAt: Date?
     private var audioToggleFirstRequestedAt: Date?
     private var videoToggleLastRequestedAt: Date?
@@ -178,10 +192,8 @@ private final class FrameworkBackedMediaSFUHostShellViewController: UIViewContro
     private var localPrimingDebugState: String
     private let launchMarker: String
 
-    init(hostedViewController: UIViewController, onClose: @escaping () -> Void, showWrapperCloseButton: Bool, includeControlProbes: Bool, enableRuntimeProbes: Bool, probeEnableLocalAudio: Bool, probeEnableLocalVideo: Bool, probeEnableScreenShare: Bool, bridgeInstallSummary: String, runtimeProbeHostBridge: AnyObject?, launchMarker: String) {
+    init(hostedViewController: UIViewController, includeControlProbes: Bool, enableRuntimeProbes: Bool, probeEnableLocalAudio: Bool, probeEnableLocalVideo: Bool, probeEnableScreenShare: Bool, bridgeInstallSummary: String, runtimeProbeHostBridge: AnyObject?, launchMarker: String) {
         self.hostedViewController = hostedViewController
-        self.onClose = onClose
-        self.showWrapperCloseButton = showWrapperCloseButton
         self.includeControlProbes = includeControlProbes
         self.enableRuntimeProbes = enableRuntimeProbes
         self.probeEnableLocalAudio = probeEnableLocalAudio
@@ -233,39 +245,25 @@ private final class FrameworkBackedMediaSFUHostShellViewController: UIViewContro
             hostedViewController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor)
         ]
 
-        if showWrapperCloseButton {
-            let closeButton = UIButton(type: .system)
-            closeButton.translatesAutoresizingMaskIntoConstraints = false
-            closeButton.setTitle("Close", for: .normal)
-            closeButton.accessibilityIdentifier = "mediaSfuCloseButton"
-            closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
-            closeButton.backgroundColor = UIColor.systemBackground.withAlphaComponent(0.92)
-            closeButton.layer.cornerRadius = 16
-            closeButton.contentEdgeInsets = UIEdgeInsets(top: 10, left: 14, bottom: 10, right: 14)
-            self.closeButton = closeButton
-
-            view.addSubview(closeButton)
-            constraints.append(contentsOf: [
-                closeButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
-                closeButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -12)
-            ])
-        }
-
         NSLayoutConstraint.activate(constraints)
 
         if includeControlProbes {
             addControlAccessibilityProbes()
         }
 
+        if enableRuntimeProbes || probeEnableLocalAudio || probeEnableLocalVideo || probeEnableScreenShare {
+            addRuntimeProbeElement()
+        }
+
         if enableRuntimeProbes {
-            self.closeButton?.accessibilityValue = defaultRuntimeProbeSummary
+            self.runtimeProbeElement?.accessibilityValue = defaultRuntimeProbeSummary
         }
 
         if enableRuntimeProbes || probeEnableLocalAudio || probeEnableLocalVideo || probeEnableScreenShare {
             let bootstrapSummary = appendBridgeInstallSummary(
                 to: "seq=-1;launchMarker=\(launchMarker);primingDebug=booting"
             )
-            self.closeButton?.accessibilityValue = bootstrapSummary
+            self.runtimeProbeElement?.accessibilityValue = bootstrapSummary
             logRuntimeProbeSummaryIfNeeded(bootstrapSummary)
         }
 
@@ -298,24 +296,29 @@ private final class FrameworkBackedMediaSFUHostShellViewController: UIViewContro
         probeContainer.translatesAutoresizingMaskIntoConstraints = false
         probeContainer.axis = .horizontal
         probeContainer.spacing = 1
-        probeContainer.alpha = 0.01
+        probeContainer.alpha = 0.02
         probeContainer.accessibilityIdentifier = "mediaSfuControlProbeContainer"
 
-        [
-            ("mediaSfuControlButton_audio", "Mute"),
-            ("mediaSfuControlButton_video", "Video"),
-            ("mediaSfuControlButton_screen_share", "Share"),
-            ("mediaSfuControlButton_hang_up", "Hang Up")
-        ].forEach { identifier, label in
-            let probe = UIView()
+        let controlProbes: [(String, String, Selector?)] = [
+            ("mediaSfuControlButton_audio", "Mute", #selector(handleControlProbeAudio)),
+            ("mediaSfuControlButton_video", "Video", #selector(handleControlProbeVideo)),
+            ("mediaSfuControlButton_screen_share", "Share", nil),
+            ("mediaSfuControlButton_hang_up", "Hang Up", nil)
+        ]
+
+        controlProbes.forEach { identifier, label, action in
+            let probe = UIButton(type: .custom)
             probe.translatesAutoresizingMaskIntoConstraints = false
             probe.isAccessibilityElement = true
             probe.accessibilityIdentifier = identifier
             probe.accessibilityLabel = label
             NSLayoutConstraint.activate([
-                probe.widthAnchor.constraint(equalToConstant: 1),
-                probe.heightAnchor.constraint(equalToConstant: 1)
+                probe.widthAnchor.constraint(equalToConstant: 2),
+                probe.heightAnchor.constraint(equalToConstant: 2)
             ])
+            if let action {
+                probe.addTarget(self, action: action, for: .touchUpInside)
+            }
             probeContainer.addArrangedSubview(probe)
         }
 
@@ -324,12 +327,100 @@ private final class FrameworkBackedMediaSFUHostShellViewController: UIViewContro
             probeContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 1),
             probeContainer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -1)
         ])
+
+        // Navigation probe UIButtons live in a SEPARATE container with alpha > 0.01 so
+        // UIKit's hitTest can reach them (hitTest returns nil for views with alpha <= 0.01).
+        // These tiny 2×2-pt buttons are visually invisible but tappable from XCUITest to
+        // bypass Compose LazyColumn touch interception and trigger modals via the Kotlin bridge.
+        let navProbeContainer = UIStackView()
+        navProbeContainer.translatesAutoresizingMaskIntoConstraints = false
+        navProbeContainer.axis = .horizontal
+        navProbeContainer.spacing = 1
+        navProbeContainer.alpha = 0.02   // above UIKit 0.01 threshold, invisible to users
+
+        let navProbes: [(String, String, Selector)] = [
+            ("mediaSfuNavProbeButton_media_settings",    "Show Media Settings",    #selector(handleNavProbeMediaSettings)),
+            ("mediaSfuNavProbeButton_display_settings",  "Show Display Settings",  #selector(handleNavProbeDisplaySettings)),
+            ("mediaSfuNavProbeButton_recording",         "Show Recording",          #selector(handleNavProbeRecording)),
+            ("mediaSfuNavProbeButton_cohost",            "Show Co-Host",            #selector(handleNavProbeCoHost)),
+            ("mediaSfuNavProbeButton_requests",          "Show Requests",           #selector(handleNavProbeRequests)),
+            ("mediaSfuNavProbeButton_waiting",           "Show Waiting Room",       #selector(handleNavProbeWaiting)),
+            ("mediaSfuNavProbeButton_confirm_exit",      "Show Confirm Exit",       #selector(handleNavProbeConfirmExit)),
+            ("mediaSfuNavProbeButton_breakout_rooms",    "Show Breakout Rooms",     #selector(handleNavProbeBreakoutRooms)),
+            ("mediaSfuNavProbeButton_background",        "Show Background",          #selector(handleNavProbeBackground)),
+            ("mediaSfuNavProbeButton_polls",             "Show Polls",               #selector(handleNavProbePolls)),
+            ("mediaSfuNavProbeButton_panelists",         "Show Panelists",           #selector(handleNavProbePanelists)),
+            ("mediaSfuNavProbeButton_permissions",       "Show Permissions",         #selector(handleNavProbePermissions)),
+            ("mediaSfuNavProbeButton_translation",       "Show Translation",         #selector(handleNavProbeTranslation)),
+        ]
+        navProbes.forEach { identifier, label, action in
+            let button = UIButton(type: .custom)
+            button.translatesAutoresizingMaskIntoConstraints = false
+            button.isAccessibilityElement = true
+            button.accessibilityIdentifier = identifier
+            button.accessibilityLabel = label
+            NSLayoutConstraint.activate([
+                button.widthAnchor.constraint(equalToConstant: 2),
+                button.heightAnchor.constraint(equalToConstant: 2)
+            ])
+            button.addTarget(self, action: action, for: .touchUpInside)
+            navProbeContainer.addArrangedSubview(button)
+        }
+
+        view.addSubview(navProbeContainer)
+        NSLayoutConstraint.activate([
+            navProbeContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 1),
+            navProbeContainer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -4)
+        ])
+    }
+
+    @objc private func handleControlProbeAudio() { _ = performBridgeToggle(selectorName: "triggerToggleAudio") }
+    @objc private func handleControlProbeVideo() { _ = performBridgeToggle(selectorName: "triggerToggleVideo") }
+
+    @objc private func handleNavProbeMediaSettings()   { _ = performBridgeShowModal("media_settings") }
+    @objc private func handleNavProbeDisplaySettings() { _ = performBridgeShowModal("display_settings") }
+    @objc private func handleNavProbeRecording()       { _ = performBridgeShowModal("recording") }
+    @objc private func handleNavProbeCoHost()          { _ = performBridgeShowModal("cohost") }
+    @objc private func handleNavProbeRequests()        { _ = performBridgeShowModal("requests") }
+    @objc private func handleNavProbeWaiting()         { _ = performBridgeShowModal("waiting") }
+    @objc private func handleNavProbeConfirmExit()     { _ = performBridgeShowModal("confirm_exit") }
+    @objc private func handleNavProbeBreakoutRooms()   { _ = performBridgeShowModal("breakout_rooms") }
+    @objc private func handleNavProbeBackground()      { _ = performBridgeShowModal("background") }
+    @objc private func handleNavProbePolls()           { _ = performBridgeShowModal("polls") }
+    @objc private func handleNavProbePanelists()       { _ = performBridgeShowModal("panelists") }
+    @objc private func handleNavProbePermissions()     { _ = performBridgeShowModal("permissions") }
+    @objc private func handleNavProbeTranslation()     { _ = performBridgeShowModal("translation") }
+
+    private func performBridgeShowModal(_ name: String) -> Bool {
+        #if canImport(MediaSFUSDK) || canImport(shared)
+        if let typedBridge = runtimeProbeHostBridge as? MediaSFUIosHostBridge {
+            return typedBridge.triggerShowModal(name: name)
+        }
+        #endif
+        return false
+    }
+
+    private func addRuntimeProbeElement() {
+        let probe = UIView()
+        probe.translatesAutoresizingMaskIntoConstraints = false
+        probe.isAccessibilityElement = true
+        probe.accessibilityIdentifier = "mediaSfuRuntimeProbe"
+        probe.alpha = 0.01
+        runtimeProbeElement = probe
+
+        view.addSubview(probe)
+        NSLayoutConstraint.activate([
+            probe.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 1),
+            probe.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -3),
+            probe.widthAnchor.constraint(equalToConstant: 1),
+            probe.heightAnchor.constraint(equalToConstant: 1)
+        ])
     }
 
     private func startRuntimeProbeUpdates() {
-        NSLog("MediaSFU - startRuntimeProbeUpdates: enableRTProbes=%d probeAudio=%d probeVideo=%d closeBtn=%@",
+        NSLog("MediaSFU - startRuntimeProbeUpdates: enableRTProbes=%d probeAudio=%d probeVideo=%d probeElement=%@",
               enableRuntimeProbes, probeEnableLocalAudio, probeEnableLocalVideo,
-              closeButton != nil ? "non-nil" : "nil")
+              runtimeProbeElement != nil ? "non-nil" : "nil")
         updateRuntimeProbeLabel()
         runtimeProbeTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             if self == nil {
@@ -345,20 +436,20 @@ private final class FrameworkBackedMediaSFUHostShellViewController: UIViewContro
     private func updateRuntimeProbeLabel() {
         timerDbgTick += 1
         if timerDbgTick == 1 || timerDbgTick % 10 == 0 {
-            NSLog("MediaSFU - probe timer tick #%d, closeButton=%@, primingState=%@",
+            NSLog("MediaSFU - probe timer tick #%d, probeElement=%@, primingState=%@",
                   timerDbgTick,
-                  closeButton != nil ? "non-nil" : "nil",
+                  runtimeProbeElement != nil ? "non-nil" : "nil",
                   localPrimingDebugState)
         }
-        guard let closeButton else {
+        guard let runtimeProbeElement else {
             return
         }
 
-        let currentSummary = latestRuntimeProbeSummary() ?? closeButton.accessibilityValue ?? defaultRuntimeProbeSummary
+        let currentSummary = latestRuntimeProbeSummary() ?? runtimeProbeElement.accessibilityValue ?? defaultRuntimeProbeSummary
         primeLocalMediaIfNeeded(currentSummary: currentSummary)
         let refreshedSummary = latestRuntimeProbeSummary() ?? currentSummary
-        let summary = appendBridgeInstallSummary(to: refreshedSummary)
-        closeButton.accessibilityValue = summary
+        let summary = appendBridgeInstallSummary(to: appendBackgroundProbeSummary(to: refreshedSummary))
+        runtimeProbeElement.accessibilityValue = summary
         logRuntimeProbeSummaryIfNeeded(summary)
     }
 
@@ -385,6 +476,39 @@ private final class FrameworkBackedMediaSFUHostShellViewController: UIViewContro
         return "\(combinedSummary);bridgeInstall=\(compactProbeValue(trimmedSummary).prefix(260))"
     }
 
+    private func appendBackgroundProbeSummary(to summary: String) -> String {
+        guard let backgroundSummary = latestBackgroundProbeSummary(), !backgroundSummary.isEmpty else {
+            return summary
+        }
+
+        var combinedSummary = summary
+        backgroundSummary
+            .split(separator: ";")
+            .compactMap { entry -> (String, String)? in
+                guard let separatorIndex = entry.firstIndex(of: "=") else {
+                    return nil
+                }
+
+                let key = String(entry[..<separatorIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let value = String(entry[entry.index(after: separatorIndex)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !key.isEmpty else {
+                    return nil
+                }
+                return (key, value)
+            }
+            .forEach { key, value in
+                let fieldPattern = ";\(NSRegularExpression.escapedPattern(for: key))=[^;]*"
+                let replacement = ";\(key)=\(compactProbeValue(value))"
+                if let range = combinedSummary.range(of: fieldPattern, options: .regularExpression) {
+                    combinedSummary.replaceSubrange(range, with: replacement)
+                } else {
+                    combinedSummary += replacement
+                }
+            }
+
+        return combinedSummary
+    }
+
     private var defaultRuntimeProbeSummary: String {
         "seq=0;participants=0;visibleStreams=0;audioOnlyStreams=0;localAudio=false;localVideo=false;alertType=;alert="
     }
@@ -395,6 +519,19 @@ private final class FrameworkBackedMediaSFUHostShellViewController: UIViewContro
         }
 
         let selector = NSSelectorFromString("latestRuntimeProbeSummary")
+        guard bridge.responds(to: selector) else {
+            return nil
+        }
+
+        return bridge.perform(selector)?.takeUnretainedValue() as? String
+    }
+
+    private func latestBackgroundProbeSummary() -> String? {
+        guard let bridge = runtimeProbeHostBridge as? NSObject else {
+            return nil
+        }
+
+        let selector = NSSelectorFromString("latestBackgroundProbeSummary")
         guard bridge.responds(to: selector) else {
             return nil
         }
@@ -505,6 +642,9 @@ private final class FrameworkBackedMediaSFUHostShellViewController: UIViewContro
 
     private func isReadyToPrimeLocalMedia(currentSummary: String) -> Bool {
         let sessionConnected = currentSummary.contains("alert=Connected to ") ||
+            currentSummary.contains("lastSignalStage=rest-ok") ||
+            currentSummary.contains("lastSignalStage=socket-ok") ||
+            currentSummary.contains("lastSignalStage=join-ok") ||
             !currentSummary.contains("participants=0")
 
         guard sessionConnected else {
@@ -528,6 +668,25 @@ private final class FrameworkBackedMediaSFUHostShellViewController: UIViewContro
         return Date().timeIntervalSince(lastRequestedAt) >= 5
     }
 
+    private func runtimeProbeCounterValue(in summary: String, key: String) -> Int? {
+        let needle = "\(key)="
+        guard let range = summary.range(of: needle) else {
+            return nil
+        }
+
+        let suffix = summary[range.upperBound...]
+        let digits = suffix.prefix { $0.isNumber }
+        guard !digits.isEmpty else {
+            return nil
+        }
+
+        return Int(digits)
+    }
+
+    private func runtimeProbeCounterAtLeast(in summary: String, key: String, minimum: Int) -> Bool {
+        (runtimeProbeCounterValue(in: summary, key: key) ?? 0) >= minimum
+    }
+
     private func canPrimeVideoAfterAudioDispatch(currentSummary: String) -> Bool {
         if !probeEnableLocalAudio {
             return true
@@ -538,7 +697,8 @@ private final class FrameworkBackedMediaSFUHostShellViewController: UIViewContro
         // audio and video call createSendTransport concurrently: audio creates
         // transport A and produces; video simultaneously creates transport B
         // (overwriting A) and its produce path fails.
-        if currentSummary.contains("audioProduced=1") || currentSummary.contains("produceAckOk=1") {
+        if runtimeProbeCounterAtLeast(in: currentSummary, key: "audioProduced", minimum: 1) ||
+            runtimeProbeCounterAtLeast(in: currentSummary, key: "produceAckOk", minimum: 1) {
             return true
         }
 
@@ -632,6 +792,19 @@ private final class FrameworkBackedMediaSFUHostShellViewController: UIViewContro
     }
 
     private func performBridgeToggle(selectorName: String) -> Bool {
+        if Thread.isMainThread {
+            return performBridgeToggleOnCurrentThread(selectorName: selectorName)
+        }
+
+        var result = false
+        DispatchQueue.main.sync { [weak self] in
+            guard let self else { return }
+            result = self.performBridgeToggleOnCurrentThread(selectorName: selectorName)
+        }
+        return result
+    }
+
+    private func performBridgeToggleOnCurrentThread(selectorName: String) -> Bool {
         #if canImport(MediaSFUSDK) || canImport(shared)
         if let typedBridge = runtimeProbeHostBridge as? MediaSFUIosHostBridge {
             switch selectorName {
@@ -639,6 +812,8 @@ private final class FrameworkBackedMediaSFUHostShellViewController: UIViewContro
                 return typedBridge.triggerToggleAudio()
             case "triggerToggleVideo":
                 return typedBridge.triggerToggleVideo()
+            case "triggerToggleScreenShare":
+                return typedBridge.triggerToggleScreenShare()
             default:
                 break
             }
@@ -693,13 +868,8 @@ private final class FrameworkBackedMediaSFUHostShellViewController: UIViewContro
     }
 
     private func persistLatestRuntimeProbeSnapshot() {
-        let latestSummary = latestRuntimeProbeSummary() ?? closeButton?.accessibilityValue ?? defaultRuntimeProbeSummary
+        let latestSummary = latestRuntimeProbeSummary() ?? runtimeProbeElement?.accessibilityValue ?? defaultRuntimeProbeSummary
         let summary = appendBridgeInstallSummary(to: latestSummary)
         persistRuntimeProbeSummary(summary)
-    }
-
-    @objc
-    private func closeTapped() {
-        onClose()
     }
 }

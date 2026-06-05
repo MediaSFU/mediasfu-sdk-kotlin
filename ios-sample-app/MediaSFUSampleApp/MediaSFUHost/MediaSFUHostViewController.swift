@@ -62,26 +62,6 @@ final class MediaSFUHostViewController: UIViewController {
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        let frameDescription = String(describing: view.frame)
-        let boundsDescription = String(describing: view.bounds)
-        let safeInsetsDescription = String(describing: view.safeAreaInsets)
-        let presenterBoundsDescription = String(describing: presentingViewController?.view.bounds ?? .zero)
-        let superviewFrameDescription = String(describing: view.superview?.frame ?? .zero)
-        let parentBoundsDescription = String(describing: parent?.view.bounds ?? .zero)
-        let windowFrameDescription = String(describing: view.window?.frame ?? .zero)
-        let windowBoundsDescription = String(describing: view.window?.bounds ?? .zero)
-        NSLog(
-            "MediaSFU - host viewDidAppear frame=%@ bounds=%@ safeInsets=%@ modalStyle=%ld presenterBounds=%@ superviewFrame=%@ parentBounds=%@ windowFrame=%@ windowBounds=%@",
-            frameDescription,
-            boundsDescription,
-            safeInsetsDescription,
-            Int(modalPresentationStyle.rawValue),
-            presenterBoundsDescription,
-            superviewFrameDescription,
-            parentBoundsDescription,
-            windowFrameDescription,
-            windowBoundsDescription
-        )
     }
 
     override func viewDidDisappear(_ animated: Bool) {

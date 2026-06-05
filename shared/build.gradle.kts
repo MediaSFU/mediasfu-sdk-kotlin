@@ -1,3 +1,5 @@
+import java.io.File
+
 plugins {
     kotlin("multiplatform")
     kotlin("native.cocoapods")
@@ -31,7 +33,9 @@ kotlin {
             isStatic = true
         }
 
-        pod("WebRTC")
+        pod("WebRTC") {
+            source = path(project.file("../ios-local-pods/WebRTC"))
+        }
     }
 
     iosX64()
@@ -175,5 +179,101 @@ mavenPublishing {
             connection.set("scm:git:git://github.com/MediaSFU/mediasfu-sdk-kotlin.git")
             developerConnection.set("scm:git:ssh://git@github.com/MediaSFU/mediasfu-sdk-kotlin.git")
         }
+    }
+}
+
+fun resolveActiveDeveloperDir(): File {
+    val envDeveloperDir = System.getenv("DEVELOPER_DIR")?.trim().orEmpty()
+    if (envDeveloperDir.isNotEmpty()) {
+        return File(envDeveloperDir)
+    }
+
+    val selectedDeveloperDir = runCatching {
+        val process = ProcessBuilder("xcode-select", "-p")
+            .redirectErrorStream(true)
+            .start()
+        val output = process.inputStream.bufferedReader().use { it.readText().trim() }
+        if (process.waitFor() == 0 && output.isNotEmpty()) output else null
+    }.getOrNull()
+
+    return File(selectedDeveloperDir ?: "/Applications/Xcode.app/Contents/Developer")
+}
+
+fun generateDarwinFoundationOverlay(): File? {
+    val developerDir = resolveActiveDeveloperDir()
+    val overlayDir = layout.buildDirectory.dir("cinterop/vfs").get().asFile.apply { mkdirs() }
+    val sdkRoots = listOf("iPhoneOS", "iPhoneSimulator").mapNotNull { sdkPlatform ->
+        val sdkDir = developerDir
+            .resolve("Platforms/$sdkPlatform.platform/Developer/SDKs")
+            .listFiles()
+            ?.filter { it.isDirectory && it.name.startsWith(sdkPlatform) && it.name.endsWith(".sdk") }
+            ?.sortedByDescending { it.name }
+            ?.firstOrNull()
+            ?: return@mapNotNull null
+
+        val includeDir = sdkDir.resolve("usr/include")
+        val moduleMap = includeDir.resolve("DarwinFoundation1.modulemap")
+        if (!moduleMap.exists()) {
+            return@mapNotNull null
+        }
+
+        val originalText = moduleMap.readText()
+        if (!originalText.contains("found_incompatible_headers__check_search_paths")) {
+            return@mapNotNull null
+        }
+
+        val fixedModuleMap = overlayDir.resolve("${sdkPlatform}-DarwinFoundation1-fixed.modulemap")
+        fixedModuleMap.writeText(
+            originalText
+                .lineSequence()
+                .filterNot { it.contains("found_incompatible_headers__check_search_paths") }
+                .joinToString(separator = "\n", postfix = "\n")
+        )
+
+        includeDir to fixedModuleMap
+    }
+
+    if (sdkRoots.isEmpty()) {
+        return null
+    }
+
+    val overlayJson = buildString {
+        appendLine("{")
+        appendLine("  \"version\": 0,")
+        appendLine("  \"case-sensitive\": \"false\",")
+        appendLine("  \"roots\": [")
+        sdkRoots.forEachIndexed { index, (includeDir, fixedModuleMap) ->
+            appendLine("    {")
+            appendLine("      \"type\": \"directory\",")
+            appendLine("      \"name\": \"${includeDir.absolutePath}\",")
+            appendLine("      \"contents\": [")
+            appendLine("        {")
+            appendLine("          \"type\": \"file\",")
+            appendLine("          \"name\": \"DarwinFoundation1.modulemap\",")
+            appendLine("          \"external-contents\": \"${fixedModuleMap.absolutePath}\"")
+            appendLine("        }")
+            append("      ]\n    }")
+            if (index != sdkRoots.lastIndex) {
+                append(',')
+            }
+            appendLine()
+        }
+        appendLine("  ]")
+        appendLine("}")
+    }
+
+    return overlayDir.resolve("cinterop-vfs-overlay.yaml").apply {
+        writeText(overlayJson)
+    }
+}
+
+// Workaround: Xcode 26.2 ships DarwinFoundation1.modulemap with a guarded 'requires'
+// clause that Kotlin/Native's bundled clang doesn't understand. Generate a local VFS
+// overlay for both device and simulator SDKs so cinterop can reuse fixed copies.
+val darwinFoundationOverlay = generateDarwinFoundationOverlay()
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.CInteropProcess>().configureEach {
+    darwinFoundationOverlay?.let { overlayFile ->
+        settings.compilerOpts("-ivfsoverlay", overlayFile.absolutePath)
     }
 }

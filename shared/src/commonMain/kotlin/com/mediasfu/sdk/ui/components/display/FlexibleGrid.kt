@@ -2,6 +2,7 @@ package com.mediasfu.sdk.ui.components.display
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
@@ -129,11 +130,14 @@ fun FlexibleGrid.renderCompose() {
     val totalWidthDp = with(density) { (cardWidthPx * columns).toDp() }
     val totalHeightDp = with(density) { (cardHeightPx * rows).toDp() }
 
+    val isLightTheme = MaterialTheme.colorScheme.background.red > 0.5f
+    val containerBgColor = if (isLightTheme) MaterialTheme.colorScheme.background else Color(options.backgroundColor)
+
     Column(
         modifier = Modifier
             .width(totalWidthDp)
             .height(totalHeightDp)
-            .background(Color(options.backgroundColor)),
+            .background(containerBgColor),
         verticalArrangement = Arrangement.spacedBy(verticalSpacing.dp)
     ) {
         for (rowIndex in 0 until rows) {
@@ -182,7 +186,7 @@ fun FlexibleGrid.renderCompose() {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .background(Color(0xFF1C2B4A))
+                                        .background(if (isLightTheme) MaterialTheme.colorScheme.surfaceVariant else Color(0xFF1C2B4A))
                                 )
                             }
                             // Empty cells still take space due to weight(1f)

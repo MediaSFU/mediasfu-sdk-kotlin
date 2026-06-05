@@ -155,7 +155,7 @@ suspend fun createJoinRoom(
     }
 }
 
-private fun Map<String, Any?>.stringValue(key: String): String? {
+internal fun Map<String, Any?>.stringValue(key: String): String? {
     val raw = this[key] ?: return null
     val value = when (raw) {
         is String -> raw
@@ -174,7 +174,7 @@ private fun Map<String, Any?>.stringValue(key: String): String? {
     return value?.trim()?.takeIf { it.isNotEmpty() }
 }
 
-private fun Map<String, Any?>.intValue(key: String): Int? {
+internal fun Map<String, Any?>.intValue(key: String): Int? {
     val raw = this[key] ?: return null
     return when (raw) {
         is Number -> raw.toInt()
@@ -192,7 +192,7 @@ private fun Map<String, Any?>.longValue(key: String): Long? {
     }
 }
 
-private fun Map<String, Any?>.boolValue(key: String): Boolean? {
+internal fun Map<String, Any?>.boolValue(key: String): Boolean? {
     val raw = this[key] ?: return null
     return when (raw) {
         is Boolean -> raw
@@ -212,3 +212,27 @@ private fun errorResult(message: String): CreateJoinRoomResult = CreateJoinRoomR
     data = CreateJoinRoomError(error = message, success = false),
     success = false
 )
+
+internal fun CreateJoinRoomResponse.normalizedForEndpoint(endpoint: String): CreateJoinRoomResponse {
+    val origin = endpoint.trimEnd('/')
+    val correctedLink = if (link.contains(".mediasfu.com") && link.startsWith("https://.")) {
+        origin
+    } else if (link == "https://mediasfu.com" || link == "https://mediasfu.com") { // ENDPOINT_TOGGLE
+        origin
+    } else {
+        link
+    }
+    
+    val basePublicHost = "https://.mediasfu.com"
+    var correctedPublicUrl = publicURL
+    
+    if (publicURL.startsWith(basePublicHost)) {
+        correctedPublicUrl = publicURL.replace(basePublicHost, origin)
+    } else if (publicURL.startsWith("https://mediasfu.com/meet/")) { // ENDPOINT_TOGGLE
+        correctedPublicUrl = publicURL.replace("https://mediasfu.com/meet/", "$origin/meet/") // ENDPOINT_TOGGLE
+    } else if (publicURL.startsWith("https://mediasfu.com/meet/")) {
+        correctedPublicUrl = publicURL.replace("https://mediasfu.com/meet/", "$origin/meet/")
+    }
+    
+    return copy(link = correctedLink, publicURL = correctedPublicUrl)
+}

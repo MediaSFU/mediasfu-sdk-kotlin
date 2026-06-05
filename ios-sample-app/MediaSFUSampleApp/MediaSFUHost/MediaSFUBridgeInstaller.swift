@@ -16,12 +16,20 @@ import MediaSFUMediasoupClient
 import WebRTC
 #endif
 
+#if canImport(AVFoundation)
+import AVFoundation
+#endif
+
 struct MediaSFUBridgeInstaller {
     func installIfNeeded() -> String {
         // Keep simulator-specific manual audio as the workaround for the iOS
         // 26.x WebRTC crash path, but let physical devices use the normal
         // WebRTC audio lifecycle so microphone capture is actually enabled.
         #if canImport(WebRTC)
+        let webRtcAudioConfig = RTCAudioSessionConfiguration.webRTC()
+        webRtcAudioConfig.categoryOptions = webRtcAudioConfig.categoryOptions.union(.defaultToSpeaker)
+        RTCAudioSessionConfiguration.setWebRTC(webRtcAudioConfig)
+
         let audioSession = RTCAudioSession.sharedInstance()
         #if targetEnvironment(simulator)
         audioSession.useManualAudio = true
@@ -105,7 +113,7 @@ struct MediaSFUBridgeInstaller {
     }
 
     private static func automationFlag(named name: String) -> Bool {
-        guard let rawValue = ProcessInfo.processInfo.environment[name] else {
+        guard let rawValue = SampleAppEnvironment.bootstrapOverrideValue(named: name) else {
             return false
         }
 
@@ -157,7 +165,7 @@ private enum MediaSFUSDKDirectBridgeInstaller {
     #if canImport(MediaSFUMediasoupClient)
     @discardableResult
     static func installMediaSFUMediasoupClientBridgeIfSupported(device: MSCDevice) -> Bool {
-        guard device.nativeIntegrationMode == .fullyBundledNative else {
+        guard device.nativeIntegrationMode != .stubBacked else {
             return false
         }
 
@@ -167,7 +175,7 @@ private enum MediaSFUSDKDirectBridgeInstaller {
     #endif
 }
 
-private final class MediaSFUSDKBridgeAdapter: IosNativeMediasoupBridge {
+private final class MediaSFUSDKBridgeAdapter: IosNativeLoadableMediasoupBridge {
     private let bridge: MediaSFUNativeMediasoupBridge
 
     init(bridge: MediaSFUNativeMediasoupBridge) {
@@ -241,8 +249,22 @@ private final class MediaSFUSDKSendTransportAdapter: IosNativeSendTransportHandl
         })
     }
 
-    func produce(track: RTCMediaStreamTrack, encodingsJson: String?, appDataJson: String?) -> IosNativeProducerHandle {
-        MediaSFUSDKProducerAdapter(handle: handle.produce(track: track, encodingsJson: encodingsJson, appDataJson: appDataJson))
+    func produce(
+        track: RTCMediaStreamTrack,
+        encodingsJson: String?,
+        codecOptionsJson: String?,
+        codecJson: String?,
+        appDataJson: String?
+    ) -> IosNativeProducerHandle {
+        MediaSFUSDKProducerAdapter(
+            handle: handle.produce(
+                track: track,
+                encodingsJson: encodingsJson,
+                codecOptionsJson: codecOptionsJson,
+                codecJson: codecJson,
+                appDataJson: appDataJson
+            )
+        )
     }
 }
 

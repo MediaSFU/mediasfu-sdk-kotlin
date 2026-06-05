@@ -134,7 +134,11 @@ data class MenuModalProps(
     val whiteboardActive: Boolean,
     val whiteboardCollaboratorCount: Int,
     val canAccessWhiteboard: Boolean,
-    val canConfigureWhiteboard: Boolean
+    val canConfigureWhiteboard: Boolean,
+    /** Optional callback to switch the app theme at runtime (true = dark, false = light) */
+    val onToggleTheme: ((Boolean) -> Unit)? = null,
+    /** Current dark-mode state, used to highlight the active theme button */
+    val isDarkMode: Boolean = true
 )
 
 /**

@@ -45,6 +45,7 @@ import com.mediasfu.sdk.methods.MediasfuParameters
 import com.mediasfu.sdk.methods.stream_methods.ClickScreenShareParameters
 import com.mediasfu.sdk.model.EventType
 import com.mediasfu.sdk.model.Participant
+import com.mediasfu.sdk.model.PermissionConfig
 import com.mediasfu.sdk.model.ShowAlert
 import com.mediasfu.sdk.model.Stream
 import com.mediasfu.sdk.methods.utils.producer.ProducerOptionsType
@@ -88,6 +89,7 @@ private class MediasfuClickScreenShareParameters(
     override val videoSetting: String get() = backing.videoSetting
     override val screenshareSetting: String get() = backing.screenshareSetting
     override val chatSetting: String get() = backing.chatSetting
+    override val permissionConfig: PermissionConfig? get() = state.permissionConfig.value
     override val screenAction: Boolean get() = backing.screenAction
     override val screenAlreadyOn: Boolean get() = backing.screenAlreadyOn
     override val screenRequestState: String?
@@ -111,10 +113,8 @@ private class MediasfuClickScreenShareParameters(
     override val updateScreenAlreadyOn: (Boolean) -> Unit
         get() = { value ->
             if (backing.screenAlreadyOn != value) {
-                backing.screenAlreadyOn = value
-                state.media.screenAlreadyOn = value
-                backing.shareScreenStarted = value
-                state.media.shareScreenStarted = value
+                backing.updateScreenAlreadyOn(value)
+                backing.updateShareScreenStarted(value)
                 state.propagateParameterChanges()
             }
         }
@@ -207,8 +207,7 @@ private class MediasfuClickScreenShareParameters(
     override val updateShared: (Boolean) -> Unit
         get() = { value ->
             if (backing.shared != value) {
-                backing.shared = value
-                state.media.shared = value
+                backing.updateShared(value)
                 state.propagateParameterChanges()
             }
         }
@@ -216,8 +215,7 @@ private class MediasfuClickScreenShareParameters(
     override val updateShareScreenStarted: (Boolean) -> Unit
         get() = { value ->
             if (backing.shareScreenStarted != value) {
-                backing.shareScreenStarted = value
-                state.media.shareScreenStarted = value
+                backing.updateShareScreenStarted(value)
                 state.propagateParameterChanges()
             }
         }

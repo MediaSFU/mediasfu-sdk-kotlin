@@ -1,222 +1,296 @@
 # MediaSFU Swift iOS Client Usage
 
-This guide covers the Swift-facing iOS client shipped from `mediasfu-sdk-kotlin`. It is the app integration layer that hosts the shared MediaSFU UI on iOS through the exported Kotlin Multiplatform framework.
+This guide covers the Swift-facing iOS integration for the MediaSFU SDK. The SDK ships a
+Swift-accessible host bridge so you can embed the full MediaSFU conferencing UI in any
+iOS app without writing any Kotlin or managing the underlying media layer directly.
 
-For the lower-level standalone mediasoup/WebRTC package, see the [mediasfu-mediasoup-client-apple](https://github.com/MediaSFU/mediasfu-mediasoup-client-apple) repository.
+For the lower-level standalone WebRTC client package, see
+[mediasfu-mediasoup-client-apple](https://github.com/MediaSFU/mediasfu-mediasoup-client-apple).
 
 ## What You Get
 
-- A Swift-friendly `MediaSFUIosHostBridge` exported by the shared KMP framework.
-- A `MediaSFUIosLaunchConfig` object so Swift apps do not need to construct the full Kotlin `MediasfuGenericOptions` object directly.
-- Full hosted UI mode for normal create/join flows.
-- No-UI mode parity with React and Flutter through `autoProceed`, which maps to `returnUI=false` plus create/join prejoin options.
-- Optional native iOS bridge wiring through `MediaSFUIosBridge` and `MediaSFUMediasoupClient` when the real WebRTC/libmediasoupclient artifacts are linked.
+- **`MediaSFUIosHostBridge`** — the single entry point for presenting the MediaSFU UI from Swift.
+- **`MediaSFUIosLaunchConfig`** — a plain Swift object for configuring a session without writing any Kotlin.
+- Hosted UI mode — the full pre-join form plus in-room UI, ready out of the box.
+- Headless mode — skip the pre-join form and auto-connect with your own session parameters.
+- Virtual background (iOS 15+) — person segmentation with blur, colour, or image backgrounds.
+- Screen sharing, chat, polls, recording controls, and all other in-room features.
+
+## Requirements
+
+- **iOS 14.1+** to run the SDK.
+- **iOS 15+** for Virtual Background (gracefully degrades on iOS 14).
+- An API username and API key from [mediasfu.com](https://mediasfu.com) for cloud rooms.
+- CocoaPods for the framework integration step (see below).
 
 ## Endpoint Policy
 
-Production cloud is the default. Leave `localLink` empty for MediaSFU Cloud, and provide `apiUserName` plus a 64-character `apiKey`.
+Production cloud is the default. Leave `localLink` empty for MediaSFU Cloud and supply
+your `apiUserName` and `apiKey`.
 
-Use `localLink` only for MediaSFU CE or a private backend root, such as `https://your-ce-host.example.com`. Do not put the cloud `/v1/rooms` endpoint into `localLink`.
+Set `localLink` only when connecting to a self-hosted MediaSFU CE backend, for example
+`https://your-ce-host.example.com`. Do not point `localLink` at the production cloud URL.
 
-The default endpoint is production cloud (`https://mediasfu.com/v1/rooms`). Do not override `MEDIASFU_CLOUD_ROOMS_ENDPOINT` in shipping code; that env var is reserved for self-hosted or custom backend deployments only.
+## Install
 
-## Install In An iOS App
-
-The sample app uses CocoaPods for the generated KMP framework:
+Add the MediaSFU SDK pod to your `Podfile`:
 
 ```ruby
 target 'YourApp' do
   use_frameworks!
-  pod 'shared', :path => '../shared'
+  pod 'MediaSFUSDK'  # or the path-based variant when consuming from source
 end
 ```
 
-Then run:
+Then install and open the workspace:
 
 ```sh
-cd ios-sample-app
 pod install
-open MediaSFUSampleApp.xcworkspace
+open YourApp.xcworkspace
 ```
 
-In Swift, import the generated framework as either `shared` or `MediaSFUSDK`, depending on the module name Xcode exposes:
+Import the module in Swift:
 
 ```swift
-#if canImport(shared)
-import shared
-#elseif canImport(MediaSFUSDK)
 import MediaSFUSDK
-#endif
 ```
 
 ## Hosted UI Mode
 
-Hosted UI mode presents the shared MediaSFU interface. This is the mode most apps should start with.
+Hosted UI is the default. The SDK presents a pre-join form where users enter their
+display name and room details, then transitions to the full in-room UI.
 
 ```swift
+import MediaSFUSDK
+
 let bridge = MediaSFUIosHostBridge()
 let config = bridge.makeLaunchConfig()
 
 config.apiUserName = "your-api-username"
-config.apiKey = "your-64-character-api-key"
-config.localLink = ""
+config.apiKey = "your-api-key"
 config.connectMediaSFU = true
-config.userName = "alice"
-config.roomName = "mediasfu-demo"
-config.action = "create"
-config.eventType = "conference"
+config.userName = "alice"         // pre-fills the display name field
+config.action = "create"         // "create" or "join"
+config.eventType = "conference"  // "conference", "broadcast", "webinar", "chat"
 config.durationMinutes = 60
 config.capacity = 100
-config.autoProceed = false
-config.useModernUI = true
-config.useModernTheme = true
+config.autoProceed = false       // false = show the pre-join form
 
 let controller = bridge.makeHostViewController(config: config)
 controller.modalPresentationStyle = .fullScreen
 present(controller, animated: true)
 ```
 
-The sample app wraps this with `MediaSFUHostViewController`, which pins the hosted controller to the full window and hides the status/home indicator while in-call.
+## Headless Mode (No Pre-Join Form)
 
-## No-UI Mode
+Set `autoProceed = true` to skip the pre-join form entirely and connect automatically
+using the parameters you supply. The UI goes straight to the in-room experience.
 
-React uses `returnUI={false}` and `noUIPreJoinOptions`. Flutter uses `returnUI: false` with either `noUIPreJoinOptionsCreate` or `noUIPreJoinOptionsJoin`.
+This mirrors `returnUI=false` in the React SDK and Flutter SDK.
 
-The Swift bridge mirrors that through `config.autoProceed = true`:
-
-- `action = "create"` builds the create no-UI options and bypasses the prejoin UI.
-- `action = "join"` builds the join no-UI options and bypasses the prejoin UI.
-- `returnUI` becomes false only when those no-UI options are available.
-
-### No-UI Create
+### Headless Create
 
 ```swift
+import MediaSFUSDK
+
 let bridge = MediaSFUIosHostBridge()
 let config = bridge.makeLaunchConfig()
 
 config.apiUserName = "your-api-username"
-config.apiKey = "your-64-character-api-key"
+config.apiKey = "your-api-key"
 config.connectMediaSFU = true
-config.localLink = ""
 config.action = "create"
 config.userName = "host1"
 config.eventType = "conference"
 config.durationMinutes = 60
 config.capacity = 100
-config.secureCode = ""
-config.safeRoom = false
-config.recordOnly = false
-config.autoProceed = true
+config.autoProceed = true   // skip the pre-join form
 
 let controller = bridge.makeHostViewController(config: config)
 controller.modalPresentationStyle = .fullScreen
 present(controller, animated: true)
 ```
 
-### No-UI Join
+### Headless Join
 
 ```swift
+import MediaSFUSDK
+
 let bridge = MediaSFUIosHostBridge()
 let config = bridge.makeLaunchConfig()
 
 config.apiUserName = "your-api-username"
-config.apiKey = "your-64-character-api-key"
+config.apiKey = "your-api-key"
 config.connectMediaSFU = true
-config.localLink = ""
 config.action = "join"
 config.roomName = "s1234567"
 config.userName = "guest1"
-config.adminPasscode = ""
-config.islevel = "0"
-config.autoProceed = true
+config.islevel = "0"        // "0" = participant, "2" = admin
+config.autoProceed = true   // skip the pre-join form
 
 let controller = bridge.makeHostViewController(config: config)
 controller.modalPresentationStyle = .fullScreen
 present(controller, animated: true)
 ```
 
-## Media Controls From Swift
+## SwiftUI Integration
 
-`MediaSFUIosHostBridge` exposes Swift-callable control hooks after the host has been created:
+Wrap the UIKit view controller in a `UIViewControllerRepresentable` to embed MediaSFU inside SwiftUI:
 
 ```swift
-let didRequestAudio = bridge.triggerToggleAudio()
-let didRequestVideo = bridge.triggerToggleVideo()
-let didRequestScreenShare = bridge.triggerToggleScreenShare()
+import SwiftUI
+import MediaSFUSDK
+
+struct MediaSFUView: UIViewControllerRepresentable {
+    let apiUserName: String
+    let apiKey: String
+    let userName: String
+    var action: String = "create"   // "create" or "join"
+    var roomName: String = ""       // leave empty to auto-generate on create
+    var autoProceed: Bool = false
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        let bridge = MediaSFUIosHostBridge()
+        let config = bridge.makeLaunchConfig()
+        config.apiUserName = apiUserName
+        config.apiKey = apiKey
+        config.connectMediaSFU = true
+        config.userName = userName
+        config.roomName = roomName
+        config.action = action
+        config.durationMinutes = 60
+        config.capacity = 100
+        config.eventType = "conference"
+        config.autoProceed = autoProceed
+        return bridge.makeHostViewController(config: config)
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
+}
+
+// Minimal SwiftUI usage:
+struct ContentView: View {
+    var body: some View {
+        MediaSFUView(
+            apiUserName: "your-api-username",
+            apiKey: "your-api-key",
+            userName: "alice"
+        )
+        .ignoresSafeArea()
+    }
+}
 ```
 
-These return `false` when the shared UI has not installed a handler yet. Call them after the room UI is mounted.
+## Media Controls
 
-## Sample App Configuration
+`MediaSFUIosHostBridge` lets you trigger media actions programmatically from Swift after
+the room is mounted:
 
-The sample app reads values from the Swift bootstrap form, process environment, or env-style files. Useful keys include:
+```swift
+let bridge = MediaSFUIosHostBridge()
+// ... present the controller first ...
 
-```text
-MEDIASFU_API_USERNAME=your-api-username
-MEDIASFU_API_KEY=your-64-character-api-key
-MEDIASFU_LOCAL_LINK=
-MEDIASFU_CONNECT_MEDIA_SFU=true
-MEDIASFU_USER_NAME=alice
-MEDIASFU_ROOM_NAME=mediasfu-demo
-MEDIASFU_ACTION=create
-MEDIASFU_AUTO_PROCEED=true
-MEDIASFU_EVENT_TYPE=conference
-MEDIASFU_DURATION_MINUTES=60
-MEDIASFU_CAPACITY=100
+// Toggle microphone
+bridge.triggerToggleAudio()
+
+// Toggle camera
+bridge.triggerToggleVideo()
+
+// Start / stop screen share
+bridge.triggerToggleScreenShare()
 ```
 
-File lookup order:
+These calls are ignored if the room UI has not finished mounting. Call them only after the
+host view controller has appeared on screen.
 
-1. `MEDIASFU_BOOTSTRAP_ENV_FILE`
-2. `MEDIASFU_CREDS_FILE`
-3. `Documents/mediasfu_sample_env.txt`
-4. `Documents/mediasfu_ui_test_env.txt`
-5. `/tmp/mediasfu_sample_env.txt`, `/tmp/mediasfu_ui_test_env.txt`, `/tmp/mediasfu_creds.txt` on simulator/macOS-backed runs
+## Virtual Background (iOS 15+)
 
-## Native Bridge Modes
+Virtual background uses Apple's Vision framework for on-device person segmentation.
+No extra configuration is required — the SDK checks the OS version at runtime and
+enables the feature automatically.
 
-The KMP-hosted Swift client can run with the shared WebRTC abstractions, and it can also install the local native iOS bridge package for real mediasoup/WebRTC validation.
+- **iOS 15+**: Background replacement is active. Users see a Presets / Blur / Colors / Custom
+  tab panel in the Virtual Background modal.
+- **iOS 14**: The modal opens with a graceful "not available on this platform" notice.
+  No code change is needed.
 
-Use these flags when validating the real native bridge path:
+### Background options available to users
 
-```sh
-MEDIA_SFU_ENABLE_IOS_NATIVE_BRIDGE_PACKAGE=1 \
-MEDIA_SFU_ENABLE_REAL_LIBMEDIASOUPCLIENT_BINDING=1 \
-MEDIASFU_REQUIRE_REAL_NATIVE_BRIDGE=1 \
-xcodebuild -workspace ios-sample-app/MediaSFUSampleApp.xcworkspace \
-  -scheme MediaSFUSampleApp \
-  -configuration Debug \
-  -sdk iphoneos \
-  -destination 'generic/platform=iOS' \
-  build CODE_SIGNING_ALLOWED=NO
+| Option | What it does |
+|--------|----------|
+| **None** | Passes the camera feed through unchanged |
+| **Blur** | Applies a gaussian blur behind the person |
+| **Color** | Fills the background with a solid color |
+| **Custom image** | Replaces the background with a photo |
+
+### Remote participants
+
+The processed video stream (with the background applied) is what remote participants see.
+The effect runs locally on the sending device before the video is encoded and transmitted.
+
+### Simulator
+
+Background controls appear on all iOS 15+ simulator builds. Person segmentation runs on
+whatever camera frame the simulator provides. For visual accuracy, test on a physical device
+with the front camera.
+
+## Participant Level
+
+Set `config.islevel` when joining a room:
+
+| Value | Role |
+|-------|------|
+| `"0"` | Participant — can view and receive streams |
+| `"2"` | Admin / host — can manage participants, start media, and control the room |
+
+Use `"2"` when creating a room as the host.
+
+## Room Passcode
+
+To restrict admin access, supply a `secureCode` when creating a room. Participants
+who need admin access provide the same code as `adminPasscode` when joining:
+
+```swift
+// Host (create)
+config.secureCode = "your-room-passcode"
+
+// Admin participant (join)
+config.adminPasscode = "your-room-passcode"
+config.islevel = "2"
 ```
 
-For simulator compile checks, pre-sync the shared framework before Xcode invokes the CocoaPods script phase:
+## Event Types
 
-```sh
-cd mediasfu-sdk-kotlin
-ARCHS=arm64 SDK_NAME=iphonesimulator PLATFORM_NAME=iphonesimulator CONFIGURATION=Debug \
-  ./gradlew --no-daemon -p "$PWD" :shared:syncFramework \
-  -Pkotlin.native.cocoapods.platform=iphonesimulator \
-  -Pkotlin.native.cocoapods.archs=arm64 \
-  -Pkotlin.native.cocoapods.configuration=Debug
+Set `config.eventType` to match the type of room you are creating:
 
-OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES \
-  ./gradlew :shared:compileKotlinIosSimulatorArm64 --no-daemon --stacktrace
-```
+| Value | Description |
+|-------|-------------|
+| `"conference"` | All participants can share video and audio |
+| `"broadcast"` | One broadcaster, audience members receive only |
+| `"webinar"` | Host + panelists present; attendees can be promoted |
+| `"chat"` | Text and audio only, no video grid |
 
-## Validation Checklist
+## Supported Features
 
-- Hosted UI opens full-screen from Swift.
-- Create flow works with `autoProceed=false` and the visible prejoin UI.
-- No-UI create flow works with `autoProceed=true`, `action="create"`.
-- No-UI join flow works with `autoProceed=true`, `action="join"` and an active room.
-- Local audio/video toggles are callable through the bridge.
-- Screen-share publish uses `appData.mediaTag=screen-video` and remote screen-share consume updates the runtime probe.
-- Production cloud is the default; staging appears only when explicitly supplied for validation.
+| Feature | iOS 14 | iOS 15+ |
+|---------|--------|---------|
+| Full hosted UI (create / join) | ✅ | ✅ |
+| Headless mode (`autoProceed`) | ✅ | ✅ |
+| Chat, polls, participants list | ✅ | ✅ |
+| Screen sharing (ReplayKit) | ✅ | ✅ |
+| Recording controls | ✅ | ✅ |
+| Virtual Background | — | ✅ |
 
-## Current Status
+## Validated Capabilities
 
-- Physical iPhone validation has confirmed local video production, local screen-share production, browser-to-iPhone screen-share consume, and late-join receive refresh through this hosted path.
-- The shared UI has responsive video, audio, mini-card, and modal sizing for iPhone-width layouts.
-- macOS package tests pass for the safe native package surface, but real macOS media is not claimed until the macOS WebRTC artifact exports the required ObjC symbols and a runtime gate passes.
+The following capabilities have been validated on physical iPhone hardware and iOS simulator:
+
+- Hosted UI presents full-screen from UIKit and SwiftUI.
+- Create and join flows work with both the visible pre-join form and headless mode.
+- Headless mode (`autoProceed = true`) skips the pre-join form and connects immediately.
+- Local camera and microphone produce a live stream visible to remote participants.
+- Screen share produces a stream visible to remote participants.
+- Virtual Background (iOS 15+): person segmentation runs on-device; the background-replaced
+  stream is transmitted to remote participants.
+- Virtual Background degrades gracefully on iOS 14 — no errors or crashes.
+- In-room controls (mute, camera, hang-up, chat, participants) are accessible and functional.

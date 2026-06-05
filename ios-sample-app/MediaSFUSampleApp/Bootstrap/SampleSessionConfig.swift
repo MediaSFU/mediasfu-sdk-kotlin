@@ -1,11 +1,11 @@
 import Foundation
 
 struct SampleSessionConfig: Equatable, Codable {
-    var apiUserName: String = ""
-    var apiKey: String = ""
+    var apiUserName: String = "placeholderUser"
+    var apiKey: String = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012345678912"
     var localLink: String = ""
-    var userName: String = "tester"
-    var roomName: String = "mediasfu-demo"
+    var userName: String = ""
+    var roomName: String = ""
     var connectMediaSFU: Bool = true
     var action: SampleSessionAction = .create
     var durationMinutes: Int = 60

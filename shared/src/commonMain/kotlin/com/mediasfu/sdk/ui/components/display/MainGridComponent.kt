@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -109,11 +110,14 @@ fun MainGridComponent.renderCompose(
         return
     }
 
+    val isLightTheme = MaterialTheme.colorScheme.background.red > 0.5f
+    val containerBgColor = if (isLightTheme) MaterialTheme.colorScheme.background else Color(options.backgroundColor)
+
     Box(
         modifier = Modifier
             .width(options.width.dp)
             .height(options.height.dp)
-            .background(Color(options.backgroundColor))
+            .background(containerBgColor)
     ) {
         content()
 

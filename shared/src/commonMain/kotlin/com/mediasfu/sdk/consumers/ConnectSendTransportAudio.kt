@@ -16,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Parameters interface for connecting audio send transports.
@@ -174,8 +175,10 @@ suspend fun connectSendTransportAudio(
         val streamCandidate = options.stream
         val mediaStream = streamCandidate as? MediaStream
         val audioParamsSnapshot = parameters.audioParams ?: parameters.params ?: parameters.aParams
+        val audioParamsStream = audioParamsSnapshot?.stream
         val resolvedAudioTrack = audioParamsSnapshot?.track ?: runCatching {
-            mediaStream?.getAudioTracks()?.firstOrNull()
+            audioParamsStream?.getAudioTracks()?.firstOrNull()
+                ?: mediaStream?.getAudioTracks()?.firstOrNull()
         }.getOrNull()
 
         val extendedCaps = resolveExtendedRtpCapabilities(parameters)
@@ -183,7 +186,7 @@ suspend fun connectSendTransportAudio(
 
         val alignedAudioOptions = ProducerCapabilityAlignment.alignProducerOptions(
             baseOptions = audioParamsSnapshot,
-            stream = mediaStream,
+            stream = audioParamsStream ?: mediaStream,
             track = resolvedAudioTrack,
             negotiatedCodec = negotiatedCodec,
             label = "audio",
@@ -199,24 +202,37 @@ suspend fun connectSendTransportAudio(
         }
         val resolvedAudioCodecOptions = alignedAudioOptions.codecOptions
 
-        // Clean up any existing audio tracks to avoid duplicates.
-        parameters.localStream?.removeAudioTracksSafely()
-        parameters.localStreamAudio?.removeAudioTracksSafely()
+        Logger.i(
+            "ConnectSendTransportAudio",
+            "connect start target=$targetOption streamId=${resolvedStream?.id ?: mediaStream?.id ?: "none"} trackId=${effectiveAudioTrack?.id ?: "none"} transportId=${parameters.producerTransport?.id ?: "null"} existingProducer=${parameters.audioProducer != null}"
+        )
 
-        if (resolvedStream != null) {
-            parameters.updateLocalStreamAudio(resolvedStream)
-            val currentLocalStream = parameters.localStream
-            if (currentLocalStream == null) {
-                parameters.updateLocalStream(resolvedStream)
-            } else if (currentLocalStream !== resolvedStream) {
-                resolvedStream.getAudioTracks().firstOrNull()?.let { track ->
-                    try {
-                        currentLocalStream.addTrack(track)
-                        parameters.updateLocalStream(currentLocalStream)
-                    } catch (_: Exception) {
-                        // Silently handle errors
-                    }
-                }
+        if (resolvedStream == null || effectiveAudioTrack == null) {
+            Logger.e(
+                "ConnectSendTransportAudio",
+                "connectSendTransportAudio missing audio track/stream streamId=${resolvedStream?.id ?: "none"} trackId=${effectiveAudioTrack?.id ?: "none"}"
+            )
+            com.mediasfu.sdk.util.MediaSFURuntimeProbe.recordProducerSignalStage(
+                "track-missing",
+                "audio",
+                "stream=${resolvedStream?.id ?: "none"} track=${effectiveAudioTrack?.id ?: "none"}"
+            )
+            return Result.failure(
+                ConnectSendTransportAudioException("Audio track is unavailable for production")
+            )
+        }
+
+        parameters.updateLocalStreamAudio(resolvedStream)
+        val currentLocalStream = parameters.localStream
+        if (currentLocalStream == null) {
+            parameters.updateLocalStream(resolvedStream)
+        } else if (currentLocalStream !== resolvedStream) {
+            try {
+                currentLocalStream.removeAudioTracksSafely()
+                currentLocalStream.addTrack(effectiveAudioTrack)
+                parameters.updateLocalStream(currentLocalStream)
+            } catch (_: Exception) {
+                // Silently handle errors
             }
         }
 
@@ -230,30 +246,38 @@ suspend fun connectSendTransportAudio(
 
             val existingProducer = parameters.audioProducer
             if (existingProducer == null) {
-                if (effectiveAudioTrack != null) {
-                    val remoteProduceAppData = mapOf(
-                        "kind" to "audio",
-                        "source" to "microphone",
-                        "trackId" to effectiveAudioTrack.id
+                val remoteProducer = runCatching {
+                    Logger.i(
+                        "ConnectSendTransportAudio",
+                        "produce remote trackId=${effectiveAudioTrack.id} enabled=${effectiveAudioTrack.enabled} kind=${effectiveAudioTrack.kind} transportId=${producerTransport.id}"
                     )
-                    val remoteProducer = runCatching {
+                    withContext(Dispatchers.Default) {
                         producerTransport.produce(
                             track = effectiveAudioTrack,
                             encodings = resolvedAudioEncodings,
                             codecOptions = resolvedAudioCodecOptions,
-                            appData = remoteProduceAppData
-                        )
-                    }.getOrElse { error ->
-                        return Result.failure(
-                            ConnectSendTransportAudioException(
-                                "Failed to produce on remote transport: ${error.message}",
-                                error
+                            codec = alignedAudioOptions.codec,
+                            appData = mapOf(
+                                "mediaTag" to "audio",
+                                "source" to "microphone",
+                                "trackId" to effectiveAudioTrack.id
                             )
                         )
                     }
-
-                    parameters.updateAudioProducer(remoteProducer)
+                }.getOrElse { error ->
+                    return Result.failure(
+                        ConnectSendTransportAudioException(
+                            "Failed to produce on remote transport: ${error.message}",
+                            error
+                        )
+                    )
                 }
+
+                Logger.i(
+                    "ConnectSendTransportAudio",
+                    "produce remote success producerId=${remoteProducer.id} paused=${remoteProducer.paused} transportId=${producerTransport.id}"
+                )
+                parameters.updateAudioProducer(remoteProducer)
             }
         }
 
@@ -262,6 +286,10 @@ suspend fun connectSendTransportAudio(
                 options.copy(stream = resolvedStream)
             )
             if (localResult.isFailure) {
+                Logger.e(
+                    "ConnectSendTransportAudio",
+                    "local connect failed: ${localResult.exceptionOrNull()?.message ?: "unknown"}"
+                )
                 return localResult
             }
         }

@@ -1,6 +1,7 @@
 // SignalNewConsumerTransport.kt
 package com.mediasfu.sdk.consumers
 import com.mediasfu.sdk.util.Logger
+import com.mediasfu.sdk.util.MediaSFURuntimeProbe
 import com.mediasfu.sdk.util.toStringAnyMap
 
 import com.mediasfu.sdk.methods.utils.mini_audio_player.MiniAudioPlayerParameters
@@ -14,6 +15,7 @@ import com.mediasfu.sdk.socket.SocketManager
 import com.mediasfu.sdk.webrtc.*
 import com.mediasfu.sdk.webrtc.ortc.OrtcUtils
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -349,21 +351,34 @@ suspend fun signalNewConsumerTransport(
         val parameters = options.parameters.getUpdatedAllParams()
         val socket = options.socket
         val producerId = options.producerId
+
+        MediaSFURuntimeProbe.recordConsumerSignalStage(
+            "entered",
+            producerId,
+            "level=${options.islevel}"
+        )
+        Logger.i(
+            "SignalNewConsumerTransport",
+            "entered producerId=$producerId level=${options.islevel} consumingAlready=${parameters.consumingTransports.contains(producerId)}"
+        )
         
         // Validate required parameters
         val device = parameters.device
         if (device == null) {
+            MediaSFURuntimeProbe.recordConsumerSignalStage("device-null", producerId, "")
             return Result.failure(
                 SignalNewConsumerTransportException("Device is null")
             )
         }
 
         // Get RTP capabilities from parameters (must be set when device is loaded)
-        val baseRtpCapabilities = parameters.rtpCapabilities
-            ?: device.currentRtpCapabilities()
+        val deviceRtpCapabilities = device.currentRtpCapabilities()
+        val baseRtpCapabilities = deviceRtpCapabilities
+            ?: parameters.rtpCapabilities
             ?: parameters.routerRtpCapabilities
 
         if (baseRtpCapabilities == null) {
+            MediaSFURuntimeProbe.recordConsumerSignalStage("rtp-null", producerId, "")
             return Result.failure(
                 SignalNewConsumerTransportException("RTP capabilities not loaded")
             )
@@ -387,7 +402,7 @@ suspend fun signalNewConsumerTransport(
             null
         }
 
-        val rtpCapabilities = cachedNegotiatedCaps ?: freshlyNegotiatedCaps ?: baseRtpCapabilities
+        val rtpCapabilities = deviceRtpCapabilities ?: cachedNegotiatedCaps ?: freshlyNegotiatedCaps ?: baseRtpCapabilities
         
         // Filter out problematic header extensions (urn:3gpp:video-orientation)
         val filteredRtpCapabilities = rtpCapabilities.copy(
@@ -421,17 +436,37 @@ suspend fun signalNewConsumerTransport(
             onSuccess = { response ->
                     val params = response["params"].toStringAnyMap()
                     if (params.isEmpty()) {
+                    MediaSFURuntimeProbe.recordConsumerSignalStage("transport-fail", producerId, "empty-params")
                     return Result.failure(SignalNewConsumerTransportException("createWebRtcTransport returned null params"))
                 }
                 
                 if (params.containsKey("error")) {
                     val error = params["error"]
+                    MediaSFURuntimeProbe.recordConsumerSignalStage("transport-fail", producerId, "$error")
                     return Result.failure(SignalNewConsumerTransportException("createWebRtcTransport error: $error"))
                 }
                 
+                MediaSFURuntimeProbe.recordConsumerSignalStage(
+                    "transport-ok",
+                    producerId,
+                    (params["id"] as? String).orEmpty()
+                )
+                Logger.i(
+                    "SignalNewConsumerTransport",
+                    "transport-ok producerId=$producerId serverConsumerTransportId=${params["id"] as? String ?: ""}"
+                )
                 params
             },
             onFailure = { error ->
+                MediaSFURuntimeProbe.recordConsumerSignalStage(
+                    "transport-fail",
+                    producerId,
+                    error.toProbeDetail()
+                )
+                Logger.e(
+                    "SignalNewConsumerTransport",
+                    "transport-fail producerId=$producerId error=${error.message}"
+                )
                 return Result.failure(SignalNewConsumerTransportException("createWebRtcTransport failed", error))
             }
         )
@@ -443,6 +478,10 @@ suspend fun signalNewConsumerTransport(
         
         // Convert FILTERED rtpCapabilities to JSON-serializable map
         val rtpCapsMap = filteredRtpCapabilities.toMap()
+        Logger.i(
+            "SignalNewConsumerTransport",
+            "consume-capabilities producerId=$producerId source=${if (deviceRtpCapabilities != null) "device" else if (cachedNegotiatedCaps != null) "cached-negotiated" else if (freshlyNegotiatedCaps != null) "fresh-negotiated" else "base"} codecs=${filteredRtpCapabilities.codecDebugSummary()} headerExts=${filteredRtpCapabilities.headerExtensions.size}"
+        )
         
         // === CODEC DEBUG: Log client RTP capabilities being sent ===
         val videoCodecs = filteredRtpCapabilities.codecs.filter { it.mimeType.startsWith("video/", ignoreCase = true) }
@@ -480,6 +519,15 @@ suspend fun signalNewConsumerTransport(
                 // Parse successful response - extract from params if nested
                 val dataMap = if (params.isNotEmpty()) params else response.toStringAnyMap()
                 val consumeResponse = parseConsumeResponse(dataMap)
+                MediaSFURuntimeProbe.recordConsumerSignalStage(
+                    "consume-ok",
+                    producerId,
+                    consumeResponse.kind
+                )
+                Logger.i(
+                    "SignalNewConsumerTransport",
+                    "consume-ok producerId=$producerId consumerId=${consumeResponse.id} kind=${consumeResponse.kind} rtp=${consumeResponse.rtpDebugSummary()}"
+                )
                 
                 // === CODEC DEBUG: Log consume response from server ===
                 val rtpParams = consumeResponse.rtpParameters
@@ -504,23 +552,49 @@ suspend fun signalNewConsumerTransport(
                 val clientTransport = runCatching {
                     device.createRecvTransport(transportParams.toStringAnyMap())
                 }.getOrElse { error ->
+                    MediaSFURuntimeProbe.recordConsumerSignalStage(
+                        "client-transport-fail",
+                        producerId,
+                        error.toProbeDetail()
+                    )
                     return@fold Result.failure(SignalNewConsumerTransportException("Failed to create client transport", error))
                 }
+                MediaSFURuntimeProbe.recordConsumerSignalStage(
+                    "client-transport-ok",
+                    producerId,
+                    clientTransport.id
+                )
+                Logger.i(
+                    "SignalNewConsumerTransport",
+                    "client-transport-ok producerId=$producerId clientTransportId=${clientTransport.id}"
+                )
                 
                 // Set up transport connect handler (following Flutter/React pattern)
                 clientTransport.onConnect { connectData ->
-                    
-                    // Emit transport-recv-connect to server (non-blocking fire-and-forget)
-                    CoroutineScope(Dispatchers.Default).launch {
-                        val payload = mapOf(
-                            "dtlsParameters" to connectData.dtlsParameters.toMap(),
-                            "serverConsumerTransportId" to serverConsumerTransportId
-                        )
-                        socket.emit("transport-recv-connect", payload)
+                    try {
+                        val dtlsParameters = connectData.dtlsParameters
+                        connectData.callback()
+                        CoroutineScope(Dispatchers.Default).launch {
+                            val payload = mapOf(
+                                "dtlsParameters" to dtlsParameters.toMap(),
+                                "serverConsumerTransportId" to serverConsumerTransportId
+                            )
+                            runCatching { socket.emit("transport-recv-connect", payload) }
+                                .onFailure { error ->
+                                    Logger.w(
+                                        "SignalNewConsumerTransport",
+                                        "transport-recv-connect emit failed producerId=$producerId transportId=$serverConsumerTransportId: ${error.message}"
+                                    )
+                                }
+                        }
+                    } catch (error: Throwable) {
+                        val exception = error as? Exception
+                            ?: Exception(
+                                error.message ?: "Failed to connect consumer transport",
+                                error
+                            )
+                        connectData.errback(exception)
                     }
-                    
-                    // Acknowledge the connection
-                    connectData.callback()
                 }
                 
                 // Set up connection state change handler
@@ -532,15 +606,31 @@ suspend fun signalNewConsumerTransport(
                 
                 // STEP 4: Create consumer from consume response (following React pattern)
                 val consumer = runCatching {
-                    clientTransport.consume(
-                        id = consumeResponse.id,
-                        producerId = consumeResponse.producerId,
-                        kind = consumeResponse.kind,
-                        rtpParameters = consumeResponse.rtpParameters
-                    )
+                    withContext(Dispatchers.Default) {
+                        clientTransport.consume(
+                            id = consumeResponse.id,
+                            producerId = consumeResponse.producerId,
+                            kind = consumeResponse.kind,
+                            rtpParameters = consumeResponse.rtpParameters
+                        )
+                    }
                 }.getOrElse { error ->
+                    MediaSFURuntimeProbe.recordConsumerSignalStage(
+                        "consumer-create-fail",
+                        producerId,
+                        error.toProbeDetail()
+                    )
                     return@fold Result.failure(SignalNewConsumerTransportException("Failed to create consumer", error))
                 }
+                MediaSFURuntimeProbe.recordConsumerSignalStage(
+                    "consumer-created",
+                    producerId,
+                    consumer.id
+                )
+                Logger.i(
+                    "SignalNewConsumerTransport",
+                    "consumer-created producerId=$producerId consumerId=${consumer.id} kind=${consumeResponse.kind}"
+                )
                 
                 // STEP 4.5: Add to consumerTransports list for tracking
                 // This is critical for ProducerClosed to find and clean up this consumer later
@@ -561,50 +651,80 @@ suspend fun signalNewConsumerTransport(
 
                 // STEP 5: Emit consumer-resume after consume succeeds
                 val serverConsumerId = consumeResponse.serverConsumerId.ifEmpty { consumeResponse.id }
-                
-                val resumeResult = runCatching {
+
+                val resumeResponse = try {
                     withTimeout(30000) {
-                        socket.emitWithAck<Map<String, Any?>>(
+                        socket.emitWithAck<Any?>(
                             event = "consumer-resume",
                             data = mapOf("serverConsumerId" to serverConsumerId),
                             timeout = 30000
                         )
                     }
+                } catch (_: Exception) {
+                    runCatching {
+                        socket.emit(
+                            "consumer-resume",
+                            mapOf("serverConsumerId" to serverConsumerId)
+                        )
+                    }
+                    null
                 }
-                
-                resumeResult.fold(
-                    onSuccess = { resumeResponse ->
-                        val resumed = resumeResponse["resumed"].toLooseBoolean()
-                        
-                        if (resumed) {
-                            runCatching { consumer.resume() }
-                            
-                            // Consumer resumed successfully - now call consumerResume to update UI
-                            // Get FRESH consumer resume parameters right before calling consumerResume
-                            // This ensures we have the latest participants list populated by allMembersRest
-                            val consumerResumeParams = parameters.consumerResumeParamsProvider().getUpdatedAllParams()
-                            
-                            // Call consumerResume (this updates UI and media handling)
-                            val resumeOptions = ConsumerResumeOptions(
-                                stream = consumer.stream,
-                                consumer = consumer,
-                                kind = consumeResponse.kind,
-                                remoteProducerId = producerId,
-                                parameters = consumerResumeParams,
-                                nsock = socket
-                            )
-                            
-                            runCatching {
-                                parameters.consumerResume(resumeOptions)
-                            }
-                        }
-                    },
-                    onFailure = { _ -> }
-                )
+
+                val resumed = resumeResponse.resumeAckSucceeded(defaultOnNull = true)
+                if (resumed) {
+                    MediaSFURuntimeProbe.recordConsumerSignalStage(
+                        "resume-ack-ok",
+                        producerId,
+                        serverConsumerId
+                    )
+                    Logger.i(
+                        "SignalNewConsumerTransport",
+                        "resume-ack-ok producerId=$producerId serverConsumerId=$serverConsumerId"
+                    )
+                    runCatching { consumer.resume() }
+
+                    // Consumer resumed successfully - now call consumerResume to update UI
+                    // Get FRESH consumer resume parameters right before calling consumerResume
+                    // This ensures we have the latest participants list populated by allMembersRest
+                    val consumerResumeParams = parameters.consumerResumeParamsProvider().getUpdatedAllParams()
+
+                    // Call consumerResume (this updates UI and media handling)
+                    val resumeOptions = ConsumerResumeOptions(
+                        stream = consumer.stream,
+                        consumer = consumer,
+                        kind = consumeResponse.kind,
+                        remoteProducerId = producerId,
+                        parameters = consumerResumeParams,
+                        nsock = socket
+                    )
+
+                    runCatching {
+                        parameters.consumerResume(resumeOptions)
+                    }
+                } else {
+                    MediaSFURuntimeProbe.recordConsumerSignalStage(
+                        "resume-ack-fail",
+                        producerId,
+                        serverConsumerId
+                    )
+                    Logger.w(
+                        "SignalNewConsumerTransport",
+                        "resume-ack-fail producerId=$producerId serverConsumerId=$serverConsumerId"
+                    )
+                }
                 
                 Result.success(Unit)
             },
             onFailure = { error ->
+                MediaSFURuntimeProbe.recordConsumerSignalStage(
+                    "consume-fail",
+                    producerId,
+                    error.toProbeDetail()
+                )
+                Logger.e(
+                    "SignalNewConsumerTransport",
+                    "consume-fail producerId=$producerId error=${error.message}"
+                )
                 Result.failure(
                     SignalNewConsumerTransportException(
                         "Failed to signal new consumer transport: ${error.message}",
@@ -670,6 +790,29 @@ private fun ConsumeResponse.rtpDebugSummary(): String {
 
     return "codecs=$codecs headerExts=$headerExts encodings=$encodings rtcp=$rtcp"
 }
+
+private fun Throwable.toProbeDetail(maxLen: Int = 220): String {
+    val base = buildString {
+        append(this@toProbeDetail::class.simpleName ?: "Throwable")
+        val msg = this@toProbeDetail.message.orEmpty()
+        if (msg.isNotBlank()) {
+            append(": ")
+            append(msg)
+        }
+        val causeMsg = this@toProbeDetail.cause?.message.orEmpty()
+        if (causeMsg.isNotBlank() && !msg.contains(causeMsg)) {
+            append(" | cause: ")
+            append(causeMsg)
+        }
+    }
+    return if (base.length <= maxLen) base else base.take(maxLen)
+}
+
+private fun RtpCapabilities.codecDebugSummary(): String =
+    codecs.joinToString(prefix = "[", postfix = "]") { codec ->
+        val payload = codec.preferredPayloadType?.toString() ?: "?"
+        "$payload/${codec.mimeType}"
+    }
 
 /**
  * Converts RtpCapabilities to a JSON-serializable map structure for Socket.IO.

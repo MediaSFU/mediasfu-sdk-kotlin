@@ -64,12 +64,12 @@ struct MediaSFUSampleRootView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .task {
-            prepareSessionIfNeeded()
+            await prepareSessionIfNeeded()
         }
     }
 
     @MainActor
-    private func prepareSessionIfNeeded() {
+    private func prepareSessionIfNeeded() async {
         guard !didPrepareSession else {
             return
         }
@@ -90,6 +90,12 @@ struct MediaSFUSampleRootView: View {
 
         self.resolvedSessionConfig = resolvedConfig
         self.hostReloadToken = UUID()
+        // Defer showing the SDK host container until the UIWindowScene screen
+        // bounds have been fully configured.  UIScreen.main.bounds returns the
+        // legacy 320×480 placeholder during the very first SwiftUI layout pass;
+        // waiting here ensures sizeThatFits receives the real full-screen
+        // proposal (e.g. 393×852 on iPhone 15 Pro) instead.
+        try? await Task.sleep(nanoseconds: 200_000_000)  // 200 ms
         self.didPrepareSession = true
     }
 }

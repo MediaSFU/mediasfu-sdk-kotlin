@@ -288,6 +288,7 @@ class AndroidUnityReceiveTransportBackendCoreTest {
             track: MediaStreamTrack,
             encodings: List<RtpEncodingParameters>,
             codecOptions: ProducerCodecOptions?,
+            codec: RtpCodecCapability?,
             appData: Map<String, Any?>?
         ): WebRtcProducer {
             throw UnsupportedOperationException("Not needed in test")

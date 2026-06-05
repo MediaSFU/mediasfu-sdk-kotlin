@@ -10,10 +10,14 @@ import com.mediasfu.sdk.methods.utils.mini_audio_player.MiniAudioPlayerOptions
 import com.mediasfu.sdk.methods.utils.mini_audio_player.MiniAudioPlayerParameters
 import com.mediasfu.sdk.ui.components.display.DefaultMiniAudio
 import com.mediasfu.sdk.ui.components.display.MiniAudioOptions
+import com.mediasfu.sdk.util.Logger
+import com.mediasfu.sdk.util.MediaSFURuntimeProbe
 import com.mediasfu.sdk.webrtc.MediaStream
 import com.mediasfu.sdk.webrtc.AudioStatsProvider
 import com.mediasfu.sdk.webrtc.WebRtcConsumer
 import kotlinx.coroutines.delay
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Parameters for handling the resumption of audio and video streams in a media session.
@@ -104,6 +108,79 @@ data class ConsumerResumeOptions(
     val nsock: SocketManager
 )
 
+data class ConsumerResumeScreenShareResolution(
+    val screenId: String,
+    val shareScreenStarted: Boolean?
+)
+
+internal fun resolveScreenShareStateForConsumerResume(
+    participants: List<Participant>,
+    currentScreenId: String?,
+    remoteProducerId: String,
+    whiteboardStarted: Boolean,
+    whiteboardEnded: Boolean
+): ConsumerResumeScreenShareResolution {
+    val activeScreenParticipant = participants.firstOrNull {
+        !it.ScreenID.isNullOrBlank() && it.ScreenOn == true
+    }
+
+    if (activeScreenParticipant != null) {
+        return ConsumerResumeScreenShareResolution(
+            screenId = activeScreenParticipant.ScreenID.orEmpty(),
+            shareScreenStarted = true
+        )
+    }
+
+    if (whiteboardStarted && !whiteboardEnded) {
+        return ConsumerResumeScreenShareResolution(
+            screenId = currentScreenId.orEmpty(),
+            shareScreenStarted = null
+        )
+    }
+
+    val pendingScreenId = currentScreenId.orEmpty()
+    if (pendingScreenId.isNotBlank()) {
+        return ConsumerResumeScreenShareResolution(
+            screenId = pendingScreenId,
+            shareScreenStarted = if (remoteProducerId == pendingScreenId) true else null
+        )
+    }
+
+    return ConsumerResumeScreenShareResolution(
+        screenId = "",
+        shareScreenStarted = false
+    )
+}
+
+internal fun resolveParticipantForRemoteProducer(
+    remoteProducerId: String,
+    kind: String,
+    participants: List<Participant>,
+    localParticipantName: String,
+    namedStreams: List<Stream> = emptyList()
+): Participant? {
+    val exactMatch = when (kind.lowercase()) {
+        "audio" -> participants.firstOrNull { it.audioID == remoteProducerId }
+        else -> participants.firstOrNull { it.videoID == remoteProducerId }
+    }
+    if (exactMatch != null) return exactMatch
+
+    val streamHintName = namedStreams
+        .firstOrNull { it.producerId == remoteProducerId }
+        ?.name
+        ?.takeIf { it.isNotBlank() }
+    if (streamHintName != null) {
+        participants.firstOrNull { it.name == streamHintName }?.let { return it }
+    }
+
+    val placeholderCandidates = participants.filter { participant ->
+        participant.name != localParticipantName &&
+            participant.extra["placeholder"]?.jsonPrimitive?.booleanOrNull == true
+    }
+
+    return placeholderCandidates.singleOrNull()
+}
+
 /**
  * Handles the resumption of a media stream (either audio or video) by managing the socket
  * connections, updating the UI, and reordering streams as necessary.
@@ -157,12 +234,14 @@ data class ConsumerResumeOptions(
 suspend fun consumerResume(options: ConsumerResumeOptions) {
     try {
         // Destructure options for easy access
-    val stream = options.stream
+        val stream = options.stream
         val kind = options.kind
         val remoteProducerId = options.remoteProducerId
         val parameters = options.parameters
         val nsock = options.nsock
         val consumer = options.consumer
+
+        MediaSFURuntimeProbe.recordConsumerResumeEntered(kind, remoteProducerId)
 
         // Refresh parameters using the latest state
         val updatedParams = parameters.getUpdatedAllParams()
@@ -189,7 +268,10 @@ suspend fun consumerResume(options: ConsumerResumeOptions) {
         val deferReceive = updatedParams.deferReceive
         val firstRound = updatedParams.firstRound
         var remoteScreenStream = updatedParams.remoteScreenStream.toMutableList()
-        val hostLabel = updatedParams.hostLabel
+        val hostLabel = participants.firstOrNull { participant ->
+            (participant.isAdmin || participant.isHost || participant.islevel == "2") &&
+                participant.name.isNotBlank()
+        }?.name ?: updatedParams.hostLabel
         val whiteboardStarted = updatedParams.whiteboardStarted
         val whiteboardEnded = updatedParams.whiteboardEnded
 
@@ -221,6 +303,11 @@ suspend fun consumerResume(options: ConsumerResumeOptions) {
             // Find participant with audioID == remoteProducerId
             val participant = participants.firstOrNull { it.audioID == remoteProducerId }
             val name = participant?.name ?: ""
+            MediaSFURuntimeProbe.recordConsumerParticipantResolution(
+                kind = "audio",
+                remoteProducerId = remoteProducerId,
+                participantName = name.ifBlank { null }
+            )
 
             // If the participant is the host, no action is needed
             if (name == hostLabel) {
@@ -353,6 +440,7 @@ suspend fun consumerResume(options: ConsumerResumeOptions) {
             // Add the new audio stream to allAudioStreams
             allAudioStreams.add(Stream(producerId = remoteProducerId, stream = stream))
             updateAllAudioStreams(allAudioStreams)
+            MediaSFURuntimeProbe.recordTrackedStreams("audio", allAudioStreams.size)
 
             if (name.isNotEmpty()) {
                 // Add to audStreamNames
@@ -518,20 +606,24 @@ suspend fun consumerResume(options: ConsumerResumeOptions) {
 
                 // Find the participant associated with the resumed video
                 val participant = participants.firstOrNull { it.videoID == remoteProducerId }
+                MediaSFURuntimeProbe.recordConsumerParticipantResolution(
+                    kind = "video",
+                    remoteProducerId = remoteProducerId,
+                    participantName = participant?.name
+                )
 
-                if (participant != null &&
-                    participant.name.isNotEmpty() &&
-                    participant.name != hostLabel
-                ) {
-                    // Add the new video stream to allVideoStreams
-                    allVideoStreams.add(
-                        Stream(
-                            producerId = remoteProducerId,
-                            stream = stream,
-                            socket_ = nsock
-                        )
+                if (participant != null && participant.name.isNotEmpty()) {
+                    val resumedVideoStream = Stream(
+                        producerId = remoteProducerId,
+                        stream = stream,
+                        socket_ = nsock,
+                        name = participant.name,
+                        videoID = participant.videoID
                     )
+                    allVideoStreams.removeAll { it.producerId == remoteProducerId }
+                    allVideoStreams.add(resumedVideoStream)
                     updateAllVideoStreams(allVideoStreams)
+                    MediaSFURuntimeProbe.recordTrackedStreams("video", allVideoStreams.size)
                 }
 
                 if (participant != null) {
@@ -577,6 +669,12 @@ suspend fun consumerResume(options: ConsumerResumeOptions) {
                         // If the resumed producer is the admin, update main window
                         if (remoteProducerId == adminVideoID) {
                             updateUpdateMainWindow(true)
+                            prepopulateUserMedia(
+                                PrepopulateUserMediaOptions(
+                                    name = hostLabel,
+                                    parameters = parameters.getUpdatedAllParams()
+                                )
+                            )
                         }
                     }
 
@@ -644,6 +742,6 @@ suspend fun consumerResume(options: ConsumerResumeOptions) {
             }
         }
     } catch (error: Exception) {
-        // Error during consumer resume
+        Logger.e("ConsumerResume", "MediaSFU - consumerResume error: ${error.message}")
     }
 }

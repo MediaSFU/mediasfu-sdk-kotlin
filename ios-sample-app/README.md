@@ -80,3 +80,21 @@ The bootstrap screen also checks for optional env-style override files with `MED
 5. Simulator/macOS fallback files `/tmp/mediasfu_sample_env.txt`, `/tmp/mediasfu_ui_test_env.txt`, and `/tmp/mediasfu_creds.txt`.
 
 Process environment values still take precedence over file-backed defaults.
+
+## Real native bridge reminder
+
+When building the physical iPhone app for real mediasoup validation, you must enable the native libmediasoup binding at build time:
+
+```bash
+MEDIA_SFU_ENABLE_REAL_LIBMEDIASOUPCLIENT_BINDING=1 xcodebuild ...
+```
+
+Without that build-time flag, the app can still launch into the shared prejoin UI but the bridge will fall back to placeholder / pending-binding mode instead of `fullyBundledNative`.
+
+For manual app launches from `Documents/mediasfu_sample_env.txt`, you can also set:
+
+```text
+MEDIASFU_REQUIRE_REAL_NATIVE_BRIDGE=1
+```
+
+The sample app now reads that override from the same bootstrap env file path as the rest of the `MEDIASFU_*` settings, so placeholder fallback is surfaced immediately instead of being easy to miss.

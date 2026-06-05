@@ -16,16 +16,29 @@ DERIVED_DATA_PATH="${MEDIA_SFU_IOS_DERIVED_DATA_PATH:-/tmp/mediasfu-ios-simulato
 SHARED_DIR="${MEDIA_SFU_SHARED_DIR:-$ROOT_DIR/../shared}"
 GRADLEW_BIN="${MEDIA_SFU_GRADLEW_BIN:-$ROOT_DIR/../gradlew}"
 ROOM_DURATION_MINUTES="${MEDIASFU_ROOM_DURATION_MINUTES:-60}"
-API_USERNAME="${MEDIASFU_API_USERNAME:-}"  # Required: export MEDIASFU_API_USERNAME before running
-ROOMS_ENDPOINT="${MEDIASFU_CLOUD_ROOMS_ENDPOINT:-https://mediasfu.com/v1/rooms}"
+API_USERNAME="${MEDIASFU_API_USERNAME:-}"
+ROOMS_ENDPOINT="${MEDIASFU_CLOUD_ROOMS_ENDPOINT:-https://mediasfu.com/v1/rooms}" # ENDPOINT_TOGGLE
 CREDS_FILE="${MEDIASFU_CREDS_FILE:-/tmp/mediasfu_creds.txt}"
-EVENT_TYPE="${MEDIASFU_EVENT_TYPE:-conference}"
-CHROME_JOIN_SETTLE_SECONDS="${MEDIASFU_CHROME_JOIN_SETTLE_SECONDS:-5}"
+EVENT_TYPE="${MEDIASFU_EVENT_TYPE:-webinar}"
+DEFAULT_IOS_ISLEVEL="0"
+# Probe joiners should default to the plain participant role.
+# Only the event creator / host should be islevel=2. Promote to islevel=1 explicitly
+# only for a dedicated co-host/moderator test; otherwise React/Flutter host placement
+# and viewer layout comparisons drift.
+ROOM_CREATOR_ISLEVEL="${MEDIASFU_ROOM_CREATOR_ISLEVEL:-2}"
+IOS_USER_ISLEVEL="${MEDIASFU_IOS_ISLEVEL:-$DEFAULT_IOS_ISLEVEL}"
+# CRITICAL: keep the simulator probe on the same host/role assumptions as the physical lane.
+# If the browser room creator falls back to islevel=0 here, host detection drifts and the
+# Swift/KMP UI can appear to misplace media even when the rendering logic is otherwise correct.
+# Give the joined browser a short settle window before automation starts producing media.
+# This avoids transient null/undefined transport timing races during early production.
+CHROME_JOIN_SETTLE_SECONDS="${MEDIASFU_CHROME_JOIN_SETTLE_SECONDS:-2}"
 CHROME_PATH="${MEDIASFU_CHROME_PATH:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
 CHROME_DEBUG_PORT="${MEDIASFU_CHROME_DEBUG_PORT:-$((9300 + RANDOM % 500))}"
 RUN_MARKER_PREFLIGHT="${MEDIASFU_RUN_MARKER_PREFLIGHT:-1}"
 RUN_EXISTING_MEDIA_PROBE="${MEDIASFU_RUN_EXISTING_MEDIA_PROBE:-1}"
 RUN_AUDIO_PRODUCE_PROBE="${MEDIASFU_RUN_AUDIO_PRODUCE_PROBE:-1}"
+RUN_VIDEO_PRODUCE_PROBE="${MEDIASFU_RUN_VIDEO_PRODUCE_PROBE:-1}"
 RUN_SCREENSHARE_PROBE="${MEDIASFU_RUN_SCREENSHARE_PROBE:-1}"
 SCREENSHARE_SOURCE_MODE="${MEDIASFU_SCREENSHARE_SOURCE:-browser}"
 PRESYNC_SHARED_FRAMEWORK="${MEDIASFU_PRESYNC_SHARED_FRAMEWORK:-1}"
@@ -38,6 +51,14 @@ if [[ -z "$RUN_ID_SUFFIX" ]]; then
 fi
 WEB_USER="${MEDIASFU_WEB_USER_NAME:-web${RUN_ID_SUFFIX}}"
 IOS_USER="${MEDIASFU_USER_NAME:-ios${RUN_ID_SUFFIX}}"
+PREFLIGHT_IOS_USER="${MEDIASFU_IOS_PREFLIGHT_USER:-$IOS_USER}"
+if [[ "$PREFLIGHT_IOS_USER" == "$IOS_USER" ]]; then
+	if [[ ${#IOS_USER} -ge 10 ]]; then
+		PREFLIGHT_IOS_USER="${IOS_USER:0:9}p"
+	else
+		PREFLIGHT_IOS_USER="${IOS_USER}p"
+	fi
+fi
 CREATE_RESPONSE="$RUN_STATE_DIR/mediasfu_create_${RUN_ID}.json"
 JOIN_RESPONSE="$RUN_STATE_DIR/mediasfu_join_probe_${RUN_ID}.json"
 ENV_FILE="$RUN_STATE_DIR/mediasfu_ui_test_env_${RUN_ID}.txt"
@@ -99,7 +120,12 @@ if [[ -f "$CREDS_FILE" ]]; then
 	set +a
 fi
 
+API_USERNAME="${MEDIASFU_API_USERNAME:-}"
 API_KEY="${MEDIASFU_API_KEY:-}"
+if [[ -z "$API_USERNAME" ]]; then
+	echo "MEDIASFU_API_USERNAME is required, either exported or available in $CREDS_FILE." >&2
+	exit 2
+fi
 if [[ -z "$API_KEY" ]]; then
 	echo "MEDIASFU_API_KEY is required, either exported or available in $CREDS_FILE." >&2
 	exit 2
@@ -149,6 +175,8 @@ boot_simulator() {
 		echo "Simulator did not become ready: $SIMULATOR_ID" >&2
 		exit 3
 	fi
+	xcrun simctl privacy "$SIMULATOR_ID" grant microphone "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
+	xcrun simctl privacy "$SIMULATOR_ID" grant camera "$APP_BUNDLE_ID" >/dev/null 2>&1 || true
 	printf 'Booted simulator: %s\n' "$SIMULATOR_ID"
 }
 
@@ -189,7 +217,7 @@ create_room() {
 	create_status=$(curl -sS -o "$CREATE_RESPONSE" -w "%{http_code}" -X POST "$ROOMS_ENDPOINT" \
 		-H "Authorization: Bearer ${API_USERNAME}:${API_KEY}" \
 		-H "Content-Type: application/json" \
-		--data-raw "{\"action\":\"create\",\"duration\":${ROOM_DURATION_MINUTES},\"capacity\":4,\"userName\":\"${WEB_USER}\",\"roomName\":\"\",\"adminPasscode\":\"\",\"islevel\":\"0\",\"eventType\":\"${EVENT_TYPE}\"}")
+		--data-raw "{\"action\":\"create\",\"duration\":${ROOM_DURATION_MINUTES},\"capacity\":4,\"userName\":\"${WEB_USER}\",\"roomName\":\"\",\"adminPasscode\":\"\",\"islevel\":\"${ROOM_CREATOR_ISLEVEL}\",\"eventType\":\"${EVENT_TYPE}\"}")
 
 	ROOM_NAME="$(jq -r '.roomName // empty' "$CREATE_RESPONSE")"
 	SECRET="$(jq -r '.secret // empty' "$CREATE_RESPONSE")"
@@ -205,11 +233,16 @@ create_room() {
 }
 
 verify_join_api() {
-	local join_status join_success
+	local join_payload join_status join_success
+	if [[ "$IOS_USER_ISLEVEL" == "2" ]]; then
+		join_payload="{\"action\":\"join\",\"meetingID\":\"${ROOM_NAME}\",\"userName\":\"${PREFLIGHT_IOS_USER}\",\"adminPasscode\":\"${SECRET}\",\"islevel\":\"${IOS_USER_ISLEVEL}\"}"
+	else
+		join_payload="{\"action\":\"join\",\"meetingID\":\"${ROOM_NAME}\",\"userName\":\"${PREFLIGHT_IOS_USER}\",\"islevel\":\"${IOS_USER_ISLEVEL}\"}"
+	fi
 	join_status=$(curl -sS -o "$JOIN_RESPONSE" -w "%{http_code}" -X POST "$ROOMS_ENDPOINT" \
 		-H "Authorization: Bearer ${API_USERNAME}:${API_KEY}" \
 		-H "Content-Type: application/json" \
-		--data-raw "{\"action\":\"join\",\"meetingID\":\"${ROOM_NAME}\",\"userName\":\"${IOS_USER}\",\"adminPasscode\":\"${SECRET}\",\"islevel\":\"0\"}")
+		--data-raw "$join_payload")
 	join_success="$(jq -r '.success // false' "$JOIN_RESPONSE")"
 
 	if [[ "$join_status" != "200" || "$join_success" != "true" ]]; then
@@ -218,7 +251,7 @@ verify_join_api() {
 		exit 5
 	fi
 
-	echo "Join preflight passed for $ROOM_NAME with generated admin passcode."
+	echo "Join preflight passed for $ROOM_NAME using preflight user=$PREFLIGHT_IOS_USER islevel=$IOS_USER_ISLEVEL."
 }
 
 write_env_file() {
@@ -226,11 +259,23 @@ write_env_file() {
 	local enable_audio="$2"
 	local enable_video="$3"
 	local enable_screenshare="${4:-0}"
+	local probe_label="${5:-runtime-probe}"
+	local probe_return_ui="${MEDIASFU_PROBE_RETURN_UI:-0}"
+	local apply_background_value="0"
+	local post_match_hold_seconds="${MEDIASFU_PROBE_POST_MATCH_HOLD_SECONDS:-0}"
+	if [[ "$probe_label" == "local-av" || "$probe_label" == virtual-background* ]]; then
+		apply_background_value="${MEDIASFU_PROBE_APPLY_BACKGROUND:-0}"
+		post_match_hold_seconds="${MEDIASFU_PROBE_POST_MATCH_HOLD_SECONDS:-10}"
+	fi
+	local auto_proceed_value="1"
+	if [[ "$probe_return_ui" == "1" ]]; then
+		auto_proceed_value="0"
+	fi
 	CURRENT_EXPECTED_SUBSTRING="$expected_substring"
 
 	cat > "$ENV_FILE" <<EOF_ENV
 MEDIASFU_AUTO_LAUNCH=1
-MEDIASFU_AUTO_PROCEED=1
+MEDIASFU_AUTO_PROCEED=${auto_proceed_value}
 MEDIASFU_ACTION=join
 MEDIASFU_API_USERNAME=${API_USERNAME}
 MEDIASFU_API_KEY=${API_KEY}
@@ -238,16 +283,28 @@ MEDIASFU_CLOUD_ROOMS_ENDPOINT=${ROOMS_ENDPOINT}
 MEDIASFU_USER_NAME=${IOS_USER}
 MEDIASFU_ROOM_NAME=${ROOM_NAME}
 MEDIASFU_ADMIN_PASSCODE=${SECRET}
-MEDIASFU_ISLEVEL=0
+MEDIASFU_ISLEVEL=${IOS_USER_ISLEVEL}
 MEDIASFU_CONNECT_MEDIA_SFU=1
 MEDIASFU_ENABLE_RUNTIME_PROBES=1
+MEDIASFU_PROBE_RETURN_UI=${probe_return_ui}
+MEDIASFU_PROBE_APPLY_BACKGROUND=${apply_background_value}
+MEDIASFU_PROBE_BACKGROUND_ACTION=${MEDIASFU_PROBE_BACKGROUND_ACTION:-apply}
+MEDIASFU_PROBE_BACKGROUND_NAME=${MEDIASFU_PROBE_BACKGROUND_NAME:-Light Blur}
+MEDIASFU_CAPTURE_SCREENSHOTS=1
+MEDIASFU_CAPTURE_LIVE_PROBE_SCREENSHOTS=1
+MEDIASFU_PROBE_LABEL=${probe_label}
+MEDIASFU_SCREENSHOT_OUTPUT_DIR=${RUN_STATE_DIR}/ios-ui-${probe_label}
 MEDIASFU_PROBE_ENABLE_LOCAL_AUDIO=${enable_audio}
 MEDIASFU_PROBE_ENABLE_LOCAL_VIDEO=${enable_video}
+MEDIASFU_PROBE_ENABLE_LOCAL_VIDEO_AFTER_BACKGROUND=${MEDIASFU_PROBE_ENABLE_LOCAL_VIDEO_AFTER_BACKGROUND:-0}
 MEDIASFU_PROBE_ENABLE_SCREENSHARE=${enable_screenshare}
 MEDIASFU_PROBE_MODE=join
 MEDIASFU_PROBE_RUN_ID=${RUN_ID}
 MEDIASFU_EXPECT_RUNTIME_PROBE_SUBSTRING=${expected_substring}
-MEDIASFU_PROBE_POST_MATCH_HOLD_SECONDS=${MEDIASFU_PROBE_POST_MATCH_HOLD_SECONDS:-0}
+MEDIASFU_EXPECT_PRE_BACKGROUND_APPLY_SUBSTRING=${MEDIASFU_EXPECT_PRE_BACKGROUND_APPLY_SUBSTRING:-}
+MEDIASFU_EXPECT_POST_BACKGROUND_SAVE_SUBSTRING=${MEDIASFU_EXPECT_POST_BACKGROUND_SAVE_SUBSTRING:-}
+MEDIASFU_EXPECT_POST_BACKGROUND_VIDEO_SUBSTRING=${MEDIASFU_EXPECT_POST_BACKGROUND_VIDEO_SUBSTRING:-}
+MEDIASFU_PROBE_POST_MATCH_HOLD_SECONDS=${post_match_hold_seconds}
 EOF_ENV
 	cp "$ENV_FILE" "$CURRENT_ENV_FILE"
 	echo "Updated simulator UI test env: $CURRENT_ENV_FILE"
@@ -280,6 +337,12 @@ launch_chrome() {
 		--force-device-scale-factor=1 \
 		--app="$PUBLIC_URL" >/tmp/mediasfu_chrome_${RUN_ID}.log 2>&1 &
 	CHROME_PID=$!
+
+	# Give Chrome time to register a debuggable tab, especially after simulator/device resets.
+	local launch_delay_seconds="${MEDIASFU_CHROME_LAUNCH_DELAY_SECONDS:-6}"
+	if [[ "$launch_delay_seconds" != "0" ]]; then
+		sleep "$launch_delay_seconds"
+	fi
 }
 
 prepare_browser_capture_source() {
@@ -357,9 +420,7 @@ finish_web_evidence_capture() {
 	fi
 
 	local exit_code=0
-	if ! wait "$EVIDENCE_PID"; then
-		exit_code=$?
-	fi
+	wait "$EVIDENCE_PID" || exit_code=$?
 
 	if [[ -f "$EVIDENCE_JSON" ]]; then
 		echo "Web evidence label=$EVIDENCE_LABEL json=$EVIDENCE_JSON png=$EVIDENCE_PNG exit=$exit_code"
@@ -372,6 +433,7 @@ finish_web_evidence_capture() {
 	fi
 
 	EVIDENCE_PID=""
+	return "$exit_code"
 }
 
 start_web_evidence_capture() {
@@ -393,6 +455,11 @@ start_web_evidence_capture() {
 		MIN_ACTIVE_VIDEOS="$min_active_videos" \
 		TIMEOUT_SECONDS="$timeout_seconds" \
 		AUTO_CLICK=1 \
+		DISPLAY_NAME_VALUE="$WEB_USER" \
+		REQUIRE_REMOTE_VIDEO="${MEDIASFU_BROWSER_CAPTURE_REQUIRE_REMOTE_VIDEO:-1}" \
+		MIN_REMOTE_VIDEOS="${MEDIASFU_BROWSER_CAPTURE_MIN_REMOTE_VIDEOS:-1}" \
+		REMOTE_VIDEO_MUST_BE_NONBLANK="${MEDIASFU_BROWSER_CAPTURE_REMOTE_VIDEO_MUST_BE_NONBLANK:-1}" \
+		POST_READY_DELAY_MS="${MEDIASFU_BROWSER_CAPTURE_POST_READY_MS:-0}" \
 		PRODUCE_START_DELAY_MS="${MEDIASFU_BROWSER_PRODUCE_START_DELAY_MS:-2000}" \
 		node "$CAPTURE_HELPER" >"$EVIDENCE_LOG" 2>&1 &
 	EVIDENCE_PID=$!
@@ -496,6 +563,7 @@ wait_for_scheduled_browser_screenshare() {
 }
 
 verify_chrome_media() {
+	local allow_dom_active_tag_fallback="${1:-0}"
 	local label="browser_av_source"
 	local json_path="$RUN_STATE_DIR/mediasfu_web_${label}_${RUN_ID}.json"
 	local png_path="$RUN_STATE_DIR/mediasfu_web_${label}_${RUN_ID}.png"
@@ -510,7 +578,10 @@ verify_chrome_media() {
 		MIN_ACTIVE_VIDEOS="${MEDIASFU_BROWSER_AV_MIN_ACTIVE_VIDEOS:-1}" \
 		TIMEOUT_SECONDS="${MEDIASFU_BROWSER_AV_TIMEOUT_SECONDS:-90}" \
 		AUTO_CLICK=1 \
+		DISPLAY_NAME_VALUE="$WEB_USER" \
+		REQUIRE_REMOTE_VIDEO=0 \
 		REQUIRE_PRODUCE_TAGS="${MEDIASFU_BROWSER_AV_REQUIRE_PRODUCE_TAGS:-audio,video}" \
+		ALLOW_DOM_ACTIVE_TAG_FALLBACK="$allow_dom_active_tag_fallback" \
 		PRODUCE_START_DELAY_MS="${MEDIASFU_BROWSER_AV_PRODUCE_START_DELAY_MS:-${MEDIASFU_BROWSER_PRODUCE_START_DELAY_MS:-2000}}" \
 		PRODUCE_RETRY_AFTER_MS="${MEDIASFU_BROWSER_AV_PRODUCE_RETRY_AFTER_MS:-12000}" \
 		DEBUG_FIELDS="${MEDIASFU_BROWSER_AV_DEBUG_FIELDS:-0}" \
@@ -527,8 +598,8 @@ verify_chrome_media() {
 run_probe_test() {
 	local label="$1"
 	local log_file="${LOG_PREFIX}_${label}.log"
+	local xcode_status=0
 
-	set -o pipefail
 	xcodebuild \
 		-workspace MediaSFUSampleApp.xcworkspace \
 		-scheme "$SCHEME" \
@@ -538,7 +609,10 @@ run_probe_test() {
 		-only-testing:MediaSFUSampleAppUITests/MediaSFUSampleAppUITests/testRuntimeProbeMatchesExpectedLiveState \
 		test \
 		CODE_SIGNING_ALLOWED=NO \
-		2>&1 | tee "$log_file" | grep -E 'MediaSFU UI Test env|MediaSFU runtime probe matched|Test Case|Timed out waiting|Final value|TEST SUCCEEDED|TEST FAILED|Executed|error:'
+		2>&1 | tee "$log_file"
+	xcode_status=${PIPESTATUS[0]}
+	grep -E 'MediaSFU UI Test env|MediaSFU runtime probe matched|Test Case|Timed out waiting|Final value|TEST SUCCEEDED|TEST FAILED|Executed|error:' "$log_file" || true
+	return "$xcode_status"
 }
 
 run_browser_screenshare_probe_timing() {
@@ -552,7 +626,7 @@ run_browser_screenshare_probe_timing() {
 	local stop_exit=0
 
 	echo "== Running browser-to-simulator screen-share probe (${timing}) =="
-	write_env_file "$screenshare_expect_substring" 0 0 0
+	write_env_file "$screenshare_expect_substring" 0 0 0 "screenshare-setup"
 	start_web_evidence_capture "$probe_label" "$local_screenshare_min_active" "$local_screenshare_timeout"
 
 	case "$timing" in
@@ -614,6 +688,67 @@ run_browser_screenshare_probe_timing() {
 	return "$share_exit"
 }
 
+run_virtual_background_probe_path() {
+	local path="$1"
+	local background_name="${MEDIASFU_PROBE_BACKGROUND_NAME:-Light Blur}"
+	local background_summary="keepBackground=true;selectedBackground=${background_name};backgroundHasChanged=true"
+	local probe_exit=0
+	local evidence_exit=0
+	local label=""
+	local enable_audio="0"
+	local enable_video="0"
+	local web_label=""
+
+	local MEDIASFU_PROBE_APPLY_BACKGROUND=1
+	local MEDIASFU_EXPECT_PRE_BACKGROUND_APPLY_SUBSTRING=""
+	local MEDIASFU_EXPECT_POST_BACKGROUND_SAVE_SUBSTRING=""
+	local MEDIASFU_EXPECT_POST_BACKGROUND_VIDEO_SUBSTRING=""
+	local MEDIASFU_PROBE_ENABLE_LOCAL_VIDEO_AFTER_BACKGROUND=0
+	local MEDIASFU_PROBE_BACKGROUND_ACTION="apply"
+
+	case "$path" in
+		live)
+			label="virtual-background-live"
+			web_label="virtual-background-live"
+			enable_audio="${MEDIASFU_VB_LIVE_ENABLE_LOCAL_AUDIO:-1}"
+			enable_video="1"
+			MEDIASFU_PROBE_BACKGROUND_ACTION="apply"
+			MEDIASFU_EXPECT_PRE_BACKGROUND_APPLY_SUBSTRING="${MEDIASFU_VB_LIVE_PRE_APPLY_EXPECT_SUBSTRING:-videoProduced=1||backgroundHasChanged=false}"
+			MEDIASFU_EXPECT_POST_BACKGROUND_VIDEO_SUBSTRING="${MEDIASFU_VB_LIVE_POST_APPLY_EXPECT_SUBSTRING:-videoProduced=1||${background_summary}}"
+			;;
+		saved)
+			label="virtual-background-saved"
+			web_label="virtual-background-saved"
+			enable_audio="${MEDIASFU_VB_SAVED_ENABLE_LOCAL_AUDIO:-0}"
+			enable_video="0"
+			MEDIASFU_PROBE_BACKGROUND_ACTION="save"
+			MEDIASFU_PROBE_ENABLE_LOCAL_VIDEO_AFTER_BACKGROUND=1
+			MEDIASFU_EXPECT_POST_BACKGROUND_SAVE_SUBSTRING="${MEDIASFU_VB_SAVED_POST_SAVE_EXPECT_SUBSTRING:-localVideo=false||videoProduced=0||${background_summary}}"
+			MEDIASFU_EXPECT_POST_BACKGROUND_VIDEO_SUBSTRING="${MEDIASFU_VB_SAVED_POST_VIDEO_EXPECT_SUBSTRING:-localVideo=true||videoProduced=1||${background_summary}}"
+			;;
+		*)
+			echo "Unsupported virtual background path: $path" >&2
+			return 2
+			;;
+	esac
+
+	echo "== Running virtual background ${path} probe on iOS simulator =="
+	write_env_file "$background_summary" "$enable_audio" "$enable_video" 0 "$label"
+	start_web_evidence_capture "$web_label" "${MEDIASFU_VB_MIN_ACTIVE_VIDEOS:-2}" "${MEDIASFU_VB_WEB_TIMEOUT_SECONDS:-75}"
+	run_probe_test "$label" || probe_exit=$?
+	finish_web_evidence_capture || evidence_exit=$?
+
+	if [[ "$probe_exit" == "0" && "$evidence_exit" == "0" ]]; then
+		echo "Virtual background ${path} probe succeeded."
+	else
+		echo "Virtual background ${path} probe failed." >&2
+	fi
+	if [[ "$probe_exit" != "0" ]]; then
+		return "$probe_exit"
+	fi
+	return "$evidence_exit"
+}
+
 echo "== Booting iOS simulator =="
 boot_simulator
 
@@ -627,7 +762,7 @@ verify_join_api
 
 echo "== Launching fake-media Chrome peer =="
 launch_chrome
-verify_chrome_media
+verify_chrome_media 0
 
 if [[ "$CHROME_JOIN_SETTLE_SECONDS" != "0" ]]; then
 	echo "== Waiting ${CHROME_JOIN_SETTLE_SECONDS}s for browser join settle =="
@@ -636,16 +771,18 @@ fi
 
 if [[ "$RUN_MARKER_PREFLIGHT" == "1" ]]; then
 	echo "== Running current-marker preflight on iOS simulator =="
-	write_env_file "launchMarker=${RUN_ID}" 0 0 0
+	write_env_file "launchMarker=${RUN_ID}" 0 0 0 "marker"
 	run_probe_test marker
 fi
 
 if [[ "$RUN_EXISTING_MEDIA_PROBE" == "1" ]]; then
 	existing_audio_expect_substring="${MEDIASFU_EXISTING_AUDIO_EXPECT_SUBSTRING:-audioResumes=1}"
 	existing_video_expect_substring="${MEDIASFU_EXISTING_VIDEO_EXPECT_SUBSTRING:-videoMatches=1}"
+	existing_probe_enable_local_audio="${MEDIASFU_EXISTING_PROBE_ENABLE_LOCAL_AUDIO:-0}"
+	existing_probe_enable_local_video="${MEDIASFU_EXISTING_PROBE_ENABLE_LOCAL_VIDEO:-0}"
 
 	echo "== Running late-join existing-audio receive probe on iOS simulator =="
-	write_env_file "$existing_audio_expect_substring" 0 0 0
+	write_env_file "$existing_audio_expect_substring" "$existing_probe_enable_local_audio" "$existing_probe_enable_local_video" 0 "existing-audio"
 	if run_probe_test existingaudio; then
 		echo "Existing-audio receive probe succeeded."
 	else
@@ -653,7 +790,7 @@ if [[ "$RUN_EXISTING_MEDIA_PROBE" == "1" ]]; then
 	fi
 
 	echo "== Running late-join existing-video receive probe on iOS simulator =="
-	write_env_file "$existing_video_expect_substring" 0 0 0
+	write_env_file "$existing_video_expect_substring" "$existing_probe_enable_local_audio" "$existing_probe_enable_local_video" 0 "existing-video"
 	if run_probe_test existingvideo; then
 		echo "Existing-video receive probe succeeded."
 	else
@@ -664,8 +801,36 @@ fi
 if [[ "$RUN_AUDIO_PRODUCE_PROBE" == "1" ]]; then
 	audio_expect_substring="${MEDIASFU_SIMULATOR_AUDIO_EXPECT_SUBSTRING:-audioProduced=1}"
 	echo "== Running audio production probe on iOS simulator =="
-	write_env_file "$audio_expect_substring" 1 0 0
+	write_env_file "$audio_expect_substring" 1 0 0 "local-audio"
 	run_probe_test audio
+fi
+
+if [[ "$RUN_VIDEO_PRODUCE_PROBE" == "1" ]]; then
+	local_video_expect_substring="${MEDIASFU_LOCAL_VIDEO_EXPECT_SUBSTRING:-audioProduced=1;videoProduced=1}"
+	video_probe_exit=0
+	video_evidence_exit=0
+	echo "== Running video production probe on iOS simulator =="
+	write_env_file "$local_video_expect_substring" 1 1 0 "local-av"
+	start_web_evidence_capture "video" "${MEDIASFU_VIDEO_MIN_ACTIVE_VIDEOS:-2}" "${MEDIASFU_VIDEO_WEB_TIMEOUT_SECONDS:-60}"
+	run_probe_test video || video_probe_exit=$?
+	finish_web_evidence_capture || video_evidence_exit=$?
+	if [[ "$video_probe_exit" != "0" ]]; then
+		exit "$video_probe_exit"
+	fi
+	if [[ "$video_evidence_exit" != "0" ]]; then
+		exit "$video_evidence_exit"
+	fi
+fi
+
+if [[ "${MEDIASFU_RUN_VIRTUAL_BACKGROUND_PROBE:-0}" == "1" ]]; then
+	IFS=',' read -r -a vb_paths <<< "${MEDIASFU_VIRTUAL_BACKGROUND_PATHS:-live,saved}"
+	for raw_path in "${vb_paths[@]}"; do
+		vb_path="$(printf '%s' "$raw_path" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+		if [[ -z "$vb_path" ]]; then
+			continue
+		fi
+		run_virtual_background_probe_path "$vb_path"
+	done
 fi
 
 if [[ "$RUN_SCREENSHARE_PROBE" == "1" ]]; then

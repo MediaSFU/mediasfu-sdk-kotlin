@@ -32,18 +32,6 @@ A lightweight example showing basic SDK integration:
 ./demo-app/
 ```
 
-### 3. spacestek-app
-**Audio Rooms (Twitter Spaces-like)**
-
-Audio-only conferencing example:
-- Audio-focused room experience
-- Speaker/listener roles
-- Raise hand functionality
-- Minimalist audio UI
-
-```
-./spacestek-app/
-```
 
 ## Configuration
 
@@ -62,8 +50,6 @@ Before running any example app:
 # Build and run demo-app
 ./gradlew :demo-app:installDebug
 
-# Build and run spacestek-app
-./gradlew :spacestek-app:installDebug
 ```
 
 ## Using the SDK in Your App

@@ -3,6 +3,7 @@ package com.mediasfu.sdk.ui.components.display
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -84,11 +85,14 @@ fun OtherGridComponent.renderCompose(content: @Composable ColumnScope.() -> Unit
         return
     }
 
+    val isLightTheme = MaterialTheme.colorScheme.background.red > 0.5f
+    val containerBgColor = if (isLightTheme) MaterialTheme.colorScheme.background else Color(options.backgroundColor)
+
     Box(
         modifier = Modifier
             .width(options.width.dp)
             .height(options.height.dp)
-            .background(Color(options.backgroundColor))
+            .background(containerBgColor)
     ) {
         Column(
             modifier = Modifier

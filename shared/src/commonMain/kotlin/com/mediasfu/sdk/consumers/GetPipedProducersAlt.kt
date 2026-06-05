@@ -1,5 +1,6 @@
 package com.mediasfu.sdk.consumers
 import com.mediasfu.sdk.util.Logger
+import com.mediasfu.sdk.util.MediaSFURuntimeProbe
 
 import com.mediasfu.sdk.socket.SocketManager
 
@@ -69,29 +70,162 @@ suspend fun getPipedProducersAlt(options: GetPipedProducersAltOptions) {
 
         val emitEvent = if (community) "getProducersAlt" else "getProducersPipedAlt"
 
+        MediaSFURuntimeProbe.recordConsumerSignalStage(
+            "get-producers-emit",
+            "",
+            "event=$emitEvent,level=$islevel,member=$member"
+        )
+
         // Emit request to get piped producers
-        val producerIds = nsock.emitWithAck<Any>(
-            event = emitEvent,
-            data = mapOf("islevel" to islevel, "member" to member)
+        val requestData = mapOf("islevel" to islevel, "member" to member)
+        val producerIds = try {
+            nsock.emitWithAck<Any>(
+                event = emitEvent,
+                data = requestData
+            )
+        } catch (error: Exception) {
+            val isPipedTimeout = emitEvent == "getProducersPipedAlt" &&
+                (error.message?.contains("Acknowledgment timeout", ignoreCase = true) == true)
+            if (isPipedTimeout) {
+                MediaSFURuntimeProbe.recordConsumerSignalStage(
+                    "get-producers-fallback-event",
+                    "",
+                    "from=$emitEvent,to=getProducersAlt,level=$islevel"
+                )
+                nsock.emitWithAck(
+                    event = "getProducersAlt",
+                    data = requestData
+                )
+            } else {
+                throw error
+            }
+        }
+
+        val extractedProducerIds = extractProducerIds(producerIds)
+        val responseShape = summarizeProducerAckShape(producerIds)
+
+        Logger.d(
+            "GetPipedProducersAlt",
+            "ack event=$emitEvent level=$islevel member='$member' shape=$responseShape extractedCount=${extractedProducerIds.size}"
+        )
+        MediaSFURuntimeProbe.recordConsumerSignalStage(
+            "get-producers-ack",
+            "",
+            "event=$emitEvent,level=$islevel,count=${extractedProducerIds.size},shape=$responseShape"
         )
 
         // Handle the server response with producer IDs
-        if (producerIds is List<*> && producerIds.isNotEmpty()) {
-            for (id in producerIds) {
-                if (id is String) {
-                    val signalOptions = SignalNewConsumerTransportOptions(
-                        producerId = id,
-                        islevel = islevel,
-                        socket = nsock,
-                        parameters = parameters
-                    )
-                    signalNewConsumerTransport(signalOptions)
-                }
+        if (extractedProducerIds.isNotEmpty()) {
+            MediaSFURuntimeProbe.recordConsumerSignalStage(
+                "get-producers",
+                "",
+                "event=$emitEvent,level=$islevel,count=${extractedProducerIds.size}"
+            )
+            for (remoteProducerId in extractedProducerIds) {
+                val signalOptions = SignalNewConsumerTransportOptions(
+                    producerId = remoteProducerId,
+                    islevel = islevel,
+                    socket = nsock,
+                    parameters = parameters
+                )
+                signalNewConsumerTransport(signalOptions)
             }
         }
     } catch (error: Exception) {
+        MediaSFURuntimeProbe.recordConsumerSignalStage(
+            "get-producers-error",
+            "",
+            "detail=${error.message ?: "unknown"}"
+        )
         Logger.e("GetPipedProducersAlt", "Error getting piped producers: ${error.message}")
         throw error
     }
 }
 
+data class BootstrapProducerEntry(
+    val id: String,
+    val screenShareHint: Boolean = false
+)
+
+internal fun extractProducerIds(response: Any?): List<String> =
+    extractProducerEntries(response).map { it.id }
+
+internal fun extractProducerEntries(response: Any?): List<BootstrapProducerEntry> {
+    val entries = mutableListOf<BootstrapProducerEntry>()
+    collectProducerEntries(response, entries)
+    return entries.distinctBy { it.id }
+}
+
+private fun collectProducerEntries(
+    value: Any?,
+    entries: MutableList<BootstrapProducerEntry>,
+    keyHint: String = "",
+    allowStringValue: Boolean = false
+) {
+    when (value) {
+        is String -> {
+            if (allowStringValue && value.isNotBlank()) {
+                entries += BootstrapProducerEntry(
+                    id = value,
+                    screenShareHint = keyHint.contains("screen", ignoreCase = true)
+                )
+            }
+        }
+
+        is List<*> -> {
+            value.forEach { entry ->
+                collectProducerEntries(
+                    value = entry,
+                    entries = entries,
+                    keyHint = keyHint,
+                    allowStringValue = allowStringValue
+                )
+            }
+        }
+
+        is Map<*, *> -> {
+            val idKey = listOf("id", "producerId", "producer_id", "remoteProducerId")
+                .firstOrNull { key -> value[key] is String }
+            val directId = idKey?.let { value[it] as? String }?.takeIf { it.isNotBlank() }
+            if (directId != null) {
+                entries += BootstrapProducerEntry(
+                    id = directId,
+                    screenShareHint = keyHint.contains("screen", ignoreCase = true) ||
+                        idKey.contains("screen", ignoreCase = true)
+                )
+            }
+
+            value.forEach { (rawKey, nestedValue) ->
+                val key = rawKey?.toString().orEmpty()
+                val keyLooksProducerRelated = key.contains("producer", ignoreCase = true) ||
+                    key.contains("screen", ignoreCase = true)
+                val nestedAllowsStrings = keyLooksProducerRelated ||
+                    key.equals("data", ignoreCase = true) ||
+                    key.equals("result", ignoreCase = true) ||
+                    key.equals("payload", ignoreCase = true)
+
+                collectProducerEntries(
+                    value = nestedValue,
+                    entries = entries,
+                    keyHint = key,
+                    allowStringValue = nestedAllowsStrings
+                )
+            }
+        }
+    }
+}
+
+private fun summarizeProducerAckShape(response: Any?): String {
+    return when (response) {
+        is List<*> -> "list(size=${response.size})"
+        is Map<*, *> -> {
+            val keys = response.keys
+                .map { it.toString() }
+                .sorted()
+                .joinToString(",")
+            "map(keys=$keys)"
+        }
+        null -> "null"
+        else -> response::class.simpleName ?: "unknown"
+    }
+}

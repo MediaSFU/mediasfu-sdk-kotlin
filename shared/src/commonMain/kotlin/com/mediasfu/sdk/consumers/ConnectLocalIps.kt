@@ -15,7 +15,9 @@ import com.mediasfu.sdk.consumers.socket_receive_methods.producerClosed
  * Parameters interface for connecting local IPs and managing socket connections.
  *
  * This interface defines the state and functions needed for managing
- * local socket connections for media consumption (e.g., on-premise deployments).
+ * local socket connections for media consumption. Despite the legacy name,
+ * the React and Flutter references also use this path for the single-socket
+ * community/cloud fallback when `roomRecvIPs == ["none"]`.
  */
 interface ConnectLocalIpsParameters {
     // State properties
@@ -97,7 +99,9 @@ class ConnectLocalIpsException(
  *
  * This function sets up event listeners on the provided local socket for handling
  * new media producers and closed producers. It utilizes the provided methods to
- * manage these events accordingly.
+ * manage these events accordingly. In parity with the React and Flutter refs,
+ * this is also the bootstrap path for community/cloud rooms that do not fan out
+ * dedicated receive IPs and instead consume over the already-authenticated media socket.
  *
  * ## Features:
  * - Registers event handlers on existing socket
@@ -161,6 +165,13 @@ suspend fun connectLocalIps(options: ConnectLocalIpsOptions): Result<Unit> {
         // Check if listener is already set (prevent duplicates)
         val alreadyListening = hasListener(socket, "new-producer")
         if (alreadyListening) {
+            receiveAllPipedTransportsMethod(
+                ReceiveAllPipedTransportsOptions(
+                    community = true,
+                    nsock = socket,
+                    parameters = parameters
+                )
+            )
             return Result.success(Unit)
         }
 

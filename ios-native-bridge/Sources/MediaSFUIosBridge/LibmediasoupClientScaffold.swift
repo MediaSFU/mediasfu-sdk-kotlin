@@ -30,7 +30,13 @@ public protocol MediaSFULibmediasoupTransport: AnyObject {
 
 public protocol MediaSFULibmediasoupSendTransport: MediaSFULibmediasoupTransport {
     func onProduce(_ listener: MediaSFUNativeProduceListener?)
-    func produce(track: MediaSFUNativeTrack, encodingsJson: String?, appDataJson: String?) throws -> MediaSFULibmediasoupProducer
+    func produce(
+        track: MediaSFUNativeTrack,
+        encodingsJson: String?,
+        codecOptionsJson: String?,
+        codecJson: String?,
+        appDataJson: String?
+    ) throws -> MediaSFULibmediasoupProducer
 }
 
 public protocol MediaSFULibmediasoupRecvTransport: MediaSFULibmediasoupTransport {
@@ -124,7 +130,13 @@ final class LibmediasoupClientSendTransport: MediaSFUNativeClientSendTransport {
     func onConnectionStateChange(_ listener: ((String) -> Void)?) { transport.onConnectionStateChange(listener) }
     func onProduce(_ listener: MediaSFUNativeProduceListener?) { transport.onProduce(listener) }
     func produce(track: MediaSFUNativeTrack, options: MediaSFUProduceOptions) throws -> MediaSFUNativeClientProducer {
-        let producer = try transport.produce(track: track, encodingsJson: options.encodingsJson, appDataJson: options.appDataJson)
+        let producer = try transport.produce(
+            track: track,
+            encodingsJson: options.encodingsJson,
+            codecOptionsJson: options.codecOptionsJson,
+            codecJson: options.codecJson,
+            appDataJson: options.appDataJson
+        )
         return LibmediasoupClientProducer(producer: producer)
     }
 }

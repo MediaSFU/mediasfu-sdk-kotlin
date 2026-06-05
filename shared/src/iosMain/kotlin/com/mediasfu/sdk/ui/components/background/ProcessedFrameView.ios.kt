@@ -2,6 +2,7 @@ package com.mediasfu.sdk.ui.components.background
 
 import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.interop.UIKitView
@@ -35,19 +36,21 @@ actual fun ProcessedFrameView(
 
         else -> {
             val image = bitmap.toUIImage() ?: return
-            UIKitView(
-                factory = {
-                    UIImageView().apply {
-                        contentMode = UIViewContentMode.UIViewContentModeScaleAspectFill
-                        clipsToBounds = true
-                        setImage(image)
+            key(bitmap) {
+                UIKitView(
+                    factory = {
+                        UIImageView().apply {
+                            contentMode = UIViewContentMode.UIViewContentModeScaleAspectFill
+                            clipsToBounds = true
+                            setImage(image)
+                        }
+                    },
+                    modifier = modifier,
+                    update = { imageView ->
+                        imageView.setImage(image)
                     }
-                },
-                modifier = modifier,
-                update = { imageView ->
-                    imageView.setImage(image)
-                }
-            )
+                )
+            }
         }
     }
 }

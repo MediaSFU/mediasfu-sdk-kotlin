@@ -1,25 +1,13 @@
 package com.mediasfu.sdk.socket
 
 import com.mediasfu.sdk.model.SocketConfig
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.darwin.Darwin
-import io.ktor.client.plugins.websocket.DefaultClientWebSocketSession
-import io.ktor.client.plugins.websocket.WebSockets
-import io.ktor.client.plugins.websocket.webSocketSession
-import io.ktor.client.request.url
-import io.ktor.http.URLBuilder
-import io.ktor.websocket.CloseReason
-import io.ktor.websocket.Frame
-import io.ktor.websocket.close
-import io.ktor.websocket.readText
-import io.ktor.websocket.send
-import kotlinx.coroutines.CoroutineScope
+import com.mediasfu.sdk.util.Logger
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancelAndJoin
-import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -37,6 +25,12 @@ import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
+import platform.Foundation.NSError
+import platform.Foundation.NSURL
+import platform.Foundation.NSURLSession
+import platform.Foundation.NSURLSessionWebSocketCloseCodeNormalClosure
+import platform.Foundation.NSURLSessionWebSocketMessage
+import platform.Foundation.NSURLSessionWebSocketTask
 
 /**
  * iOS implementation of SocketManager using a lightweight Socket.IO-over-WebSocket client.
@@ -47,13 +41,9 @@ import kotlinx.serialization.json.longOrNull
 actual fun createSocketManager(): SocketManager = IOSSocketManager()
 
 /**
- * Native iOS Socket.IO manager backed by a WebSocket transport and Engine.IO v4 framing.
+ * Native iOS Socket.IO manager backed by NSURLSessionWebSocketTask and Engine.IO v4 framing.
  */
 class IOSSocketManager : SocketManager {
-    private val httpClient = HttpClient(Darwin) {
-        install(WebSockets)
-    }
-
     private val eventHandlers = mutableMapOf<String, suspend (Map<String, Any?>) -> Unit>()
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private val sendMutex = Mutex()
@@ -65,7 +55,7 @@ class IOSSocketManager : SocketManager {
     private var reconnectAttemptHandler: (suspend (Int) -> Unit)? = null
     private var reconnectFailedHandler: (suspend () -> Unit)? = null
 
-    private var session: DefaultClientWebSocketSession? = null
+    private var session: NSURLSessionWebSocketTask? = null
     private var receiveJob: kotlinx.coroutines.Job? = null
     private var lastConnectUrl: String? = null
     private var lastConfig: SocketConfig = SocketConfig()
@@ -80,14 +70,19 @@ class IOSSocketManager : SocketManager {
     private val ackCallbacks = mutableMapOf<Int, (Any?) -> Unit>()
 
     private var currentState: ConnectionState = ConnectionState.DISCONNECTED
+    private var connectDeferred: CompletableDeferred<Unit>? = null
 
     override val id: String?
         get() = socketId
 
     override suspend fun connect(url: String, config: SocketConfig): Result<Unit> {
         return withContext(Dispatchers.Default) {
-            if (currentState == ConnectionState.CONNECTED || currentState == ConnectionState.CONNECTING) {
+            if (currentState == ConnectionState.CONNECTED) {
                 return@withContext Result.success(Unit)
+            }
+
+            connectDeferred?.takeIf { it.isActive }?.let { pending ->
+                return@withContext awaitConnection(pending)
             }
 
             lastConnectUrl = url
@@ -95,18 +90,38 @@ class IOSSocketManager : SocketManager {
             manualDisconnect = false
             reconnectAttemptCount = 0
 
-            runCatching {
-                openWebSocket(url, config)
-                Result.success(Unit)
-            }.getOrElse { error ->
+            val deferred = CompletableDeferred<Unit>()
+            connectDeferred = deferred
+
+            val openError = runCatching { openWebSocket(url, config) }.exceptionOrNull()
+            if (openError != null) {
+                connectDeferred = null
                 currentState = ConnectionState.FAILED
-                val exception = SocketException("Failed to connect: ${error.message}", error)
+                val exception = SocketException("Failed to open WebSocket: ${openError.message}", openError)
                 scope.launch { errorHandler?.invoke(exception) }
-                Result.failure(exception)
+                return@withContext Result.failure(exception)
             }
+
+            awaitConnection(deferred)
         }
     }
-    
+
+    private suspend fun awaitConnection(deferred: CompletableDeferred<Unit>): Result<Unit> {
+        return try {
+            withTimeout(20_000L) { deferred.await() }
+            Result.success(Unit)
+        } catch (e: TimeoutCancellationException) {
+            connectDeferred = null
+            currentState = ConnectionState.FAILED
+            val exception = SocketException("Socket connection timeout after 20s")
+            scope.launch { errorHandler?.invoke(exception) }
+            Result.failure(exception)
+        } catch (error: Throwable) {
+            connectDeferred = null
+            Result.failure(SocketException(error.message ?: "Connection failed", error))
+        }
+    }
+
     override suspend fun disconnect(): Result<Unit> {
         return withContext(Dispatchers.Default) {
             manualDisconnect = true
@@ -114,16 +129,14 @@ class IOSSocketManager : SocketManager {
                 receiveJob?.cancelAndJoin()
                 receiveJob = null
 
-                session?.let { activeSession ->
-                    runCatching {
-                        activeSession.close(CloseReason(CloseReason.Codes.NORMAL, "Client disconnect"))
-                    }
-                }
+                session?.cancelWithCloseCode(NSURLSessionWebSocketCloseCodeNormalClosure, reason = null)
                 session = null
 
                 currentState = ConnectionState.DISCONNECTED
                 socketId = null
                 engineSid = null
+                connectDeferred?.cancel()
+                connectDeferred = null
                 ackDeferreds.values.forEach { it.cancel() }
                 ackDeferreds.clear()
                 ackCallbacks.clear()
@@ -133,26 +146,25 @@ class IOSSocketManager : SocketManager {
             }
         }
     }
-    
+
     override fun isConnected(): Boolean = currentState == ConnectionState.CONNECTED
-    
+
     override fun getConnectionState(): ConnectionState = currentState
-    
+
     override suspend fun emit(event: String, data: Map<String, Any?>) {
-        val activeSession = session ?: throw disconnectedException(event)
         if (!isConnected()) throw disconnectedException(event)
 
         sendMutex.withLock {
-            activeSession.send(Frame.Text(buildEventPacket(event = event, data = data, ackId = null)))
+            Logger.d("MediaSFU-Socket", "TX event=$event keys=${data.keys.joinToString(",")}")
+            sendText(buildEventPacket(event = event, data = data, ackId = null))
         }
     }
-    
+
     override suspend fun <T> emitWithAck(
         event: String,
         data: Map<String, Any?>,
         timeout: Long
     ): T {
-        val activeSession = session ?: throw disconnectedException(event)
         if (!isConnected()) throw disconnectedException(event)
 
         val ackId = nextAckIdentifier()
@@ -161,7 +173,8 @@ class IOSSocketManager : SocketManager {
 
         return try {
             sendMutex.withLock {
-                activeSession.send(Frame.Text(buildEventPacket(event = event, data = data, ackId = ackId)))
+                Logger.d("MediaSFU-Socket", "TX/ack event=$event ackId=$ackId keys=${data.keys.joinToString(",")}")
+                sendText(buildEventPacket(event = event, data = data, ackId = ackId))
             }
 
             @Suppress("UNCHECKED_CAST")
@@ -178,18 +191,29 @@ class IOSSocketManager : SocketManager {
         data: Map<String, Any?>,
         callback: (Any?) -> Unit
     ) {
-        val activeSession = session ?: throw disconnectedException(event)
         if (!isConnected()) throw disconnectedException(event)
 
         val ackId = nextAckIdentifier()
-        ackCallbacks[ackId] = callback
+        val timeoutMillis = lastConfig.timeout.coerceAtLeast(5_000)
+        val timeoutJob = scope.launch {
+            delay(timeoutMillis)
+            ackCallbacks.remove(ackId)?.let {
+                Logger.w("MediaSFU-Socket", "TX/ack callback timeout event=$event ackId=$ackId timeoutMs=$timeoutMillis")
+                it(mapOf("error" to "Acknowledgment timeout for event '$event'"))
+            }
+        }
+        ackCallbacks[ackId] = { response ->
+            timeoutJob.cancel()
+            callback(response)
+        }
 
         scope.launch {
             try {
                 sendMutex.withLock {
-                    activeSession.send(Frame.Text(buildEventPacket(event = event, data = data, ackId = ackId)))
+                    sendText(buildEventPacket(event = event, data = data, ackId = ackId))
                 }
             } catch (error: Throwable) {
+                timeoutJob.cancel()
                 ackCallbacks.remove(ackId)
                 errorHandler?.let { handler ->
                     scope.launch {
@@ -199,41 +223,41 @@ class IOSSocketManager : SocketManager {
             }
         }
     }
-    
+
     override fun on(event: String, handler: suspend (Map<String, Any?>) -> Unit) {
         eventHandlers[event] = handler
     }
-    
+
     override fun off(event: String) {
         eventHandlers.remove(event)
     }
 
     override fun hasListener(event: String): Boolean = eventHandlers.containsKey(event)
-    
+
     override fun offAll() {
         eventHandlers.clear()
     }
-    
+
     override fun onConnect(handler: suspend () -> Unit) {
         connectHandler = handler
     }
-    
+
     override fun onDisconnect(handler: suspend (String) -> Unit) {
         disconnectHandler = handler
     }
-    
+
     override fun onError(handler: suspend (Throwable) -> Unit) {
         errorHandler = handler
     }
-    
+
     override fun onReconnect(handler: suspend (Int) -> Unit) {
         reconnectHandler = handler
     }
-    
+
     override fun onReconnectAttempt(handler: suspend (Int) -> Unit) {
         reconnectAttemptHandler = handler
     }
-    
+
     override fun onReconnectFailed(handler: suspend () -> Unit) {
         reconnectFailedHandler = handler
     }
@@ -245,8 +269,17 @@ class IOSSocketManager : SocketManager {
         engineSid = null
         currentState = if (reconnectAttemptCount > 0) ConnectionState.RECONNECTING else ConnectionState.CONNECTING
 
-        session = httpClient.webSocketSession {
-            url(target.webSocketUrl)
+        Logger.i("MediaSFU-Socket", "Connecting to WebSocket URL: ${target.webSocketUrl}")
+        try {
+            val nsUrl = NSURL.URLWithString(target.webSocketUrl)
+                ?: throw SocketException("Invalid WebSocket URL: ${target.webSocketUrl}")
+            session?.cancelWithCloseCode(NSURLSessionWebSocketCloseCodeNormalClosure, reason = null)
+            session = NSURLSession.sharedSession.webSocketTaskWithURL(nsUrl)
+            session?.resume()
+            Logger.i("MediaSFU-Socket", "Native WebSocket task started")
+        } catch (e: Throwable) {
+            Logger.e("MediaSFU-Socket", "WebSocket task FAILED: ${e::class.simpleName}: ${e.message}")
+            throw e
         }
 
         receiveJob?.cancel()
@@ -255,30 +288,60 @@ class IOSSocketManager : SocketManager {
         }
     }
 
-    private suspend fun receiveLoop(config: SocketConfig) {
+    private fun receiveLoop(config: SocketConfig) {
         val activeSession = session ?: return
+        receiveNext(activeSession, config)
+    }
 
-        try {
-            while (scope.isActive) {
-                when (val frame = activeSession.incoming.receive()) {
-                    is Frame.Text -> handleEnginePacket(frame.readText())
-                    is Frame.Close -> {
-                        handleSocketClosed("Socket closed", config)
-                        return
+    private fun receiveNext(activeSession: NSURLSessionWebSocketTask, config: SocketConfig) {
+        activeSession.receiveMessageWithCompletionHandler { message, error ->
+            if (session !== activeSession || manualDisconnect) return@receiveMessageWithCompletionHandler
+
+            if (error != null) {
+                val reason = error.localizedDescription ?: "Socket receive failed"
+                scope.launch { handleSocketClosed(reason, config) }
+                return@receiveMessageWithCompletionHandler
+            }
+
+            val text = message?.string
+            if (text == null) {
+                if (scope.isActive && session === activeSession && !manualDisconnect) {
+                    receiveNext(activeSession, config)
+                }
+                return@receiveMessageWithCompletionHandler
+            }
+
+            scope.launch {
+                runCatching { handleEnginePacket(text) }
+                    .onFailure { failure ->
+                        val exception = SocketException("Socket receive loop failed: ${failure.message}", failure)
+                        errorHandler?.let { handler -> scope.launch { handler(exception) } }
+                        handleSocketClosed(failure.message ?: "Socket receive loop failed", config)
+                        return@launch
                     }
-                    else -> Unit
+
+                if (scope.isActive && session === activeSession && !manualDisconnect) {
+                    receiveNext(activeSession, config)
                 }
             }
-        } catch (error: ClosedReceiveChannelException) {
-            handleSocketClosed("Socket channel closed", config)
-        } catch (error: Throwable) {
-            val exception = SocketException("Socket receive loop failed: ${error.message}", error)
-            errorHandler?.let { handler -> scope.launch { handler(exception) } }
-            handleSocketClosed(error.message ?: "Socket receive loop failed", config)
         }
     }
 
+    private suspend fun sendText(text: String) {
+        val activeSession = session ?: throw SocketException("WebSocket session is not available")
+        val sent = CompletableDeferred<Unit>()
+        activeSession.sendMessage(NSURLSessionWebSocketMessage(string = text)) { error: NSError? ->
+            if (error != null) {
+                sent.completeExceptionally(SocketException(error.localizedDescription ?: "WebSocket send failed"))
+            } else {
+                sent.complete(Unit)
+            }
+        }
+        sent.await()
+    }
+
     private suspend fun handleEnginePacket(packet: String) {
+        Logger.d("MediaSFU-Socket", "RX: $packet")
         when {
             packet.startsWith("0") -> handleEngineOpen(packet.removePrefix("0"))
             packet == "2" -> sendEnginePong()
@@ -289,25 +352,25 @@ class IOSSocketManager : SocketManager {
     private suspend fun handleEngineOpen(payload: String) {
         val openData = payload.toJsonElementOrNull() as? JsonObject
         engineSid = openData?.get("sid")?.jsonPrimitiveContentOrNull()
+        Logger.i("MediaSFU-Socket", "Engine.IO open received, sid=$engineSid; sending Socket.IO connect")
         sendSocketIoConnect()
     }
 
     private suspend fun sendSocketIoConnect() {
-        val activeSession = session ?: return
         val packet = if (namespace == "/") {
             "40"
         } else {
             "40$namespace,"
         }
         sendMutex.withLock {
-            activeSession.send(Frame.Text(packet))
+            Logger.d("MediaSFU-Socket", "TX raw packet: $packet")
+            sendText(packet)
         }
     }
 
     private suspend fun sendEnginePong() {
-        val activeSession = session ?: return
         sendMutex.withLock {
-            activeSession.send(Frame.Text("3"))
+            sendText("3")
         }
     }
 
@@ -330,13 +393,23 @@ class IOSSocketManager : SocketManager {
         val payload = parsed.payload?.toJsonElementOrNull() as? JsonObject
         socketId = payload?.get("sid")?.jsonPrimitiveContentOrNull() ?: engineSid
 
-        val wasReconnecting = reconnectAttemptCount > 0 || currentState == ConnectionState.RECONNECTING
-        currentState = ConnectionState.CONNECTED
-        connectHandler?.let { handler -> scope.launch { handler() } }
-        if (wasReconnecting) {
-            reconnectHandler?.let { handler -> scope.launch { handler(reconnectAttemptCount) } }
+        if (!lastConfig.waitForConnectionSuccess) {
+            val wasReconnecting = reconnectAttemptCount > 0 || currentState == ConnectionState.RECONNECTING
+            currentState = ConnectionState.CONNECTED
+            connectDeferred?.let { deferred ->
+                if (deferred.isActive) deferred.complete(Unit)
+                connectDeferred = null
+            }
+            Logger.i("MediaSFU-Socket", "Socket.IO namespace connected, socketId=$socketId")
+            connectHandler?.let { handler -> scope.launch { handler() } }
+            if (wasReconnecting) {
+                reconnectHandler?.let { handler -> scope.launch { handler(reconnectAttemptCount) } }
+            }
+            reconnectAttemptCount = 0
+            return
         }
-        reconnectAttemptCount = 0
+
+        Logger.i("MediaSFU-Socket", "Socket.IO namespace connected, socketId=$socketId; waiting for connection-success")
     }
 
     private suspend fun handleSocketIoEvent(rawMeta: String) {
@@ -348,6 +421,29 @@ class IOSSocketManager : SocketManager {
         val eventName = payloadElement.firstOrNull()?.jsonPrimitiveContentOrNull() ?: return
         val payload = payloadElement.getOrNull(1)?.toKotlinValue()
         val mapPayload = payload as? Map<String, Any?> ?: emptyMap()
+
+        if (eventName == "connection-success") {
+            val receivedSocketId = mapPayload["socketId"]?.toString()
+            if (!receivedSocketId.isNullOrBlank()) socketId = receivedSocketId
+            val wasReconnecting = reconnectAttemptCount > 0 || currentState == ConnectionState.RECONNECTING
+            currentState = ConnectionState.CONNECTED
+            connectDeferred?.let { deferred ->
+                if (deferred.isActive) deferred.complete(Unit)
+                connectDeferred = null
+            }
+            Logger.i("MediaSFU-Socket", "connection-success received, socketId=$socketId")
+            connectHandler?.let { handler -> scope.launch { handler() } }
+            if (wasReconnecting) {
+                reconnectHandler?.let { handler -> scope.launch { handler(reconnectAttemptCount) } }
+            }
+            reconnectAttemptCount = 0
+        }
+
+        if (eventName == "transport-recv-connect" || eventName == "consumer-resume" || eventName == "transport-produce") {
+            Logger.i("MediaSFU-Socket", "RX media event=$eventName payloadKeys=${mapPayload.keys.joinToString(",")}")
+        } else {
+            Logger.d("MediaSFU-Socket", "RX event=$eventName payloadKeys=${mapPayload.keys.joinToString(",")}")
+        }
 
         eventHandlers[eventName]?.let { handler ->
             scope.launch {
@@ -365,6 +461,8 @@ class IOSSocketManager : SocketManager {
         val payloadElement = parsed.payload?.toJsonElementOrNull() as? JsonArray
         val payload = payloadElement?.firstOrNull()?.toKotlinValue()
 
+        Logger.d("MediaSFU-Socket", "RX ack ackId=$ackId payloadType=${payload?.let { it::class.simpleName } ?: "null"}")
+
         ackDeferreds.remove(ackId)?.complete(payload)
         ackCallbacks.remove(ackId)?.invoke(payload)
     }
@@ -374,6 +472,13 @@ class IOSSocketManager : SocketManager {
         val message = parsed.payload ?: "Socket.IO error"
         val exception = SocketException(message)
         currentState = ConnectionState.FAILED
+        Logger.e("MediaSFU-Socket", "Socket.IO ERROR: $message")
+        connectDeferred?.let { deferred ->
+            if (deferred.isActive) {
+                deferred.completeExceptionally(exception)
+            }
+            connectDeferred = null
+        }
         scope.launch { errorHandler?.invoke(exception) }
     }
 
@@ -381,6 +486,16 @@ class IOSSocketManager : SocketManager {
         session = null
         socketId = null
         engineSid = null
+
+        val deferred = connectDeferred
+        if (deferred != null && deferred.isActive) {
+            connectDeferred = null
+            currentState = ConnectionState.FAILED
+            Logger.e("MediaSFU-Socket", "Connection closed before Socket.IO handshake: $reason")
+            deferred.completeExceptionally(SocketException("Connection closed before Socket.IO handshake: $reason"))
+            scope.launch { disconnectHandler?.invoke(reason) }
+            return
+        }
 
         if (manualDisconnect) {
             currentState = ConnectionState.DISCONNECTED
@@ -429,43 +544,50 @@ class IOSSocketManager : SocketManager {
     }
 
     private fun resolveConnectionTarget(url: String): ConnectionTarget {
-        val original = URLBuilder(url)
-        val hostAndPath = url.substringAfter("://", url)
-        val rawPath = hostAndPath.substringAfter('/', "")
-        val pathOnly = rawPath.substringBefore('?').substringBefore('#')
-        val resolvedNamespace = pathOnly
-            .trim()
-            .trim('/')
-            .takeIf { it.isNotBlank() }
-            ?.let { "/$it" }
-            ?: "/"
+        // Ensure URL has a scheme
+        val withScheme = if (url.contains("://")) url else "https://$url"
 
-        val scheme = if (original.protocol.name.equals("https", ignoreCase = true)) "wss" else "ws"
-        val authority = buildString {
-            append(original.host)
-            if (original.port != 80 && original.port != 443) {
-                append(":")
-                append(original.port)
-            }
+        // Determine WebSocket scheme
+        val rawScheme = withScheme.substringBefore("://").lowercase()
+        val wsScheme = when (rawScheme) {
+            "https", "wss" -> "wss"
+            else -> "ws"
         }
-        val queryParts = mutableListOf("EIO=4", "transport=websocket")
-        original.parameters.names().forEach { name ->
-            original.parameters.getAll(name)?.forEach { value ->
-                queryParts += "$name=$value"
-            }
-        }
+
+        val afterScheme = withScheme.substringAfter("://")
+
+        // Find where the query string / fragment starts (before that is host + path)
+        val qIdx = afterScheme.indexOf('?')
+        val hIdx = afterScheme.indexOf('#')
+        val endIdx = minOf(
+            if (qIdx >= 0) qIdx else afterScheme.length,
+            if (hIdx >= 0) hIdx else afterScheme.length
+        )
+        val hostAndPath = afterScheme.substring(0, endIdx)
+        val slashIdx = hostAndPath.indexOf('/')
+        val authority = if (slashIdx >= 0) hostAndPath.substring(0, slashIdx) else hostAndPath
+        val pathPart = if (slashIdx >= 0) hostAndPath.substring(slashIdx) else ""
+
+        // The URI path IS the Socket.IO namespace (e.g. "/media")
+        // socket.io-client connects to the server root /socket.io/, not /<path>/socket.io/
+        val namespace = pathPart.trimEnd('/').takeIf { it.isNotBlank() } ?: "/"
+
+        // Preserve credentials from original URL query string verbatim
+        val rawQuery = if (qIdx >= 0) afterScheme.substring(qIdx + 1).substringBefore('#') else ""
+
+        // Build WebSocket URL targeting the standard socket.io mount point at the server root
         val wsUrl = buildString {
-            append(scheme)
+            append(wsScheme)
             append("://")
             append(authority)
-            append("/socket.io/")
-            if (queryParts.isNotEmpty()) {
-                append('?')
-                append(queryParts.joinToString("&"))
+            append("/socket.io/?EIO=4&transport=websocket")
+            if (rawQuery.isNotBlank()) {
+                append('&')
+                append(rawQuery)
             }
         }
 
-        return ConnectionTarget(webSocketUrl = wsUrl, namespace = resolvedNamespace)
+        return ConnectionTarget(webSocketUrl = wsUrl, namespace = namespace)
     }
 
     private fun buildEventPacket(event: String, data: Map<String, Any?>, ackId: Int?): String {
@@ -532,7 +654,7 @@ actual object SocketDataConverter {
             else -> emptyMap()
         }
     }
-    
+
     actual fun fromMap(map: Map<String, Any?>): Any {
         return normalizeMap(map)
     }

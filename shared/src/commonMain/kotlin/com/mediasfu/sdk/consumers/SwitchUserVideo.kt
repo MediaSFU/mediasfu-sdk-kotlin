@@ -225,6 +225,7 @@ private fun buildMediaConstraints(
                 "sourceId" to deviceId,
                 "width" to vidConsMap["width"],
                 "height" to vidConsMap["height"],
+                "maxFrameRate" to frameRate,
                 "frameRate" to mapOf("ideal" to frameRate)
             )
         ),
@@ -247,6 +248,7 @@ private fun buildAltMediaConstraints(
             "mandatory" to mapOf(
                 "width" to vidConsMap["width"],
                 "height" to vidConsMap["height"],
+                "maxFrameRate" to frameRate,
                 "frameRate" to mapOf("ideal" to frameRate),
                 "facingMode" to (facingMode ?: "user")
             )

@@ -1,5 +1,6 @@
 package com.mediasfu.sdk.ui.mediasfu
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -119,14 +121,28 @@ fun ParticipantsModalContentBody(
             value = props.filter,
             onValueChange = props.onFilterChange,
             label = { Text("Filter participants") },
-            modifier = Modifier.fillMaxWidth()
+            leadingIcon = { Icon(Icons.Rounded.Person, contentDescription = null) },
+            modifier = Modifier.fillMaxWidth(),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                focusedLabelColor = MaterialTheme.colorScheme.primary,
+                unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         )
 
         if (currentUserIsHost && (props.state.room.eventType == EventType.WEBINAR || props.state.room.eventType == EventType.CONFERENCE)) {
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                tonalElevation = 1.dp
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                tonalElevation = 0.dp
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -249,8 +265,11 @@ private fun ParticipantRow(participant: Participant, isCurrentUser: Boolean, sta
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp)),
-        tonalElevation = 2.dp
+            .clip(RoundedCornerShape(18.dp)),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.64f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        tonalElevation = 0.dp
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -262,11 +281,21 @@ private fun ParticipantRow(participant: Participant, isCurrentUser: Boolean, sta
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                Icon(
-                    imageVector = Icons.Rounded.Person,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
+                Surface(
+                    modifier = Modifier.size(42.dp),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = participant.name.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
                         text = participant.name,
@@ -309,16 +338,17 @@ private fun ParticipantRow(participant: Participant, isCurrentUser: Boolean, sta
                 // Show mute button only if user has permission and not broadcast
                 if (canMute) {
                     val isMuted = participant.muted ?: false
-                    IconButton(
+                    ParticipantActionButton(
                         onClick = {
                             state.muteParticipant(participant)
                         },
-                        modifier = Modifier.size(32.dp)
+                        tint = if (isMuted) Color(0xFFEF4444) else Color(0xFF34D399),
+                        contentDescription = if (isMuted) "Unmute participant" else "Mute participant"
                     ) {
                         Icon(
                             imageVector = if (isMuted) Icons.Rounded.MicOff else Icons.Rounded.Mic,
-                            contentDescription = if (isMuted) "Unmute participant" else "Mute participant",
-                            tint = MaterialTheme.colorScheme.primary,
+                            contentDescription = null,
+                            tint = if (isMuted) Color(0xFFEF4444) else Color(0xFF34D399),
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -326,17 +356,18 @@ private fun ParticipantRow(participant: Participant, isCurrentUser: Boolean, sta
 
                 // Show message button only if user has permission
                 if (canMessage) {
-                    IconButton(
+                    ParticipantActionButton(
                         onClick = {
                             state.messaging.directMessageDetails = participant
                             state.messaging.startDirectMessage = true
                             state.openMessages()
                         },
-                        modifier = Modifier.size(32.dp)
+                        tint = MaterialTheme.colorScheme.primary,
+                        contentDescription = "Send message"
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.Message,
-                            contentDescription = "Send message",
+                            contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp)
                         )
@@ -344,15 +375,16 @@ private fun ParticipantRow(participant: Participant, isCurrentUser: Boolean, sta
                 }
 
                 if (canManagePanelist) {
-                    IconButton(
+                    ParticipantActionButton(
                         onClick = {
                             if (isPanelist) state.removePanelist(participant) else state.addPanelist(participant)
                         },
-                        modifier = Modifier.size(32.dp)
+                        tint = if (isPanelist) Color(0xFFF59E0B) else Color(0xFF34D399),
+                        contentDescription = if (isPanelist) "Remove panelist" else "Add panelist"
                     ) {
                         Icon(
                             imageVector = if (isPanelist) Icons.Rounded.Remove else Icons.Rounded.Add,
-                            contentDescription = if (isPanelist) "Remove panelist" else "Add panelist",
+                            contentDescription = null,
                             tint = if (isPanelist) Color(0xFFFF9800) else Color(0xFF52C41A),
                             modifier = Modifier.size(18.dp)
                         )
@@ -361,13 +393,14 @@ private fun ParticipantRow(participant: Participant, isCurrentUser: Boolean, sta
 
                 // Show remove button only if user has permission
                 if (canRemove) {
-                    IconButton(
+                    ParticipantActionButton(
                         onClick = { state.removeParticipant(participant) },
-                        modifier = Modifier.size(32.dp)
+                        tint = Color(0xFFEF4444),
+                        contentDescription = "Remove participant"
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Delete,
-                            contentDescription = "Remove participant",
+                            contentDescription = null,
                             tint = Color(0xFFFF4D4F),
                             modifier = Modifier.size(18.dp)
                         )
@@ -412,4 +445,27 @@ private fun AudioStatusIcon(participant: Participant) {
     val icon = if (audioActive) Icons.Rounded.Mic else Icons.Rounded.MicOff
     val tint = if (audioActive) MaterialTheme.colorScheme.primary else Color(0xFFFF4D4F)
     Icon(icon, contentDescription = if (audioActive) "Microphone on" else "Microphone muted", tint = tint)
+}
+
+@Composable
+private fun ParticipantActionButton(
+    onClick: () -> Unit,
+    tint: Color,
+    contentDescription: String,
+    content: @Composable () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = tint.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.24f))
+    ) {
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier.size(34.dp)
+        ) {
+            Box(modifier = Modifier.size(18.dp)) {
+                content()
+            }
+        }
+    }
 }

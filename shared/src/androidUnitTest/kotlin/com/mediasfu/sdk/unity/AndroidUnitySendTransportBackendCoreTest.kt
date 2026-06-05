@@ -335,6 +335,7 @@ class AndroidUnitySendTransportBackendCoreTest {
             track: MediaStreamTrack,
             encodings: List<RtpEncodingParameters>,
             codecOptions: ProducerCodecOptions?,
+            codec: RtpCodecCapability?,
             appData: Map<String, Any?>?
         ): WebRtcProducer {
             val completion = CompletableFuture<String>()

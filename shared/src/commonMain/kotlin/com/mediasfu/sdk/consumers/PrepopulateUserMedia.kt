@@ -15,6 +15,8 @@ import com.mediasfu.sdk.ui.components.display.DefaultCardVideoDisplay
 import com.mediasfu.sdk.ui.components.display.DefaultMiniCard
 import com.mediasfu.sdk.ui.components.display.MiniCardOptions
 import com.mediasfu.sdk.webrtc.MediaStream
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * Parameters for the prepopulateUserMedia function.
@@ -241,6 +243,19 @@ suspend fun prepopulateUserMedia(options: PrepopulateUserMediaOptions) {
 
         // Track the component to emit
         val newComponent = mutableListOf<MediaSfuUIComponent>()
+        fun Participant.isPlaceholderSeed(): Boolean =
+            extra["placeholder"]?.jsonPrimitive?.booleanOrNull == true
+
+        fun preferredHostCandidate(candidates: List<Participant>): Participant? {
+            val hostLike = candidates.filter {
+                it.islevel == "2" || it.isHost || it.isAdmin
+            }
+
+            return hostLike.firstOrNull { !it.isPlaceholderSeed() }
+                ?: hostLike.firstOrNull()
+                ?: candidates.firstOrNull { !it.isPlaceholderSeed() }
+                ?: candidates.firstOrNull()
+        }
 
         if (eventType == EventType.CHAT) {
             if (mainHeightWidth != 0.0) {
@@ -303,7 +318,9 @@ suspend fun prepopulateUserMedia(options: PrepopulateUserMediaOptions) {
             forceFullDisplay = shouldForceFull
 
             if (shared) {
-                host = participants.firstOrNull { it.name.equals(member, ignoreCase = true) }
+                host = participants.firstOrNull {
+                    it.name.equals(member, ignoreCase = true) && !it.isPlaceholderSeed()
+                } ?: participants.firstOrNull { it.name.equals(member, ignoreCase = true) }
                     .orPlaceholder(member.ifBlank { name }, islevel, videoAlreadyOn, audioAlreadyOn)
                 hostStream = Stream(
                     producerId = member.ifBlank { host.name },
@@ -383,9 +400,16 @@ suspend fun prepopulateUserMedia(options: PrepopulateUserMediaOptions) {
                 return
             }
 
-            host = participants.firstOrNull { it.islevel == "2" }
+            host = preferredHostCandidate(participants)
+            if (host == null && mainScreenPerson.isNotBlank()) {
+                host = participants.firstOrNull {
+                    it.name.equals(mainScreenPerson, ignoreCase = true) && !it.isPlaceholderSeed()
+                } ?: participants.firstOrNull { it.name.equals(mainScreenPerson, ignoreCase = true) }
+            }
             if (host == null) {
-                host = participants.firstOrNull { it.name.equals(member, ignoreCase = true) }
+                host = participants.firstOrNull {
+                    it.name.equals(member, ignoreCase = true) && !it.isPlaceholderSeed()
+                } ?: participants.firstOrNull { it.name.equals(member, ignoreCase = true) }
             }
             host = host.orPlaceholder(member.ifBlank { name }, islevel, videoAlreadyOn, audioAlreadyOn)
 
@@ -422,6 +446,35 @@ suspend fun prepopulateUserMedia(options: PrepopulateUserMediaOptions) {
             val hostLevel = host.islevel ?: "1"
             val hostVideoOn = host.videoOn
             val isLocalAdmin = islevel == "2"
+            val localPreviewStream = when {
+                keepBackground && virtualStream != null -> Stream(
+                    producerId = "virtual",
+                    stream = virtualStream
+                )
+                localStreamVideo != null -> Stream(
+                    producerId = host.videoID.ifBlank { host.name },
+                    stream = localStreamVideo
+                )
+                else -> null
+            }
+            fun matchesHostMedia(stream: Stream, hostParticipant: Participant): Boolean {
+                if (stream.stream == null) return false
+                if (hostParticipant.videoID.isNotBlank() && stream.producerId == hostParticipant.videoID) return true
+                if (hostParticipant.videoID.isNotBlank() && stream.videoID == hostParticipant.videoID) return true
+                if (hostParticipant.audioID.isNotBlank() && stream.producerId == hostParticipant.audioID) return true
+                if (hostParticipant.audioID.isNotBlank() && stream.audioID == hostParticipant.audioID) return true
+                return !stream.name.isNullOrBlank() && stream.name.equals(hostParticipant.name, ignoreCase = true)
+            }
+
+            val remoteHostVideoStream = oldAllStreams.firstOrNull { stream ->
+                matchesHostMedia(stream, host)
+            }?.copy() ?: allVideoStreams.firstOrNull { stream ->
+                matchesHostMedia(stream, host)
+            }?.copy()
+            val hostHasLiveVideo = hostVideoOn || when {
+                isLocalAdmin && host.name.equals(member, ignoreCase = true) -> localPreviewStream?.stream != null
+                else -> remoteHostVideoStream?.stream != null
+            }
 
             if ((shareScreenStarted || shared) && hostStream != null) {
                 // Screen share is active - show screen share video
@@ -459,7 +512,7 @@ suspend fun prepopulateUserMedia(options: PrepopulateUserMediaOptions) {
                 // Return after screen share handling
                 updateUpdateMainWindow(false)
                 return
-            } else if ((!isLocalAdmin && !hostVideoOn) || (isLocalAdmin && (!hostVideoOn || !videoAlreadyOn)) || localUIMode) {
+            } else if ((!isLocalAdmin && !hostHasLiveVideo) || (isLocalAdmin && (!hostHasLiveVideo || !videoAlreadyOn)) || localUIMode) {
                 // Video is off
                 if (isLocalAdmin && videoAlreadyOn && localStreamVideo != null) {
                     // Admin's video is on - show their video
@@ -490,6 +543,7 @@ suspend fun prepopulateUserMedia(options: PrepopulateUserMediaOptions) {
                     // Video is off - check audio
                     val audioOn = when {
                         isLocalAdmin && audioAlreadyOn -> true
+                        host.audioOn -> true
                         host.name.isNotBlank() && !isLocalAdmin -> !host.muted
                         else -> false
                     }
@@ -515,7 +569,7 @@ suspend fun prepopulateUserMedia(options: PrepopulateUserMediaOptions) {
                     } else {
                         // Audio is off - show mini card
                         val miniCard = buildMiniCard(
-                            displayName = name,
+                            displayName = host.name.ifBlank { name },
                             participant = host
                         )
                         newComponent.add(miniCard)
@@ -563,22 +617,10 @@ suspend fun prepopulateUserMedia(options: PrepopulateUserMediaOptions) {
                     // Regular video - find the stream
                     var resolvedStream = hostStream
                     if (resolvedStream == null) {
-                        resolvedStream = if (hostLevel == "2") {
-                            when {
-                                keepBackground && virtualStream != null -> Stream(
-                                    producerId = "virtual",
-                                    stream = virtualStream
-                                )
-                                localStreamVideo != null -> Stream(
-                                    producerId = host.videoID.ifBlank { host.name },
-                                    stream = localStreamVideo
-                                )
-                                else -> null
-                            }
+                        resolvedStream = if (hostLevel == "2" && isLocalAdmin && host.name.equals(member, ignoreCase = true)) {
+                            localPreviewStream
                         } else {
-                            oldAllStreams.firstOrNull { stream ->
-                                stream.producerId == host.videoID && stream.stream != null
-                            }?.copy()
+                            remoteHostVideoStream
                         }
                     }
 
@@ -587,7 +629,7 @@ suspend fun prepopulateUserMedia(options: PrepopulateUserMediaOptions) {
                         val doMirror = member == host.name
                         val videoCard = buildVideoCard(
                             videoStream = resolvedStream!!.stream,
-                            remoteProducerId = host.videoID.ifBlank { host.name },
+                            remoteProducerId = resolvedStream.producerId.ifBlank { host.videoID.ifBlank { host.name } },
                             participant = host,
                             displayName = host.name,
                             doMirror = doMirror
@@ -607,7 +649,7 @@ suspend fun prepopulateUserMedia(options: PrepopulateUserMediaOptions) {
                     } else {
                         // No stream available - show mini card
                         val miniCard = buildMiniCard(
-                            displayName = name,
+                            displayName = host.name.ifBlank { name },
                             participant = host
                         )
                         newComponent.add(miniCard)

@@ -114,3 +114,17 @@ scripts/ios_rebuild_after_xcode_switch.sh
 unity-native-bridge/build/
 unity-native-bridge/build-android/
 unity-native-bridge/build-ios/
+
+# New Developer Handoffs, Usage Guides & Diagnostics
+ANDROID_PARITY_HANDOFF_*.md
+PHYSICAL_IOS_MEDIA_HANDOFF_*.md
+IOS_SWIFT_CLIENT_USAGE.dev.md
+ui-screenshots/
+ios-sample-app/device_app_data/
+ios-sample-app/runtime-probes/
+shared/src/commonTest/kotlin/com/mediasfu/sdk/consumers/AddVideosGridVirtualBackgroundTest.kt
+shared/src/commonTest/kotlin/com/mediasfu/sdk/consumers/StreamSuccessVideoTest.kt
+shared/src/commonTest/kotlin/com/mediasfu/sdk/ui/components/
+scripts/toggle_endpoints.py
+
+

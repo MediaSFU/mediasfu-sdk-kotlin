@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.MaterialTheme
 import com.mediasfu.sdk.ui.*
 
 /**
@@ -82,11 +83,14 @@ class DefaultMainContainerComponent(
  */
 @Composable
 fun MainContainerComponent.renderCompose(content: @Composable ColumnScope.() -> Unit) {
+    val isLightTheme = MaterialTheme.colorScheme.background.red > 0.5f
+    val containerBgColor = if (isLightTheme) MaterialTheme.colorScheme.background else Color(options.backgroundColor)
+
     Box(
         modifier = Modifier
             .fillMaxWidth(options.containerWidthFraction.toFloat())
             .fillMaxHeight(options.containerHeightFraction.toFloat())
-            .background(Color(options.backgroundColor))
+            .background(containerBgColor)
             .padding(
                 start = options.marginLeft.dp,
                 end = options.marginRight.dp,

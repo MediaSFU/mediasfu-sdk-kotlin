@@ -69,10 +69,14 @@ public struct MediaSFURawTransportOptions: Equatable {
 
 public struct MediaSFURawProduceOptions: Equatable {
     public let encodingsJson: String?
+    public let codecOptionsJson: String?
+    public let codecJson: String?
     public let appDataJson: String?
 
-    public init(encodingsJson: String?, appDataJson: String?) {
+    public init(encodingsJson: String?, codecOptionsJson: String?, codecJson: String?, appDataJson: String?) {
         self.encodingsJson = encodingsJson
+        self.codecOptionsJson = codecOptionsJson
+        self.codecJson = codecJson
         self.appDataJson = appDataJson
     }
 }
@@ -155,10 +159,21 @@ public final class MediaSFULibmediasoupSendTransportWrapper: MediaSFULibmediasou
     public func onConnectionStateChange(_ listener: ((String) -> Void)?) { backend.setConnectionStateListener(listener) }
     public func onProduce(_ listener: MediaSFUNativeProduceListener?) { backend.setProduceListener(listener) }
 
-    public func produce(track: MediaSFUNativeTrack, encodingsJson: String?, appDataJson: String?) throws -> MediaSFULibmediasoupProducer {
+    public func produce(
+        track: MediaSFUNativeTrack,
+        encodingsJson: String?,
+        codecOptionsJson: String?,
+        codecJson: String?,
+        appDataJson: String?
+    ) throws -> MediaSFULibmediasoupProducer {
         let producer = try backend.produce(
             track: track,
-            options: MediaSFURawProduceOptions(encodingsJson: encodingsJson, appDataJson: appDataJson)
+            options: MediaSFURawProduceOptions(
+                encodingsJson: encodingsJson,
+                codecOptionsJson: codecOptionsJson,
+                codecJson: codecJson,
+                appDataJson: appDataJson
+            )
         )
         return MediaSFULibmediasoupProducerWrapper(backend: producer)
     }

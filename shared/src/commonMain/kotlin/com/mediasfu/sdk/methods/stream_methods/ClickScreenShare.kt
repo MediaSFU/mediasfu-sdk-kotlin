@@ -8,6 +8,7 @@ import com.mediasfu.sdk.consumers.CheckScreenShareParameters
 import com.mediasfu.sdk.consumers.CheckScreenShareType
 import com.mediasfu.sdk.consumers.StopShareScreenOptions
 import com.mediasfu.sdk.consumers.StopShareScreenParameters
+import com.mediasfu.sdk.model.PermissionConfig
 import com.mediasfu.sdk.model.ShowAlert
 import com.mediasfu.sdk.socket.SocketManager
 import kotlinx.datetime.Clock
@@ -31,6 +32,7 @@ interface ClickScreenShareParameters :
     val videoSetting: String
     val screenshareSetting: String
     val chatSetting: String
+    val permissionConfig: PermissionConfig?
     val screenAction: Boolean
     val screenAlreadyOn: Boolean
     val screenRequestState: String?
@@ -177,7 +179,9 @@ suspend fun clickScreenShare(options: ClickScreenShareOptions) {
                     audioSetting = audioSetting,
                     videoSetting = videoSetting,
                     screenshareSetting = screenshareSetting,
-                    chatSetting = chatSetting
+                    chatSetting = chatSetting,
+                    permissionConfig = parameters.permissionConfig,
+                    participantLevel = islevel
                 )
                 response = checkPermission(optionsCheck)
             } else {
@@ -187,6 +191,14 @@ suspend fun clickScreenShare(options: ClickScreenShareOptions) {
             // Handle different responses
             when (response) {
                 0 -> {
+                    if (!parameters.transportCreated) {
+                        showAlert?.invoke(
+                            message = "Please start your media (audio/video) before starting screen share.",
+                            type = "danger",
+                            duration = 3000
+                        )
+                        return
+                    }
                     // Allow screen sharing - proceed directly without requiring mic/camera first
                     val optionsCheck = CheckScreenShareOptions(
                         parameters = parameters

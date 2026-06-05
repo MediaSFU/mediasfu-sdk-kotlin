@@ -189,14 +189,20 @@ private suspend fun connectToRemoteSocket(
     apiToken: String
 ): SocketManager {
     val socketManager = com.mediasfu.sdk.socket.createSocketManager()
-    val url = "https://$ip.mediasfu.com"
+    val url = buildRemoteSocketUrl(
+        ip = ip,
+        apiUserName = apiUserName,
+        apiKey = apiKey,
+        apiToken = apiToken
+    )
     
     // Create socket config with authentication
     val config = com.mediasfu.sdk.model.SocketConfig(
         timeout = 30000,
         reconnection = true,
         reconnectionAttempts = 3,
-        reconnectionDelay = 1000
+        reconnectionDelay = 1000,
+        waitForConnectionSuccess = false
     )
     
     val connectResult = withTimeout(30000) {
@@ -205,6 +211,48 @@ private suspend fun connectToRemoteSocket(
     
     connectResult.getOrThrow()
     return socketManager
+}
+
+private fun buildRemoteSocketUrl(
+    ip: String,
+    apiUserName: String,
+    apiKey: String,
+    apiToken: String
+): String {
+    val params = mutableListOf<Pair<String, String>>()
+    if (apiUserName.isNotBlank()) {
+        params += "apiUserName" to apiUserName
+    }
+    when {
+        apiToken.isNotBlank() -> params += "apiToken" to apiToken
+        apiKey.isNotBlank() -> params += "apiKey" to apiKey
+    }
+
+    val baseUrl = "https://$ip.mediasfu.com/media"
+    if (params.isEmpty()) return baseUrl
+
+    return buildString {
+        append(baseUrl)
+        append('?')
+        params.joinTo(this, "&") { (key, value) ->
+            "$key=${value.urlEncodeQueryValue()}"
+        }
+    }
+}
+
+private fun String.urlEncodeQueryValue(): String {
+    if (isEmpty()) return ""
+    val safeChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~"
+    val builder = StringBuilder(length)
+    for (ch in this) {
+        if (safeChars.indexOf(ch) >= 0) {
+            builder.append(ch)
+        } else {
+            builder.append('%')
+            builder.append(ch.code.toString(16).padStart(2, '0').uppercase())
+        }
+    }
+    return builder.toString()
 }
 
 /**

@@ -419,7 +419,10 @@ enum SampleAppEnvironment {
             return true
         }
 
-        return config.prejoinValidationMessage != nil
+        // The KMP Compose pre-join (MediaSFU logo, dark branded form) is the standard
+        // user-facing UI — identical to React and Flutter.  Only show the Swift dev
+        // form when automation / an explicit override requests it.
+        return false
     }
 
     static var automationModeRequested: Bool {

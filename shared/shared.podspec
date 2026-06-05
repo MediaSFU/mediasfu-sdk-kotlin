@@ -55,10 +55,37 @@ Pod::Spec.new do |spec|
                                 if [ -n "$KOTLIN_DEVELOPER_DIR" ]; then
                                     export DEVELOPER_DIR="$KOTLIN_DEVELOPER_DIR"
                                 fi
-                "$REPO_ROOT/../gradlew" --no-daemon -p "$REPO_ROOT" $KOTLIN_PROJECT_PATH:syncFramework \
-                    -Pkotlin.native.cocoapods.platform=$PLATFORM_NAME \
-                    -Pkotlin.native.cocoapods.archs="$ARCHS" \
-                    -Pkotlin.native.cocoapods.configuration="$CONFIGURATION"
+                if [ "$CONFIGURATION" = "Release" ]; then
+                  LINK_BUILD_TYPE="Release"
+                else
+                  LINK_BUILD_TYPE="Debug"
+                fi
+                case "$PLATFORM_NAME" in
+                  *simulator*)
+                    case "$ARCHS" in
+                      x86_64) LINK_TARGET="IosX64" ;;
+                      *)      LINK_TARGET="IosSimulatorArm64" ;;
+                    esac ;;
+                  *)
+                    LINK_TARGET="IosArm64" ;;
+                esac
+                "$REPO_ROOT/../gradlew" --no-daemon -p "$REPO_ROOT/.." ":shared:linkPod${LINK_BUILD_TYPE}Framework${LINK_TARGET}"
+                # Copy the built framework to the vendored_frameworks location
+                case "$PLATFORM_NAME" in
+                  *simulator*)
+                    case "$ARCHS" in
+                      x86_64) ARCH_DIR="iosX64" ;;
+                      *)      ARCH_DIR="iosSimulatorArm64" ;;
+                    esac ;;
+                  *)
+                    ARCH_DIR="iosArm64" ;;
+                esac
+                SRC_FRAMEWORK="$REPO_ROOT/build/bin/${ARCH_DIR}/pod${LINK_BUILD_TYPE}Framework/MediaSFUSDK.framework"
+                DST_FRAMEWORK="$REPO_ROOT/build/cocoapods/framework/MediaSFUSDK.framework"
+                if [ -d "$SRC_FRAMEWORK" ]; then
+                    rm -rf "$DST_FRAMEWORK"
+                    cp -r "$SRC_FRAMEWORK" "$DST_FRAMEWORK"
+                fi
             SCRIPT
         }
     ]

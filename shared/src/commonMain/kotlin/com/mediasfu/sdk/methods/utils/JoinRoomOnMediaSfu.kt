@@ -146,7 +146,8 @@ suspend fun joinRoomOnMediaSfu(options: JoinMediaSFUOptions): CreateJoinRoomResu
                 }.getOrNull()
 
                 if (data != null) {
-                    CreateJoinRoomResult(success = true, data = data)
+                    val normalizedData = data.normalizedForEndpoint(endpoint)
+                    CreateJoinRoomResult(success = true, data = normalizedData)
                 } else {
                     CreateJoinRoomResult(
                         success = false,
@@ -183,7 +184,7 @@ private fun resolveJoinEndpoint(localLink: String): String {
         val normalized = localLink.trimEnd('/')
         "$normalized/joinRoom"
     } else {
-        "https://mediasfu.com/v1/rooms"
+        "https://mediasfu.com/v1/rooms" // ENDPOINT_TOGGLE
     }
 }
 

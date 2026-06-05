@@ -1721,6 +1721,9 @@ internal class EngineCloseAndResizeParameters(
     override val updateShareScreenStarted: (Boolean) -> Unit
         get() = { value -> backing.shareScreenStarted = value }
 
+    override val updateShared: (Boolean) -> Unit
+        get() = { value -> backing.shared = value }
+
     override val updateNewLimitedStreams: (List<Stream>) -> Unit
         get() = { streams -> backing.newLimitedStreams = streams }
 

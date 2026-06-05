@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.interop.UIKitView
 import cocoapods.WebRTC.RTCMTLVideoView
 import cocoapods.WebRTC.RTCVideoTrack
+import com.mediasfu.sdk.util.Logger
 import com.mediasfu.sdk.webrtc.MediaStreamTrack
 import kotlinx.cinterop.CValue
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -27,6 +28,7 @@ actual fun PlatformVideoRenderer(
 ) {
     val nativeTrack = track.asPlatformNativeTrack() as? RTCVideoTrack
     if (nativeTrack == null) {
+        Logger.w("PlatformVideoRenderer", "native video track unavailable; showing fallback")
         VideoRendererFallback(
             message = "Video track unavailable",
             modifier = modifier
@@ -41,25 +43,37 @@ actual fun PlatformVideoRenderer(
         modifier = modifier,
         factory = {
             RTCMTLVideoView().apply {
-                contentMode = desiredContentMode(forceFullDisplay)
+                videoContentMode = desiredContentMode(forceFullDisplay)
                 transform = mirrorTransform(doMirror)
             }.also { view ->
                 updatedTrack.value.addRenderer(view)
                 boundTrack = updatedTrack.value
+                Logger.i(
+                    "PlatformVideoRenderer",
+                    "renderer attached trackId=${updatedTrack.value.trackId} doMirror=$doMirror forceFullDisplay=$forceFullDisplay"
+                )
             }
         },
         update = { view ->
-            view.contentMode = desiredContentMode(forceFullDisplay)
+            view.videoContentMode = desiredContentMode(forceFullDisplay)
             view.transform = mirrorTransform(doMirror)
 
             val desiredTrack = updatedTrack.value
             if (boundTrack !== desiredTrack) {
                 boundTrack?.removeRenderer(view)
                 desiredTrack.addRenderer(view)
+                Logger.i(
+                    "PlatformVideoRenderer",
+                    "renderer rebound previousTrackId=${boundTrack?.trackId ?: "none"} newTrackId=${desiredTrack.trackId}"
+                )
                 boundTrack = desiredTrack
             }
         },
         onRelease = { view ->
+            Logger.i(
+                "PlatformVideoRenderer",
+                "renderer released trackId=${boundTrack?.trackId ?: "none"}"
+            )
             boundTrack?.removeRenderer(view)
             boundTrack = null
         }

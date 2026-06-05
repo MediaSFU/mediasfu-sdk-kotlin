@@ -2,6 +2,7 @@ package com.mediasfu.sdk.ui.components.display
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
@@ -108,12 +109,15 @@ fun FlexibleVideo.renderCompose() {
         return
     }
 
+    val isLightTheme = MaterialTheme.colorScheme.background.red > 0.5f
+    val containerBgColor = if (isLightTheme) MaterialTheme.colorScheme.background else Color(options.backgroundColor)
+
     // Main container with fixed dimensions
     Column(
         modifier = Modifier
             .width(options.customWidth.dp)
             .height(options.customHeight.dp)
-            .background(Color(options.backgroundColor)),
+            .background(containerBgColor),
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         for (rowIndex in 0 until rows) {

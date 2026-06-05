@@ -49,6 +49,7 @@ data class StreamSuccessScreenOptions(
 suspend fun streamSuccessScreen(options: StreamSuccessScreenOptions) {
     val stream = options.stream
     val parameters = options.parameters.getUpdatedAllParams()
+    val wasScreenAlreadyOn = parameters.screenAlreadyOn
 
     try {
         val socket = parameters.socket
@@ -87,16 +88,6 @@ suspend fun streamSuccessScreen(options: StreamSuccessScreenOptions) {
         updateLocalStreamScreen(stream)
         updateLocalStream(stream)
 
-        // Update screen sharing state
-        if (!screenAlreadyOn) {
-            updateScreenAlreadyOn(true)
-            screenAlreadyOn = true
-        }
-
-        if (!parameters.shareScreenStarted) {
-            updateShareScreenStarted(true)
-        }
-
         try {
             if (!transportCreated) {
                 val optionsCreate = CreateSendTransportOptions(
@@ -118,11 +109,24 @@ suspend fun streamSuccessScreen(options: StreamSuccessScreenOptions) {
                     Logger.e("StreamSuccessScreen", "MediaSFU - Error emitting startScreenShare: ${error.message}")
                 }
         } catch (error: Exception) {
-            parameters.showAlert?.invoke(
-                "Error sharing screen: ${error.message}",
-                "danger",
-                3000
-            )
+            Logger.e("StreamSuccessScreen", "MediaSFU - Error sharing screen: ${error.message}")
+            throw error
+        }
+
+        val refreshed = parameters.getUpdatedAllParams()
+        val screenTransportReady = refreshed.transportCreated
+        val screenProduceReady = refreshed.screenProducer != null
+        if (!screenTransportReady || !screenProduceReady) {
+            throw IllegalStateException("Screen transport did not become ready")
+        }
+
+        if (!screenAlreadyOn) {
+            updateScreenAlreadyOn(true)
+            screenAlreadyOn = true
+        }
+
+        if (!parameters.shareScreenStarted) {
+            updateShareScreenStarted(true)
         }
 
         // Update participant screen sharing state
@@ -202,6 +206,10 @@ suspend fun streamSuccessScreen(options: StreamSuccessScreenOptions) {
 
     } catch (error: Exception) {
         Logger.e("StreamSuccessScreen", "MediaSFU - streamSuccessScreen error: ${error.message}")
+        if (!wasScreenAlreadyOn) {
+            parameters.updateScreenAlreadyOn(false)
+            parameters.updateTransportCreatedScreen(false)
+        }
         parameters.showAlert?.invoke(
             "Error setting up screen sharing: ${error.message}",
             "danger",

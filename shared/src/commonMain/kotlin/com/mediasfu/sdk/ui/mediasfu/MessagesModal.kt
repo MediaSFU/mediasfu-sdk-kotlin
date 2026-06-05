@@ -24,6 +24,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -196,12 +197,12 @@ private fun MessageTab(
         onClick = onClick,
         modifier = modifier,
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-            contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+            containerColor = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.16f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+            contentColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
         ),
         border = BorderStroke(
             width = 1.dp,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
         )
     ) {
         Text(text, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
@@ -327,70 +328,82 @@ private fun MessagePanel(
                         placeholder = { Text("Type a message...") },
                         modifier = Modifier.weight(1f),
                         singleLine = false,
-                        maxLines = 3
+                        maxLines = 3,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                            disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                            focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
 
-                    IconButton(
-                        onClick = {
-                            if (messageText.isNotBlank()) {
-                                val isHost = islevel == "2"
-                                
-                                // Block non-hosts from sending direct messages without recipient
-                                if (type == "direct" && directMessageDetails == null && !isHost) {
-                                    showAlert?.call(
-                                        message = "Please select a participant from the Participants list to send a direct message.",
-                                        type = "danger",
-                                        duration = 3000
-                                    )
-                                    return@IconButton
-                                }
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (sendEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                        border = BorderStroke(
+                            1.dp,
+                            if (sendEnabled) MaterialTheme.colorScheme.primary.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant
+                        )
+                    ) {
+                        IconButton(
+                            onClick = {
+                                if (messageText.isNotBlank()) {
+                                    val isHost = islevel == "2"
 
-                                // Determine receivers
-                                val receivers = if (type == "direct") {
-                                    if (directMessageDetails != null) {
-                                        listOf(directMessageDetails.name)
-                                    } else if (isHost) {
-                                        // Host can send to themselves if no recipient selected
-                                        emptyList()
+                                    if (type == "direct" && directMessageDetails == null && !isHost) {
+                                        showAlert?.call(
+                                            message = "Please select a participant from the Participants list to send a direct message.",
+                                            type = "danger",
+                                            duration = 3000
+                                        )
+                                        return@IconButton
+                                    }
+
+                                    val receivers = if (type == "direct") {
+                                        if (directMessageDetails != null) {
+                                            listOf(directMessageDetails.name)
+                                        } else if (isHost) {
+                                            emptyList()
+                                        } else {
+                                            emptyList()
+                                        }
                                     } else {
-                                        // This shouldn't happen due to button disabled state
                                         emptyList()
                                     }
-                                } else {
-                                    emptyList()
-                                }
 
-                                onSendMessage(
-                                    SendMessageOptions(
-                                        member = member,
-                                        islevel = islevel,
-                                        showAlert = showAlert,
-                                        coHostResponsibility = coHostResponsibility,
-                                        coHost = coHost,
-                                        chatSetting = chatSetting,
-                                        message = messageText.trim(),
-                                        roomName = roomName,
-                                        messagesLength = messages.size,
-                                        receivers = receivers,
-                                        group = type == "group",
-                                        sender = member,
-                                        socket = socket
+                                    onSendMessage(
+                                        SendMessageOptions(
+                                            member = member,
+                                            islevel = islevel,
+                                            showAlert = showAlert,
+                                            coHostResponsibility = coHostResponsibility,
+                                            coHost = coHost,
+                                            chatSetting = chatSetting,
+                                            message = messageText.trim(),
+                                            roomName = roomName,
+                                            messagesLength = messages.size,
+                                            receivers = receivers,
+                                            group = type == "group",
+                                            sender = member,
+                                            socket = socket
+                                        )
                                     )
-                                )
-                                messageText = ""
-                            }
-                        },
-                        enabled = sendEnabled
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.Send,
-                            contentDescription = "Send message",
-                            tint = if (sendEnabled) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            }
-                        )
+                                    messageText = ""
+                                }
+                            },
+                            enabled = sendEnabled
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.Send,
+                                contentDescription = "Send message",
+                                tint = if (sendEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
@@ -409,13 +422,19 @@ private fun MessagePanel(
 @Composable
 private fun MessageBubble(message: Message, isCurrentUser: Boolean, timeLabel: String) {
     val alignment = if (isCurrentUser) Arrangement.End else Arrangement.Start
-    val bubbleColor = if (isCurrentUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
+    val bubbleColor = if (isCurrentUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
     val bubbleContentColor = if (isCurrentUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     val recipientsLabel = if (!message.group && message.receivers.isNotEmpty()) {
         "Direct message to ${message.receivers.joinToString()}"
     } else {
         null
     }
+    val bubbleShape = RoundedCornerShape(
+        topStart = 18.dp,
+        topEnd = 18.dp,
+        bottomStart = if (isCurrentUser) 18.dp else 6.dp,
+        bottomEnd = if (isCurrentUser) 6.dp else 18.dp
+    )
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -423,9 +442,10 @@ private fun MessageBubble(message: Message, isCurrentUser: Boolean, timeLabel: S
     ) {
         Column(horizontalAlignment = if (isCurrentUser) Alignment.End else Alignment.Start) {
             Surface(
-                shape = RoundedCornerShape(18.dp),
+                shape = bubbleShape,
                 color = bubbleColor,
-                contentColor = bubbleContentColor
+                contentColor = bubbleContentColor,
+                border = if (isCurrentUser) null else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
             ) {
                 Column(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -465,8 +485,9 @@ private fun MessageDateDivider(label: String) {
         horizontalArrangement = Arrangement.Center
     ) {
         Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant
+            shape = RoundedCornerShape(999.dp),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.86f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
         ) {
             Text(
                 text = label,

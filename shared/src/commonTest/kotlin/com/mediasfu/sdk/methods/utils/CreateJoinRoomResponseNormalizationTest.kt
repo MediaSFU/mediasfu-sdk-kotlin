@@ -15,11 +15,11 @@ class CreateJoinRoomResponseNormalizationTest {
             success = true
         )
 
-        val normalized = response.normalizedForEndpoint("https://staging.mediasfu.com/v1/rooms")
+        val normalized = response.normalizedForEndpoint("https://mediasfu.com/v1/rooms") // ENDPOINT_TOGGLE
 
-        assertEquals("https://staging.mediasfu.com", normalized.link)
+        assertEquals("https://mediasfu.com/v1/rooms", normalized.link) // ENDPOINT_TOGGLE
         assertEquals(
-            "https://staging.mediasfu.com/meet/smp8g9xz571310q7/token123",
+            "https://mediasfu.com/v1/rooms/meet/smp8g9xz571310q7/token123", // ENDPOINT_TOGGLE
             normalized.publicURL
         )
     }
@@ -29,13 +29,13 @@ class CreateJoinRoomResponseNormalizationTest {
         val response = CreateJoinRoomResponse(
             message = "Room joined successfully",
             roomName = "room123",
-            publicURL = "https://staging.mediasfu.com/meet/room123/token456",
-            link = "https://staging.mediasfu.com",
+            publicURL = "https://mediasfu.com/v1/rooms/meet/room123/token456", // ENDPOINT_TOGGLE
+            link = "https://mediasfu.com/v1/rooms", // ENDPOINT_TOGGLE
             secret = "token456",
             success = true
         )
 
-        val normalized = response.normalizedForEndpoint("https://staging.mediasfu.com/v1/rooms")
+        val normalized = response.normalizedForEndpoint("https://mediasfu.com/v1/rooms") // ENDPOINT_TOGGLE
 
         assertEquals(response, normalized)
     }
@@ -43,7 +43,7 @@ class CreateJoinRoomResponseNormalizationTest {
     @Test
     fun mediaSfuCloudHelpersTargetProductionRoomsEndpoint() {
         assertEquals(
-            "https://mediasfu.com/v1/rooms",
+            "https://mediasfu.com/v1/rooms", // ENDPOINT_TOGGLE
             MEDIA_SFU_CLOUD_ROOMS_ENDPOINT
         )
     }

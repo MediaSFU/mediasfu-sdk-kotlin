@@ -340,6 +340,7 @@ interface AllMembersParameters :
     val hostFirstSwitch: Boolean
     val waitingRoomList: List<WaitingRoomParticipant>
     val isLevel: String
+    val member: String
 
     val updateParticipantsAll: (List<Participant>) -> Unit
     val updateParticipants: (List<Participant>) -> Unit
@@ -354,6 +355,7 @@ interface AllMembersParameters :
     val updateVideoSetting: (String) -> Unit
     val updateScreenshareSetting: (String) -> Unit
     val updateChatSetting: (String) -> Unit
+    val updateIslevel: (String) -> Unit
     val updateIsLoadingModalVisible: (Boolean) -> Unit
     val updateTotalReqWait: (Int) -> Unit
     val updateHostFirstSwitch: (Boolean) -> Unit
@@ -373,13 +375,12 @@ interface ProducerMediaClosedParameters :
     CloseAndResizeParameters,
     PrepopulateUserMediaParameters,
     ReorderStreamsParameters {
-
     val consumerTransports: List<TransportType>
     override val hostLabel: String
     override val shared: Boolean
 
     val updateConsumerTransports: (List<TransportType>) -> Unit
-    val updateShared: (Boolean) -> Unit
+    override val updateShared: (Boolean) -> Unit
     override val updateShareScreenStarted: (Boolean) -> Unit
     val updateScreenId: (String) -> Unit
     override val updateShareEnded: (Boolean) -> Unit

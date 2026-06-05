@@ -58,7 +58,7 @@ public enum MediaSFUKmpBridgeInstaller {
 #if canImport(shared) && canImport(WebRTC)
 import WebRTC
 
-final class SharedBridgeAdapter: SharedIosNativeMediasoupBridge {
+final class SharedBridgeAdapter: SharedIosNativeLoadableMediasoupBridge {
     private let bridge: MediaSFUNativeMediasoupBridge
 
     init(bridge: MediaSFUNativeMediasoupBridge) {
@@ -78,10 +78,29 @@ final class SharedBridgeAdapter: SharedIosNativeMediasoupBridge {
         }
         return SharedRecvTransportAdapter(handle: bridge.createRecvTransport(params: mapped))
     }
+
+    func loadRtpCapabilitiesJson(rtpCapabilitiesJson: String) -> String? {
+        guard let loadableBridge = bridge as? MediaSFUNativeLoadableMediasoupBridge else {
+            return "bridge-cast-to-loadable-failed"
+        }
+
+        do {
+            try loadableBridge.load(routerRtpCapabilitiesJson: rtpCapabilitiesJson)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    func currentRtpCapabilitiesJson() -> String? {
+        (bridge as? MediaSFUNativeLoadableMediasoupBridge)?.currentRtpCapabilitiesJson()
+    }
 }
 
 final class SharedSendTransportAdapter: SharedIosNativeSendTransportHandle {
     private let handle: MediaSFUNativeSendTransportHandle
+    private let pendingProduceKindLock = NSLock()
+    private var pendingProduceKinds: [String] = []
 
     init(handle: MediaSFUNativeSendTransportHandle) {
         self.handle = handle
@@ -107,14 +126,53 @@ final class SharedSendTransportAdapter: SharedIosNativeSendTransportHandle {
 
     func setOnProduce(listener: SharedIosNativeProduceListener?) {
         handle.setOnProduce(listener.map { listener in
-            { kind, rtpJson, appDataJson, callback, errback in
-                listener.onProduce(kind: kind, rtpParametersJson: rtpJson, appDataJson: appDataJson, callback: callback, errback: { error in errback(error) })
+            { [weak self] kind, rtpJson, appDataJson, callback, errback in
+                let hintedKind = self?.consumePendingProduceKind()
+                let effectiveKind = hintedKind ?? kind
+                if let hintedKind, hintedKind != kind {
+                    NSLog("[MediaSFUIosBridge] produce kind override native=%@ effective=%@ transportId=%@", kind, hintedKind, self?.id ?? "unknown")
+                }
+                listener.onProduce(kind: effectiveKind, rtpParametersJson: rtpJson, appDataJson: appDataJson, callback: callback, errback: { error in errback(error) })
             }
         })
     }
 
-    func produce(track: RTCMediaStreamTrack, encodingsJson: String?, appDataJson: String?) -> SharedIosNativeProducerHandle {
-        SharedProducerAdapter(handle: handle.produce(track: track, encodingsJson: encodingsJson, appDataJson: appDataJson))
+    func produce(
+        track: RTCMediaStreamTrack,
+        encodingsJson: String?,
+        codecOptionsJson: String?,
+        codecJson: String?,
+        appDataJson: String?
+    ) -> SharedIosNativeProducerHandle {
+        enqueuePendingProduceKind(kind(for: track))
+        SharedProducerAdapter(
+            handle: handle.produce(
+                track: track,
+                encodingsJson: encodingsJson,
+                codecOptionsJson: codecOptionsJson,
+                codecJson: codecJson,
+                appDataJson: appDataJson
+            )
+        )
+    }
+
+    private func enqueuePendingProduceKind(_ kind: String) {
+        pendingProduceKindLock.lock()
+        pendingProduceKinds.append(kind)
+        pendingProduceKindLock.unlock()
+    }
+
+    private func consumePendingProduceKind() -> String? {
+        pendingProduceKindLock.lock()
+        defer { pendingProduceKindLock.unlock() }
+        guard !pendingProduceKinds.isEmpty else { return nil }
+        return pendingProduceKinds.removeFirst()
+    }
+
+    private func kind(for track: RTCMediaStreamTrack) -> String {
+        if track is RTCAudioTrack { return "audio" }
+        if track is RTCVideoTrack { return "video" }
+        return track.kind
     }
 }
 

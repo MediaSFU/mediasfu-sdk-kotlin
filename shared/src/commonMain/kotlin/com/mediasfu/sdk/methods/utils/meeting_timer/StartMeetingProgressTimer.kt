@@ -1,5 +1,6 @@
 package com.mediasfu.sdk.methods.utils.meeting_timer
 
+import com.mediasfu.sdk.util.Logger
 import kotlinx.coroutines.*
 import kotlinx.datetime.Clock
 import kotlinx.datetime.Instant
@@ -60,6 +61,10 @@ fun startMeetingProgressTimer(
 ) {
     val startTime = options.startTime
     var parameters = options.parameters
+    Logger.d(
+        "MeetingProgressTimer",
+        "startMeetingProgressTimer startTime=$startTime validated=${parameters.validated} room='${parameters.roomName}'"
+    )
     
     // Utility function to calculate elapsed time based on start time.
     fun calculateElapsedTime(startTime: Long): Long {
@@ -81,11 +86,20 @@ fun startMeetingProgressTimer(
     
     // Initialize and start the timer
     val job = CoroutineScope(Dispatchers.Default).launch {
+        var tickCount = 0L
         while (isActive) {
             delay(1000) // Wait for 1 second
             elapsedTime++
+            tickCount++
             val formattedTime = formatTime(elapsedTime)
             parameters.updateMeetingProgressTime(formattedTime)
+
+            if (tickCount % 10L == 0L) {
+                Logger.d(
+                    "MeetingProgressTimer",
+                    "tick=$tickCount elapsed=$formattedTime validated=${parameters.validated} room='${parameters.roomName}'"
+                )
+            }
             
             // Get updated parameters
             val updatedParams = parameters.getUpdatedAllParams()
@@ -94,8 +108,20 @@ fun startMeetingProgressTimer(
             
             // Stop the timer if the meeting is invalidated or room name is missing
             if (!validated || roomName.isEmpty()) {
+                Logger.w(
+                    "MeetingProgressTimer",
+                    "stopping timer tick=$tickCount validated=$validated room='${roomName}'"
+                )
                 cancel()
             }
+        }
+    }
+
+    job.invokeOnCompletion { error ->
+        if (error != null && error !is CancellationException) {
+            Logger.e("MeetingProgressTimer", "timer completed with error=${error.message}")
+        } else {
+            Logger.d("MeetingProgressTimer", "timer completed/cancelled normally")
         }
     }
 }

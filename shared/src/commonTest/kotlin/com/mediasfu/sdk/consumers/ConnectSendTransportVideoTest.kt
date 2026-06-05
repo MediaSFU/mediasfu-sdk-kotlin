@@ -3,6 +3,7 @@ package com.mediasfu.sdk.consumers
 
 import com.mediasfu.sdk.methods.utils.producer.ProducerCodecOptions
 import com.mediasfu.sdk.methods.utils.producer.ProducerOptionsType
+import com.mediasfu.sdk.testutil.TestWebRtcTransport
 import com.mediasfu.sdk.webrtc.RtpEncodingParameters
 import com.mediasfu.sdk.testutil.TestConnectSendTransportVideoParameters
 import com.mediasfu.sdk.testutil.TestMediaStream
@@ -12,6 +13,7 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 
 /**
  * Test suite for ConnectSendTransportVideo functionality.
@@ -88,6 +90,32 @@ class ConnectSendTransportVideoTest {
         
         assertTrue(result.isSuccess)
         assertTrue(parameters.localStreamVideoUpdates.contains(stream))
+    }
+
+    @Test
+    fun testConnectSendTransportVideoUsesEmptyCameraAppData() = runTest {
+        val parameters = TestConnectSendTransportVideoParameters(
+            initialVideoProducer = null
+        )
+        val stream = TestMediaStream(
+            videoTracks = listOf(TestMediaStreamTrack(kind = "video"))
+        )
+        val track = stream.getVideoTracks().first()
+        val options = ConnectSendTransportVideoOptions(
+            videoParams = ProducerOptionsType(
+                stream = stream,
+                track = track
+            ),
+            parameters = parameters,
+            targetOption = "remote"
+        )
+
+        val result = connectSendTransportVideo(options)
+
+        assertTrue(result.isSuccess)
+        val transport = parameters.producerTransport as TestWebRtcTransport
+        assertEquals(1, transport.produceCalls.size)
+        assertNull(transport.produceCalls.single().appData)
     }
     
     @Test

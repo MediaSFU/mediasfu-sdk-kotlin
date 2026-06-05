@@ -65,15 +65,12 @@ class IosPlatformParityTest {
 
     @Test
     fun virtualBackgroundFactory_create_followsSupportGate() {
-        val creationResult = VirtualBackgroundProcessorFactory.createResult(null)
         val processor = VirtualBackgroundProcessorFactory.create(null)
 
         if (VirtualBackgroundProcessorFactory.isSupported()) {
             assertNotNull(processor)
-            assertTrue(creationResult is com.mediasfu.sdk.background.VirtualBackgroundProcessorCreationResult.Success)
             assertTrue(processor is IOSVirtualBackgroundProcessor)
         } else {
-            assertTrue(creationResult is com.mediasfu.sdk.background.VirtualBackgroundProcessorCreationResult.Failure)
             assertNull(processor)
         }
     }

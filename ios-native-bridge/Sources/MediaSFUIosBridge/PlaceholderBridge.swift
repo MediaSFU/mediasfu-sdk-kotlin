@@ -78,6 +78,8 @@ open class PlaceholderTransportHandle {
 public final class PlaceholderSendTransportHandle: PlaceholderTransportHandle, MediaSFUNativeSendTransportHandle {
     public var produceListener: MediaSFUNativeProduceListener?
     public private(set) var lastEncodingsJson: String?
+    public private(set) var lastCodecOptionsJson: String?
+    public private(set) var lastCodecJson: String?
     public private(set) var lastAppDataJson: String?
     public private(set) var producedHandle: PlaceholderProducerHandle?
 
@@ -88,9 +90,13 @@ public final class PlaceholderSendTransportHandle: PlaceholderTransportHandle, M
     public func produce(
         track: MediaSFUNativeTrack,
         encodingsJson: String?,
+        codecOptionsJson: String?,
+        codecJson: String?,
         appDataJson: String?
     ) -> MediaSFUNativeProducerHandle {
         lastEncodingsJson = encodingsJson
+        lastCodecOptionsJson = codecOptionsJson
+        lastCodecJson = codecJson
         lastAppDataJson = appDataJson
         let handle = PlaceholderProducerHandle(id: UUID().uuidString, kind: inferredKind(from: track))
         producedHandle = handle
@@ -193,6 +199,7 @@ public final class PlaceholderProducerHandle: MediaSFUNativeProducerHandle {
     }
 
     public func replaceTrack(_ track: MediaSFUNativeTrack) {}
+    public func statsJson() -> String? { nil }
 }
 
 public final class PlaceholderConsumerHandle: MediaSFUNativeConsumerHandle {
@@ -220,4 +227,5 @@ public final class PlaceholderConsumerHandle: MediaSFUNativeConsumerHandle {
     public func resume() {
         paused = false
     }
+    public func statsJson() -> String? { nil }
 }

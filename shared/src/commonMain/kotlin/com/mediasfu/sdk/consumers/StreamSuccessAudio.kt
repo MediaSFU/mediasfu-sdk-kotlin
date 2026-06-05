@@ -1,6 +1,7 @@
 package com.mediasfu.sdk.consumers
 import com.mediasfu.sdk.util.Logger
 
+import com.mediasfu.sdk.methods.utils.producer.AParams
 import com.mediasfu.sdk.methods.utils.producer.ProducerOptionsType
 import com.mediasfu.sdk.model.Participant
 import com.mediasfu.sdk.model.ShowAlert
@@ -115,6 +116,7 @@ data class StreamSuccessAudioOptions(
 suspend fun streamSuccessAudio(options: StreamSuccessAudioOptions) {
     val stream = options.stream
     val parameters = options.parameters.getUpdatedAllParams()
+    val wasAudioAlreadyOn = parameters.audioAlreadyOn
 
     try {
         val participants = parameters.participants
@@ -153,6 +155,7 @@ suspend fun streamSuccessAudio(options: StreamSuccessAudioOptions) {
 
         // Update local audio stream
         updateLocalStreamAudio(stream)
+        val sourceAudioTrack = runCatching { stream.getAudioTracks().firstOrNull() }.getOrNull()
 
         if (localStream == null) {
             localStream = stream
@@ -162,7 +165,7 @@ suspend fun streamSuccessAudio(options: StreamSuccessAudioOptions) {
                 localStream.getAudioTracks().forEach { track ->
                     localStream.removeTrack(track)
                 }
-                stream.getAudioTracks().firstOrNull()?.let { track ->
+                sourceAudioTrack?.let { track ->
                     localStream.addTrack(track)
                 }
             }.onFailure { error ->
@@ -171,58 +174,79 @@ suspend fun streamSuccessAudio(options: StreamSuccessAudioOptions) {
             updateLocalStream(localStream)
         }
 
-        val audioTrack = localStream?.getAudioTracks()?.firstOrNull()
+        val audioTrack = sourceAudioTrack ?: localStream?.getAudioTracks()?.firstOrNull()
         val resolvedAudioDeviceId = audioTrack?.id.orEmpty()
         if (resolvedAudioDeviceId.isNotEmpty()) {
             updateDefAudioID(resolvedAudioDeviceId)
             updateUserDefaultAudioInputDevice(resolvedAudioDeviceId)
         }
 
-        if (audioParams == null && aParams != null) {
-            audioParams = aParams
-        }
-        audioParams = audioParams?.copy(track = audioTrack, stream = localStream)
-        audioParams?.let(updateAudioParams)
+        val preparedAudioParams = (audioParams ?: aParams ?: AParams.getAudioParams()).copy(
+            track = audioTrack,
+            stream = stream
+        )
+        audioParams = preparedAudioParams
+        updateAudioParams(preparedAudioParams)
 
-        // Update audio state
-        if (!audioAlreadyOn) {
-            updateAudioAlreadyOn(true)
-            audioAlreadyOn = true
-        }
+        var audioTransportReady = transportCreated
+        var audioProduceReady = transportCreatedAudio
 
         // Create transport if needed
         if (!transportCreated) {
             try {
-                audioParams?.let(updateAudioParams)
                 val optionsCreate = CreateSendTransportOptions(
                     option = "audio",
                     parameters = parameters as CreateSendTransportParameters,
                     audioConstraints = options.audioConstraints
                 )
                 createSendTransport(optionsCreate)
+                val refreshed = parameters.getUpdatedAllParams()
+                audioTransportReady = refreshed.transportCreated
+                audioProduceReady = refreshed.transportCreatedAudio
+                if (!audioTransportReady || !audioProduceReady) {
+                    throw IllegalStateException("Audio transport did not become ready after create")
+                }
             } catch (error: Exception) {
                 Logger.e("StreamSuccessAudio", "MediaSFU - Error creating send transport: ${error.message}")
+                throw error
             }
         } else {
             // Connect or resume audio transport
             try {
                 if (!transportCreatedAudio) {
-                    audioParams?.let(updateAudioParams)
                     val optionsConnect = ConnectSendTransportAudioOptions(
                         stream = localStream ?: stream,
                         parameters = parameters as ConnectSendTransportAudioParameters,
                         audioConstraints = options.audioConstraints
                     )
                     connectSendTransportAudio(optionsConnect)
+                    val refreshed = parameters.getUpdatedAllParams()
+                    audioTransportReady = refreshed.transportCreated
+                    audioProduceReady = refreshed.transportCreatedAudio
+                    if (!audioTransportReady || !audioProduceReady) {
+                        throw IllegalStateException("Audio transport did not become ready after connect")
+                    }
                 } else {
                     val optionsResume = ResumeSendTransportAudioOptions(
                         parameters = parameters as ResumeSendTransportAudioParameters
                     )
                     resumeSendTransportAudio(optionsResume)
+                    val refreshed = parameters.getUpdatedAllParams()
+                    audioTransportReady = refreshed.transportCreated
+                    audioProduceReady = refreshed.transportCreatedAudio
+                    if (!audioTransportReady || !audioProduceReady) {
+                        throw IllegalStateException("Audio transport did not become ready after resume")
+                    }
                 }
             } catch (error: Exception) {
                 Logger.e("StreamSuccessAudio", "MediaSFU - Error connecting audio transport: ${error.message}")
+                throw error
             }
+        }
+
+        if (!audioAlreadyOn) {
+            updateAudioAlreadyOn(true)
+            audioAlreadyOn = true
         }
 
         if (micAction) {
@@ -253,13 +277,17 @@ suspend fun streamSuccessAudio(options: StreamSuccessAudioOptions) {
             }
         }
 
-        transportCreated = true
-        transportCreatedAudio = true
-        updateTransportCreated(true)
-        updateTransportCreatedAudio(true)
+        transportCreated = audioTransportReady
+        transportCreatedAudio = audioProduceReady
+        updateTransportCreated(audioTransportReady)
+        updateTransportCreatedAudio(audioProduceReady)
 
     } catch (error: Exception) {
         Logger.e("StreamSuccessAudio", "MediaSFU - streamSuccessAudio error: ${error.message}")
+        if (!wasAudioAlreadyOn) {
+            parameters.updateAudioAlreadyOn(false)
+            parameters.updateTransportCreatedAudio(false)
+        }
         parameters.showAlert.call(
             message = "Error setting up audio stream: ${error.message}",
             type = "danger",

@@ -1,5 +1,6 @@
 package com.mediasfu.sdk.ui.mediasfu
 import com.mediasfu.sdk.util.Logger
+import com.mediasfu.sdk.getPlatform
 
 import com.mediasfu.sdk.ui.mediasfu.SidebarContent
 import com.mediasfu.sdk.ui.mediasfu.UnifiedModalState
@@ -102,8 +103,15 @@ import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.Headphones
+import androidx.compose.material.icons.rounded.ClosedCaption
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.filled.FlipCameraAndroid
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -129,8 +137,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.runtime.*
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -180,11 +192,17 @@ import com.mediasfu.sdk.consumers.ScreenState
 import com.mediasfu.sdk.consumers.ReorderStreamsOptions
 import com.mediasfu.sdk.consumers.ConsumerResumeOptions
 import com.mediasfu.sdk.consumers.ConsumerTransportInfo
+import com.mediasfu.sdk.consumers.DisconnectSendTransportAudioOptions
+import com.mediasfu.sdk.consumers.DisconnectSendTransportVideoOptions
 import com.mediasfu.sdk.consumers.SignalNewConsumerTransportOptions
 import com.mediasfu.sdk.consumers.SignalNewConsumerTransportParameters
+import com.mediasfu.sdk.consumers.StopShareScreenOptions
 import com.mediasfu.sdk.EngineReorderStreamsParameters
+import com.mediasfu.sdk.consumers.disconnectSendTransportAudio
+import com.mediasfu.sdk.consumers.disconnectSendTransportVideo
 import com.mediasfu.sdk.consumers.generatePageContent
 import com.mediasfu.sdk.consumers.signalNewConsumerTransport
+import com.mediasfu.sdk.consumers.stopShareScreen
 import com.mediasfu.sdk.consumers.onScreenChanges as consumerOnScreenChanges
 import com.mediasfu.sdk.consumers.updateMiniCardsGridImpl
 import com.mediasfu.sdk.createConsumerResumeParameters
@@ -210,6 +228,8 @@ import com.mediasfu.sdk.methods.polls_methods.launchPoll
 import com.mediasfu.sdk.methods.polls_methods.pollUpdated
 import com.mediasfu.sdk.methods.recording_methods.ConfirmRecordingOptions as MethodConfirmRecordingOptions
 import com.mediasfu.sdk.methods.recording_methods.LaunchRecordingOptions
+import com.mediasfu.sdk.producer_client.CreateDeviceClientOptions
+import com.mediasfu.sdk.producer_client.createDeviceClient as producerCreateDeviceClient
 import com.mediasfu.sdk.methods.recording_methods.StartRecordingOptions as MethodStartRecordingOptions
 import com.mediasfu.sdk.methods.recording_methods.confirmRecording
 import com.mediasfu.sdk.methods.recording_methods.launchRecording
@@ -281,6 +301,7 @@ import com.mediasfu.sdk.socket.PersonJoinedOptions as SocketPersonJoinedOptions
 import com.mediasfu.sdk.socket.ReceiveMessageOptions as SocketReceiveMessageOptions
 import com.mediasfu.sdk.socket.*
 import com.mediasfu.sdk.model.MediaDeviceInfo as ModelMediaDeviceInfo
+import com.mediasfu.sdk.util.MediaSFURuntimeProbe
 import com.mediasfu.sdk.ui.components.cohost.CoHostModalOptions
 import com.mediasfu.sdk.ui.components.cohost.CoHostResponsibility as UiCoHostResponsibility
 import com.mediasfu.sdk.ui.components.display_settings.DisplaySettingsModalOptions
@@ -313,9 +334,11 @@ import com.mediasfu.sdk.webrtc.ortc.OrtcUtils
 import kotlin.coroutines.coroutineContext
 import kotlin.math.ceil
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -456,7 +479,10 @@ private fun buildSeedStreams(participants: List<Participant>): List<Stream> {
     }
 }
 
-internal fun buildPlaceholderStreams(participants: List<Participant>): List<Stream> {
+internal fun buildPlaceholderStreams(
+    participants: List<Participant>,
+    selfMemberName: String = ""
+): List<Stream> {
     if (participants.isEmpty()) return emptyList()
 
     return participants.mapIndexed { index, participant ->
@@ -465,12 +491,12 @@ internal fun buildPlaceholderStreams(participants: List<Participant>): List<Stre
             ?: participant.name.lowercase().replace(seedNameSanitizer, "-").trim('-').ifBlank { fallbackId }
         val audioId = participant.audioID.ifBlank { "audio-$baseId" }
         val videoId = participant.videoID.ifBlank { "video-$baseId" }
+        val isSelfPlaceholder = selfMemberName.isNotBlank() &&
+            participant.name.equals(selfMemberName, ignoreCase = true)
 
-        // Use "youyou" as producerId so reorderStreams always preserves these placeholder streams
-        // even when participants list is empty (matches React/Flutter behavior)
         Stream(
             id = videoId,
-            producerId = "youyou",
+            producerId = if (isSelfPlaceholder) "youyou" else videoId,
             muted = !participant.audioOn,
             name = participant.name,
             audioID = audioId,
@@ -486,7 +512,7 @@ internal fun buildPlaceholderStreams(participants: List<Participant>): List<Stre
 class MediasfuGenericState internal constructor(
     private val scope: CoroutineScope,
     internal val parameters: MediasfuParameters,
-    internal val options: MediasfuGenericOptions,
+    internal var options: MediasfuGenericOptions,
 ) {
     private val _validated = MutableStateFlow(parameters.validated)
     val validated: StateFlow<Boolean> = _validated.asStateFlow()
@@ -495,7 +521,7 @@ class MediasfuGenericState internal constructor(
     // This clears cached composables (remember blocks) when starting a new session
     private val _sessionCounter = MutableStateFlow(0)
     val sessionCounter: StateFlow<Int> = _sessionCounter.asStateFlow()
-    
+
     internal fun incrementSessionCounter() {
         _sessionCounter.value++
     }
@@ -806,6 +832,12 @@ class MediasfuGenericState internal constructor(
     private fun resolveHostLabel(): String {
         val screenLead = streams.mainScreenPerson
         if (screenLead.isNotBlank()) return screenLead
+        val resolvedHost = room.participants.firstOrNull { participant ->
+            (participant.isHost || participant.isAdmin || participant.islevel == "2") &&
+                participant.extra["placeholder"] != JsonPrimitive(true) &&
+                participant.name.isNotBlank()
+        }?.name
+        if (!resolvedHost.isNullOrBlank()) return resolvedHost
         val fallback = parameters.hostLabel
         if (fallback.isNotBlank()) return fallback
         val memberName = room.member
@@ -856,7 +888,8 @@ class MediasfuGenericState internal constructor(
     private var seedApplied = false
     private val socketEventNames = mutableSetOf<String>()
     private var registeredSocket: SocketManager? = null
-    private var initialMediaHydrated = false
+    internal var initialMediaHydrated by mutableStateOf(false)
+    private var existingRemoteBootstrapJob: Job? = null
     private var localJoinPerformed = false  // Guards against duplicate joinRoom emits
     private val socketConnectMutex = Mutex()
     private var activeSocketSignature: SocketSignature? = null
@@ -876,26 +909,47 @@ class MediasfuGenericState internal constructor(
         parameters.isLoadingModalVisible = restoringValidatedSession
         modals.setLoadingVisibility(restoringValidatedSession)
         applyInitialOptions()
-        parameters.onParticipantsUpdated = { updated -> handleParticipantsUpdated(updated) }
-        parameters.onOtherGridStreamsUpdated = { _ ->
+        val externalParticipantsUpdated = parameters.onParticipantsUpdated
+        val externalOtherGridStreamsUpdated = parameters.onOtherGridStreamsUpdated
+        val externalAudioAlreadyOnChanged = parameters.onAudioAlreadyOnChanged
+        val externalVideoAlreadyOnChanged = parameters.onVideoAlreadyOnChanged
+        val externalScreenAlreadyOnChanged = parameters.onScreenAlreadyOnChanged
+        val externalSharedChanged = parameters.onSharedChanged
+        val externalShareScreenStartedChanged = parameters.onShareScreenStartedChanged
+        val externalAlertStateChanged = parameters.onAlertStateChanged
+        val externalMainGridStreamUpdated = parameters.onMainGridStreamUpdated
+        val externalLStreamsUpdated = parameters.onLStreamsUpdated
+        val externalPaginatedStreamsUpdated = parameters.onPaginatedStreamsUpdated
+        val externalAudioOnlyStreamsUpdated = parameters.onAudioOnlyStreamsUpdated
+        parameters.onParticipantsUpdated = { updated ->
+            externalParticipantsUpdated?.invoke(updated)
+            handleParticipantsUpdated(updated)
+        }
+        parameters.onOtherGridStreamsUpdated = { updated ->
+            externalOtherGridStreamsUpdated?.invoke(updated)
             scope.launch {
                 propagateParameterChanges()
             }
         }
         // Wire up media state callbacks for Compose reactivity
         parameters.onAudioAlreadyOnChanged = { value ->
+            externalAudioAlreadyOnChanged?.invoke(value)
             media.syncAudioAlreadyOn(value)
         }
         parameters.onVideoAlreadyOnChanged = { value ->
+            externalVideoAlreadyOnChanged?.invoke(value)
             media.syncVideoAlreadyOn(value)
         }
         parameters.onScreenAlreadyOnChanged = { value ->
+            externalScreenAlreadyOnChanged?.invoke(value)
             media.syncScreenAlreadyOn(value)
         }
         parameters.onSharedChanged = { value ->
+            externalSharedChanged?.invoke(value)
             media.syncShared(value)
         }
         parameters.onShareScreenStartedChanged = { value ->
+            externalShareScreenStartedChanged?.invoke(value)
             media.syncShareScreenStarted(value)
         }
         // Wire up recording state callback for Compose reactivity
@@ -908,23 +962,28 @@ class MediasfuGenericState internal constructor(
         // Wire up alert state callback for Compose reactivity
         // Use scope.launch to ensure state changes happen on the Compose/main thread
         parameters.onAlertStateChanged = { message, type, duration ->
+            externalAlertStateChanged?.invoke(message, type, duration)
             scope.launch {
                 alert.show(message, type, duration)
             }
         }
         // Wire up mainGridStream callback for React parity - routes prepopulateUserMedia updates to UI
         parameters.onMainGridStreamUpdated = { components ->
+            externalMainGridStreamUpdated?.invoke(components)
             streams.updateMainGridStream(components)
         }
         // Wire up lStreams callback for Compose reactivity - routes DispStreams updates to UI
         parameters.onLStreamsUpdated = { newStreams ->
+            externalLStreamsUpdated?.invoke(newStreams)
             streams.updateLStreams(newStreams)
         }
         // Wire up paginatedStreams callback for Compose reactivity - routes ChangeVids updates to UI
         parameters.onPaginatedStreamsUpdated = { newStreams ->
+            externalPaginatedStreamsUpdated?.invoke(newStreams)
             streams.updatePaginatedStreams(newStreams)
         }
         parameters.onAudioOnlyStreamsUpdated = { newItems ->
+            externalAudioOnlyStreamsUpdated?.invoke(newItems)
             streams.updateAudioOnlyStreams(newItems)
         }
         observeOrientationChanges()
@@ -1005,11 +1064,11 @@ class MediasfuGenericState internal constructor(
             snapshotFlow { connectivity.socket }.collectLatest { socket ->
                 if (registeredSocket === socket) return@collectLatest
 
-                clearSocketListeners(registeredSocket)
-                registeredSocket = socket
-
                 if (socket != null) {
-                    setupSocketListeners(socket)
+                    ensureSocketListeners(socket)
+                } else {
+                    clearSocketListeners(registeredSocket)
+                    registeredSocket = null
                 }
             }
         }
@@ -1123,6 +1182,10 @@ class MediasfuGenericState internal constructor(
         socketPrefetchJob = null
     }
 
+    internal fun suspendCredentialSocketPrefetch() {
+        suspendSocketPrefetching()
+    }
+
     private fun resumeSocketPrefetching() {
         if (_validated.value) {
             socketPrefetchSuspended = true
@@ -1146,6 +1209,34 @@ class MediasfuGenericState internal constructor(
     private fun handleParticipantsUpdated(updated: List<Participant>) {
         room.refresh()
 
+        if (_validated.value && updated.isNotEmpty()) {
+            scheduleExistingRemoteMediaBootstrap()
+
+            val resolvedHost = resolveHostLabel()
+            val hasRenderableRemoteMedia =
+                parameters.oldAllStreams.any { stream -> stream.stream != null } ||
+                    parameters.allVideoStreamsState.any { stream -> stream.stream != null }
+
+            if (
+                hasRenderableRemoteMedia &&
+                resolvedHost.isNotBlank() &&
+                parameters.mainScreenPerson != resolvedHost
+            ) {
+                scope.launch {
+                    runCatching {
+                        val prepopulateParams =
+                            createAllMembersParameters() as com.mediasfu.sdk.consumers.PrepopulateUserMediaParameters
+                        parameters.prepopulateUserMedia.invoke(
+                            PrepopulateUserMediaOptions(
+                                name = resolvedHost,
+                                parameters = prepopulateParams
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
         if (!_validated.value || updated.isEmpty() || initialMediaHydrated) {
             return
         }
@@ -1163,11 +1254,66 @@ class MediasfuGenericState internal constructor(
         }
     }
 
+    private fun scheduleExistingRemoteMediaBootstrap() {
+        if (parameters.membersReceived) return
+        if (existingRemoteBootstrapJob?.isActive == true) return
+
+        existingRemoteBootstrapJob = scope.launch {
+            bootstrapExistingRemoteMediaAfterJoinIfNeeded()
+        }
+    }
+
+    internal suspend fun ensureDeviceClientForRoomCapabilities() {
+        val routerCaps = parameters.routerRtpCapabilities ?: parameters.rtpCapabilities ?: return
+
+        if (parameters.device == null) {
+            val createdDevice = runCatching {
+                producerCreateDeviceClient(CreateDeviceClientOptions(routerCaps))
+            }.getOrNull()
+
+            if (createdDevice != null) {
+                connectivity.updateDevice(createdDevice)
+            }
+        }
+
+        val currentDevice = parameters.device ?: return
+        runCatching {
+            currentDevice.load(routerCaps).getOrThrow()
+        }
+        val deviceCaps = currentDevice.currentRtpCapabilities() ?: routerCaps
+        parameters.rtpCapabilities = deviceCaps
+        media.rtpCapabilities = deviceCaps
+
+        val extendedCaps = parameters.routerRtpCapabilities?.let { caps ->
+            runCatching {
+                OrtcUtils.getExtendedRtpCapabilities(
+                    localCaps = deviceCaps,
+                    remoteCaps = caps
+                )
+            }.getOrNull()
+        }
+        parameters.extendedRtpCapabilities = extendedCaps
+        parameters.negotiatedRecvRtpCapabilities = extendedCaps?.let { caps ->
+            runCatching { OrtcUtils.getRecvRtpCapabilities(caps) }.getOrNull()
+        }
+        notifyParametersChanged()
+    }
+
     private fun clearSocketListeners(socket: SocketManager?) {
         socketEventNames.forEach { event ->
             runCatching { socket?.off(event) }
         }
         socketEventNames.clear()
+    }
+
+    private fun ensureSocketListeners(socket: SocketManager) {
+        if (registeredSocket !== socket) {
+            clearSocketListeners(registeredSocket)
+            registeredSocket = socket
+            setupSocketListeners(socket)
+        } else if (socketEventNames.isEmpty()) {
+            setupSocketListeners(socket)
+        }
     }
 
     private fun setupSocketListeners(socket: SocketManager) {
@@ -1179,15 +1325,11 @@ class MediasfuGenericState internal constructor(
         }
 
         registerSocketListener(socket, "allMembers") { payload ->
-            scope.launch {
-                handleAllMembersEvent(payload)
-            }
+            handleAllMembersEvent(payload)
         }
 
         registerSocketListener(socket, "allMembersRest") { payload ->
-            scope.launch {
-                handleAllMembersRestEvent(payload)
-            }
+            handleAllMembersRestEvent(payload)
         }
 
         registerSocketListener(socket, "userWaiting") { payload ->
@@ -1540,8 +1682,8 @@ class MediasfuGenericState internal constructor(
             parameters = createAllMembersParameters(),
             consumeSockets = parameters.consumeSocketsState,
             apiUserName = resolveApiUserName(),
-            apiKey = room.apiKey.takeIf { it.isNotBlank() },
-            apiToken = room.apiToken
+            apiKey = resolveApiKey().takeIf { it.isNotBlank() },
+            apiToken = resolveApiToken()
         )
 
         allMembers(options)
@@ -1563,11 +1705,43 @@ class MediasfuGenericState internal constructor(
             parameters = createAllMembersRestParameters(),
             consumeSockets = parameters.consumeSocketsState,
             apiUserName = resolveApiUserName(),
-            apiKey = room.apiKey.takeIf { it.isNotBlank() },
-            apiToken = room.apiToken
+            apiKey = resolveApiKey().takeIf { it.isNotBlank() },
+            apiToken = resolveApiToken()
         )
 
         allMembersRest(options)
+        propagateParameterChanges()
+    }
+
+    private suspend fun bootstrapExistingRemoteMediaAfterJoinIfNeeded() {
+        if (parameters.membersReceived) return
+
+        val recvIps = parameters.roomRecvIPs.filter { ip -> ip.isNotBlank() }
+        if (recvIps.isEmpty()) return
+
+        val currentMembers = room.participants.ifEmpty { parameters.participants }
+        if (currentMembers.isEmpty()) return
+
+        val options = AllMembersRestOptions(
+            members = currentMembers,
+            settings = listOf(
+                media.audioSetting,
+                media.videoSetting,
+                media.screenshareSetting,
+                media.chatSetting
+            ),
+            coHost = room.coHost,
+            coHostRes = room.coHostResponsibility,
+            parameters = createAllMembersRestParameters(),
+            consumeSockets = parameters.consumeSocketsState,
+            apiUserName = resolveApiUserName(),
+            apiKey = resolveApiKey().takeIf { it.isNotBlank() },
+            apiToken = resolveApiToken()
+        )
+
+        runCatching {
+            allMembersRest(options)
+        }
     }
 
     private suspend fun handleUserWaitingEvent(payload: Map<String, Any?>) {
@@ -2924,6 +3098,7 @@ class MediasfuGenericState internal constructor(
         room.updateIslevel(resolvedLevel)
 
         parameters.youAreHost = hostName.equals(memberName, ignoreCase = true)
+        parameters.hostLabel = hostName
         parameters.youAreCoHost = false
         parameters.eventType = resolvedEventType
         parameters.meetingDisplayType = if (resolvedEventType == EventType.CHAT || resolvedEventType == EventType.BROADCAST) "all" else "media"
@@ -3029,7 +3204,9 @@ class MediasfuGenericState internal constructor(
 
     private fun resolveApiToken(): String {
         return room.apiToken.ifBlank {
-            room.apiKey.ifBlank { options.credentials?.apiKey ?: "" }
+            parameters.apiToken.ifBlank {
+                room.apiKey.ifBlank { options.credentials?.apiKey ?: "" }
+            }
         }
     }
 
@@ -3108,41 +3285,115 @@ class MediasfuGenericState internal constructor(
         } catch (_: Exception) { }
 
         try {
-            // 2. Turn off video if on - using toggleVideo which properly handles the toggle
+            // 2. Force-close video producers before resetting state.
             if (media.videoAlreadyOn) {
-                toggleVideo()
+                disconnectSendTransportVideo(
+                    DisconnectSendTransportVideoOptions(
+                        parameters = createClickVideoParameters()
+                    )
+                )
             }
         } catch (_: Exception) { }
 
         try {
-            // 3. Turn off audio if on
+            // 3. Force-close audio producers before resetting state.
             if (media.audioAlreadyOn) {
-                toggleAudio()
+                disconnectSendTransportAudio(
+                    DisconnectSendTransportAudioOptions(
+                        parameters = createClickAudioParameters()
+                    )
+                )
             }
         } catch (_: Exception) { }
 
         try {
-            // 4. Disconnect all consume sockets
-            // consumeSockets is List<Map<String, SocketManager>>
+            // 4. Stop local screen share before sockets and streams are cleared.
+            if (media.screenAlreadyOn) {
+                stopShareScreen(
+                    StopShareScreenOptions(
+                        parameters = createClickScreenShareParameters()
+                    )
+                )
+            }
+        } catch (_: Exception) { }
+
+        try {
+            // 5. Disconnect all consume sockets plus the main room sockets.
             parameters.consumeSockets.forEach { socketMap: Map<String, SocketManager> ->
                 socketMap.values.forEach { socketManager: SocketManager ->
                     runCatching { socketManager.disconnect() }
                 }
             }
-            // Clear consume sockets list
+            connectivity.socket?.let { socketManager ->
+                runCatching { socketManager.disconnect() }
+            }
+            connectivity.localSocket?.let { socketManager ->
+                runCatching { socketManager.disconnect() }
+            }
             parameters.consumeSockets = emptyList()
+            connectivity.updateSocket(null)
+            connectivity.updateLocalSocket(null)
+            clearActiveSocketSignature()
+            ongoingConnectJob?.cancel()
+            ongoingConnectJob = null
+            ongoingJoinSignature = null
         } catch (_: Exception) { }
 
-        // 5. Reset all state to initial values (matching Flutter's updateStatesToInitialValues)
+        try {
+            connectivity.virtualBackgroundProcessor?.let { processor ->
+                processor.release()
+            }
+            connectivity.virtualBackgroundProcessor = null
+        } catch (_: Exception) { }
+
+        forceStopRemainingLocalMedia()
+
+        // 6. Reset all state to initial values (matching Flutter's updateStatesToInitialValues)
         resetToInitialValues()
 
-        // 6. Reset timers
+        // 7. Reset timers
         meeting.stopTimer(reset = true)
         recording.refresh()
 
-        // 7. Delay before updating validated (matching Flutter's 1000ms delay)
+        // 8. Delay before updating validated (matching Flutter's 1000ms delay)
         kotlinx.coroutines.delay(1000)
         updateValidated(false)
+    }
+
+    private fun forceStopRemainingLocalMedia() {
+        // Stop active camera capturer and screen share on the WebRTC device
+        try {
+            parameters.device?.close()
+        } catch (_: Exception) {}
+
+        val localStreams = listOfNotNull(
+            parameters.localStream,
+            parameters.localStreamAudio,
+            parameters.localStreamVideo,
+            parameters.localStreamScreen
+        ).distinctBy { it.id }
+
+        localStreams.forEach { stream ->
+            runCatching {
+                stream.getTracks().forEach { track ->
+                    runCatching { track.setEnabled(false) }
+                    runCatching { track.stop() }
+                }
+            }
+            runCatching { stream.stop() }
+        }
+
+        parameters.localStream = null
+        parameters.localStreamAudio = null
+        parameters.localStreamVideo = null
+        parameters.localStreamScreen = null
+
+        parameters.audioProducer = null
+        parameters.videoProducer = null
+        parameters.screenProducer = null
+        parameters.localAudioProducer = null
+        parameters.localVideoProducer = null
+        parameters.localScreenProducer = null
     }
 
     /**
@@ -3152,6 +3403,34 @@ class MediasfuGenericState internal constructor(
     private fun resetToInitialValues() {
         // Increment session counter FIRST to force UI recomposition and clear cached composables
         incrementSessionCounter()
+
+        // Reset local jobs and event listeners/guard states
+        autoJoinJob?.cancel()
+        autoJoinJob = null
+        socketPrefetchJob?.cancel()
+        socketPrefetchJob = null
+        existingRemoteBootstrapJob?.cancel()
+        existingRemoteBootstrapJob = null
+        
+        seedApplied = false
+        socketEventNames.clear()
+        registeredSocket = null
+        initialMediaHydrated = false
+        localJoinPerformed = false
+        activeSocketSignature = null
+        latestCredentialSnapshot = null
+        socketPrefetchSuspended = false
+        lastAutoJoinAttemptAt = 0L
+
+        // Reset meeting ID, member name, and credentials
+        room.updateRoomName("")
+        room.updateMember("")
+        room.updateApiUserName("")
+        room.updateApiToken("")
+        room.updateLink("")
+        room.updateAdminPasscode("")
+        parameters.roomName = ""
+        parameters.member = ""
 
         // PARITY AUXILIARY STATE - translation, permissions, panelists
         _translationSupported.value = false
@@ -3285,6 +3564,8 @@ class MediasfuGenericState internal constructor(
         display.refresh()
 
         // CONNECTIVITY STATE - roomResponse (CRITICAL for auto-join)
+        connectivity.updateSocket(null)
+        connectivity.updateLocalSocket(null)
         connectivity.updateRoomResponse(ResponseJoinRoom())
 
         // CORE PARAMETERS - flags and counters
@@ -3410,6 +3691,7 @@ class MediasfuGenericState internal constructor(
                     parameters = createUpdateRoomParametersBridge()
                 )
             )
+            ensureDeviceClientForRoomCapabilities()
             
             
         } catch (e: Exception) {
@@ -3913,6 +4195,101 @@ class MediasfuGenericState internal constructor(
         }
     }
 
+    /**
+     * Update a single participant's islevel (0 = basic, 1 = elevated).
+     * Mirrors Flutter's updateParticipantPermission socket call.
+     */
+    internal fun updateParticipantLevel(
+        participant: com.mediasfu.sdk.model.Participant,
+        newLevel: String,
+        onComplete: () -> Unit = {}
+    ) {
+        val socket = connectivity.socket
+        if (socket == null) {
+            showAlert("No connection established.", "danger"); onComplete(); return
+        }
+        if (room.islevel != "2") {
+            showAlert("Only the host can change participant levels.", "danger"); onComplete(); return
+        }
+        if (participant.islevel == "2") {
+            showAlert("Cannot change the host's level.", "danger"); onComplete(); return
+        }
+        if (participant.islevel == newLevel) { onComplete(); return }
+        val roomName = room.roomName.ifBlank { parameters.roomName }
+        scope.launch {
+            runCatching {
+                socket.emitWithAck(
+                    "updateParticipantPermission",
+                    mapOf(
+                        "participantId" to (participant.id ?: ""),
+                        "participantName" to participant.name,
+                        "newLevel" to newLevel,
+                        "roomName" to roomName
+                    )
+                ) { response ->
+                    val resp = (response as? Map<*, *>)?.toStringAnyMap() ?: emptyMap()
+                    scope.launch {
+                        if (resp["success"].toBooleanLoose()) {
+                            showAlert("Participant level updated", "success", 2_000)
+                        } else {
+                            showAlert(resp["reason"]?.toString() ?: "Failed to update level.", "danger", 3_000)
+                        }
+                        onComplete()
+                    }
+                }
+            }.onFailure { showAlert("Failed to update participant level.", "danger"); onComplete() }
+        }
+    }
+
+    /**
+     * Bulk-update a list of participants to the same islevel.
+     * Mirrors Flutter's bulkUpdateParticipantPermissions socket call.
+     */
+    internal fun bulkUpdateParticipantLevel(
+        participants: List<com.mediasfu.sdk.model.Participant>,
+        newLevel: String,
+        onComplete: () -> Unit = {}
+    ) {
+        val socket = connectivity.socket
+        if (socket == null) {
+            showAlert("No connection established.", "danger"); onComplete(); return
+        }
+        if (room.islevel != "2") {
+            showAlert("Only the host can change participant levels.", "danger"); onComplete(); return
+        }
+        val eligible = participants.filter { it.islevel != "2" && it.islevel != newLevel }
+        if (eligible.isEmpty()) {
+            showAlert("No participants to update.", "info", 2_000); onComplete(); return
+        }
+        val batch = eligible.take(50)
+        val roomName = room.roomName.ifBlank { parameters.roomName }
+        scope.launch {
+            runCatching {
+                val updates = batch.map { p ->
+                    mapOf("participantId" to (p.id ?: ""), "participantName" to p.name, "newLevel" to newLevel)
+                }
+                socket.emitWithAck(
+                    "bulkUpdateParticipantPermissions",
+                    mapOf("updates" to updates, "roomName" to roomName)
+                ) { response ->
+                    val resp = (response as? Map<*, *>)?.toStringAnyMap() ?: emptyMap()
+                    scope.launch {
+                        if (resp["success"].toBooleanLoose()) {
+                            val remaining = eligible.size - batch.size
+                            val msg = if (remaining > 0)
+                                "Updated ${batch.size} participants. $remaining remaining."
+                            else "All selected participants updated."
+                            showAlert(msg, "success", 2_500)
+                        } else {
+                            showAlert(resp["reason"]?.toString() ?: "Bulk update failed.", "danger", 3_000)
+                        }
+                        onComplete()
+                    }
+                }
+            }.onFailure { showAlert("Failed to update participants.", "danger"); onComplete() }
+        }
+    }
+
     private fun labelForKey(key: String): String {
         return when (key) {
             "useMic" -> "Audience mic"
@@ -4137,7 +4514,8 @@ class MediasfuGenericState internal constructor(
         defaultOutputLanguage: String?,
         defaultListenLanguage: String?,
         perSpeakerListenPreferences: Map<String, String>,
-        showSubtitles: Boolean
+        showSubtitles: Boolean,
+        voiceConfig: Map<String, Any?> = emptyMap()
     ) {
         val socket = connectivity.socket
         if (socket == null) {
@@ -4161,6 +4539,9 @@ class MediasfuGenericState internal constructor(
                             put("language", spokenLanguage)
                             put("enabled", spokenEnabled)
                             put("defaultOutputLanguage", defaultOutputLanguage)
+                            if (voiceConfig.isNotEmpty() && spokenEnabled) {
+                                put("voiceConfig", voiceConfig)
+                            }
                         }
                     )
 
@@ -4371,10 +4752,12 @@ class MediasfuGenericState internal constructor(
                         ban = ban
                     )
                 )
+                closeAndReset()
                 successMessage?.let { message ->
                     showAlert(message, "info")
                 }
             } catch (error: Throwable) {
+                runCatching { closeAndReset() }
                 showAlert(error.message ?: "Unable to exit the event.", "danger")
                 return@launch
             }
@@ -4500,25 +4883,33 @@ class MediasfuGenericState internal constructor(
         }
     }
 
+    suspend fun performToggleAudio() {
+        try {
+            val options = ClickAudioOptions(parameters = createClickAudioParameters())
+            clickAudio(options)
+        } catch (error: Throwable) {
+            showAlert(error.message ?: "Unable to toggle audio.", "danger")
+        }
+    }
+
     fun toggleAudio() {
         scope.launch {
-            try {
-                val options = ClickAudioOptions(parameters = createClickAudioParameters())
-                clickAudio(options)
-            } catch (error: Throwable) {
-                showAlert(error.message ?: "Unable to toggle audio.", "danger")
-            }
+            performToggleAudio()
+        }
+    }
+
+    suspend fun performToggleVideo() {
+        try {
+            val options = ClickVideoOptions(parameters = createClickVideoParameters())
+            clickVideo(options)
+        } catch (error: Throwable) {
+            showAlert(error.message ?: "Unable to toggle video.", "danger")
         }
     }
 
     fun toggleVideo() {
         scope.launch {
-            try {
-                val options = ClickVideoOptions(parameters = createClickVideoParameters())
-                clickVideo(options)
-            } catch (error: Throwable) {
-                showAlert(error.message ?: "Unable to toggle video.", "danger")
-            }
+            performToggleVideo()
         }
     }
 
@@ -4642,7 +5033,7 @@ class MediasfuGenericState internal constructor(
             state = this,
             isVisible = modals.isMenuVisible,
             roomName = room.roomName,
-            roomLink = room.link,
+            roomLink = resolveShareLink(),
             adminPasscode = room.adminPasscode,
             totalRequests = requests.totalPending,
             waitingCount = waitingRoom.counter,
@@ -4678,6 +5069,7 @@ class MediasfuGenericState internal constructor(
                 modals.showCoHost()
             },
             onOpenMediaSettings = {
+                modals.setMenuVisibility(false)
                 modals.showMediaSettings()
             },
             onOpenDisplaySettings = {
@@ -4706,6 +5098,14 @@ class MediasfuGenericState internal constructor(
             canAccessWhiteboard = canAccessWhiteboard,
             canConfigureWhiteboard = canConfigureWhiteboard
         )
+    }
+
+    private fun resolveShareLink(): String {
+        val resolvedRoomName = room.roomName.ifBlank { parameters.roomName }.trim()
+        if (resolvedRoomName.isBlank()) {
+            return "https://mediasfu.com/meeting/"
+        }
+        return "https://mediasfu.com/meeting/$resolvedRoomName"
     }
 
     internal fun createParticipantsModalProps(): ParticipantsModalProps {
@@ -4752,7 +5152,7 @@ class MediasfuGenericState internal constructor(
         val resolvedPasscode = room.adminPasscode.ifBlank { parameters.adminPasscode }
         val isHost = room.youAreHost || room.islevel.equals("2", ignoreCase = true)
         val visiblePasscode = resolvedPasscode.takeIf { isHost && it.isNotBlank() }
-        val shareLink = effectiveLocalLink().ifBlank { parameters.link }
+        val shareLink = resolveShareLink()
 
         return ShareEventModalProps(
             state = this,
@@ -5065,7 +5465,7 @@ class MediasfuGenericState internal constructor(
             parameters = createMediaSettingsModalParameters()
         )
     }
-    
+
     /**
      * Switches the audio output device (speaker, Bluetooth, headphones)
      */
@@ -5130,11 +5530,11 @@ class MediasfuGenericState internal constructor(
                         val forceFullDisplay = parameters.forceFullDisplay
                         val prevMeetingDisplayType = parameters.prevMeetingDisplayType
                         val prevForceFullDisplay = parameters.prevForceFullDisplay
-                        
+
                         // Check if settings changed OR if we need to force refresh for "all" mode
                         val settingsChanged = prevMeetingDisplayType != meetingDisplayType || prevForceFullDisplay != forceFullDisplay
                         val needsRefresh = meetingDisplayType == "all" && !settingsChanged  // Force refresh if staying on "all"
-                        
+
                         if (settingsChanged || needsRefresh) {
                             
                             // KEY FIX: Set firstAll=false when meetingDisplayType="all"
@@ -5237,6 +5637,7 @@ class MediasfuGenericState internal constructor(
                     val localVideoStream = parameters.localStreamVideo
                     val currentVideoProducer = parameters.videoProducer
                     val producerTransport = parameters.producerTransport
+                    val originalVideoTrack = localVideoStream?.getVideoTracks()?.firstOrNull()
                     
                     if (isBackgroundEnabled) {
                         // === ENABLE VIRTUAL BACKGROUND ===
@@ -5255,36 +5656,39 @@ class MediasfuGenericState internal constructor(
                                     val videoTracks = outputStream.getVideoTracks()
                                     if (videoTracks.isNotEmpty()) {
                                         val newTrack = videoTracks.first()
+                                        val outputUsesOriginalTrack = originalVideoTrack?.id == newTrack.id
                                         
                                         // Set the virtual stream in parameters
                                         parameters.virtualStream = outputStream
                                         parameters.processedStream = outputStream
                                         
-                                        // CRITICAL: Following React pattern - disconnect old producer, then connect new one
-                                        if (currentVideoProducer != null) {
-                                            try {
-                                                // Close the old producer - this notifies server
-                                                currentVideoProducer.close()
-                                                parameters.updateVideoProducer(null)
-                                            } catch (e: Exception) {
+                                        if (!outputUsesOriginalTrack || currentVideoProducer == null) {
+                                            // Virtual-output platforms (for example Android) need the producer
+                                            // to be recreated with the new processed track. iOS processes the
+                                            // existing camera source in-place, so replacing the same track can
+                                            // briefly publish a dark/stale stream.
+                                            if (currentVideoProducer != null) {
+                                                try {
+                                                    currentVideoProducer.close()
+                                                    parameters.updateVideoProducer(null)
+                                                } catch (e: Exception) {
+                                                }
+
+                                                kotlinx.coroutines.delay(500)
                                             }
-                                            
-                                            // Wait for server to process (like React's sleep(500))
-                                            kotlinx.coroutines.delay(500)
-                                        }
-                                        
-                                        // Create new producer with the processed track
-                                        if (producerTransport != null) {
-                                            try {
-                                                val newProducer = producerTransport.produce(
-                                                    track = newTrack,
-                                                    encodings = emptyList(),
-                                                    codecOptions = null,
-                                                    appData = null
-                                                )
-                                                parameters.updateVideoProducer(newProducer)
-                                            } catch (e: Exception) {
-                                                e.printStackTrace()
+
+                                            if (producerTransport != null) {
+                                                try {
+                                                    val newProducer = producerTransport.produce(
+                                                        track = newTrack,
+                                                        encodings = emptyList(),
+                                                        codecOptions = null,
+                                                        appData = null
+                                                    )
+                                                    parameters.updateVideoProducer(newProducer)
+                                                } catch (e: Exception) {
+                                                    e.printStackTrace()
+                                                }
                                             }
                                         }
                                         
@@ -5325,6 +5729,7 @@ class MediasfuGenericState internal constructor(
                         }
                         
                         // Clear virtual stream
+                        val virtualStreamBeforeDisable = parameters.virtualStream
                         parameters.keepBackground = false
                         parameters.virtualStream = null
                         parameters.processedStream = null
@@ -5334,31 +5739,32 @@ class MediasfuGenericState internal constructor(
                             val videoTracks = localVideoStream.getVideoTracks()
                             if (videoTracks.isNotEmpty()) {
                                 val originalTrack = videoTracks.first()
+                                val virtualStreamUsedOriginalTrack =
+                                    virtualStreamBeforeDisable?.getVideoTracks()?.firstOrNull()?.id == originalTrack.id
                                 
-                                // CRITICAL: Following React pattern - disconnect old producer, then connect new one
-                                if (currentVideoProducer != null) {
-                                    try {
-                                        currentVideoProducer.close()
-                                        parameters.updateVideoProducer(null)
-                                    } catch (e: Exception) {
+                                if (!virtualStreamUsedOriginalTrack || currentVideoProducer == null) {
+                                    if (currentVideoProducer != null) {
+                                        try {
+                                            currentVideoProducer.close()
+                                            parameters.updateVideoProducer(null)
+                                        } catch (e: Exception) {
+                                        }
+
+                                        kotlinx.coroutines.delay(500)
                                     }
-                                    
-                                    // Wait for server to process
-                                    kotlinx.coroutines.delay(500)
-                                }
-                                
-                                // Create new producer with the original track
-                                if (producerTransport != null) {
-                                    try {
-                                        val newProducer = producerTransport.produce(
-                                            track = originalTrack,
-                                            encodings = emptyList(),
-                                            codecOptions = null,
-                                            appData = null
-                                        )
-                                        parameters.updateVideoProducer(newProducer)
-                                    } catch (e: Exception) {
-                                        e.printStackTrace()
+
+                                    if (producerTransport != null) {
+                                        try {
+                                            val newProducer = producerTransport.produce(
+                                                track = originalTrack,
+                                                encodings = emptyList(),
+                                                codecOptions = null,
+                                                appData = null
+                                            )
+                                            parameters.updateVideoProducer(newProducer)
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                        }
                                     }
                                 }
                             }
@@ -5713,6 +6119,10 @@ class MediasfuGenericState internal constructor(
         apiUserName: String
     ): ResponseJoinRoom {
         return try {
+            if (socket != null) {
+                ensureSocketListeners(socket)
+            }
+
             // STEP 1: Join the room
             val options = JoinRoomClientOptions(
                 socket = socket,
@@ -5722,7 +6132,11 @@ class MediasfuGenericState internal constructor(
                 sec = sec,
                 apiUserName = apiUserName
             )
-            val response = options.joinRoom()
+            val response = prepareJoinResponseForConsumption(
+                response = options.joinRoom(),
+                socket = socket,
+                isLocal = false
+            )
 
             // STEP 2: Update in-memory room state with the server response
             room.updateRoomData(response)
@@ -5736,6 +6150,8 @@ class MediasfuGenericState internal constructor(
                             parameters = UpdateRoomParametersBridge()
                         )
                     )
+                    ensureDeviceClientForRoomCapabilities()
+                    scheduleExistingRemoteMediaBootstrap()
                 } catch (e: Exception) {
                 }
             }
@@ -5743,7 +6159,7 @@ class MediasfuGenericState internal constructor(
             // STEP 4: Setup socket listeners for real-time events
             if (socket != null) {
                 try {
-                    setupSocketListeners(socket)
+                    ensureSocketListeners(socket)
                 } catch (e: Exception) {
                 }
             }
@@ -5835,7 +6251,7 @@ class MediasfuGenericState internal constructor(
                     return@launch
                 }
 
-                val useLocalJoin = shouldUseLocalJoin(resolvedLink, trimmedAdminPasscode)
+                val useLocalJoin = shouldUseLocalJoin(resolvedLink)
                 val cloudSecret = resolveCloudSecret(resolvedApiToken, resolvedApiKey)
                 if (!useLocalJoin && cloudSecret == null) {
                     showAlert(
@@ -5881,6 +6297,8 @@ class MediasfuGenericState internal constructor(
                     return@launch
                 }
 
+                ensureSocketListeners(activeSocket)
+
                 val response = if (useLocalJoin) {
                     val (joinResponse, localResponse) = performLocalJoin(
                         socket = activeSocket,
@@ -5925,7 +6343,9 @@ class MediasfuGenericState internal constructor(
                         parameters = UpdateRoomParametersBridge()
                     )
                 )
+                ensureDeviceClientForRoomCapabilities()
                 updateValidated(true)
+                scheduleExistingRemoteMediaBootstrap()
                 // Initialize UI immediately like Flutter does - don't wait for allMembers
                 // This will use hostLabel/resolvedMember as the initial participant
                 scope.launch {
@@ -5979,18 +6399,32 @@ class MediasfuGenericState internal constructor(
         val normalizedMember = memberName.ifBlank { normalizedUser }
         val effectiveToken = normalizedToken.ifBlank { normalizedKey }
 
+        val newSignature = SocketSignature(
+            baseUrl = normalizedLink,
+            apiUserName = normalizedUser,
+            credentialFingerprint = effectiveToken
+        )
+
         if (isSocketConnected(connectivity.socket)) {
-            if (activeSocketSignature == null) {
-                activeSocketSignature = deriveCurrentSocketSignature()
+            val currentSignature = activeSocketSignature ?: deriveCurrentSocketSignature()
+            if (currentSignature == newSignature) {
+                activeSocketSignature = currentSignature
+                return true
+            } else {
+                runCatching { connectivity.socket?.disconnect() }
+                connectivity.updateSocket(null)
             }
-            return true
         }
         return socketConnectMutex.withLock {
             if (isSocketConnected(connectivity.socket)) {
-                if (activeSocketSignature == null) {
-                    activeSocketSignature = deriveCurrentSocketSignature()
+                val currentSignature = activeSocketSignature ?: deriveCurrentSocketSignature()
+                if (currentSignature == newSignature) {
+                    activeSocketSignature = currentSignature
+                    return@withLock true
+                } else {
+                    runCatching { connectivity.socket?.disconnect() }
+                    connectivity.updateSocket(null)
                 }
-                return@withLock true
             }
 
             if (!isSocketConnected(connectivity.socket) && connectivity.socket != null) {
@@ -6116,53 +6550,18 @@ class MediasfuGenericState internal constructor(
         apiKey: String?
     ): SocketManager? {
         val baseUrl = resolveSocketBaseUrl(link)
+        println("[MediaSFU-openSocket] link=$link baseUrl=$baseUrl")
         if (baseUrl.isBlank()) return null
 
-        val mediaEndpoint = ensureMediaNamespace(baseUrl)
-        val socketUrl = appendCredentialQuery(mediaEndpoint, apiUserName, apiToken, apiKey)
+        val socketUrl = appendCredentialQuery(baseUrl, apiUserName, apiToken, apiKey)
+        println("[MediaSFU-openSocket] socketUrl=$socketUrl")
         val socket = createSocketManager()
         val config = SocketConfig(transports = listOf("websocket"))
+        // connect() suspends until the Socket.IO handshake succeeds or fails (or times out at 20s).
+        // No additional polling needed; connect() completes only when the socket is ready.
         val result = socket.connect(socketUrl, config)
-        return if (result.isSuccess) {
-            // React/Flutter wait 15–18 seconds before abandoning the initial dial; mirror that here
-            val connected = waitForSocketConnection(socket, timeoutMs = 18_000L)
-            if (!connected) {
-                socket.disconnect()
-                null
-            } else {
-                socket
-            }
-        } else {
-            null
-        }
-    }
-
-    private suspend fun waitForSocketConnection(
-        socket: SocketManager,
-        timeoutMs: Long = 15_000L,
-        pollIntervalMs: Long = 100L
-    ): Boolean {
-        return try {
-            withTimeout(timeoutMs) {
-                while (isActive) {
-                    when (socket.getConnectionState()) {
-                        ConnectionState.CONNECTED -> return@withTimeout true
-                        ConnectionState.FAILED -> return@withTimeout false
-                        ConnectionState.DISCONNECTED -> if (!socket.isConnected()) return@withTimeout false
-                        else -> Unit
-                    }
-
-                    if (socket.isConnected()) {
-                        return@withTimeout true
-                    }
-
-                    delay(pollIntervalMs)
-                }
-                socket.isConnected()
-            }
-        } catch (e: Exception) {
-            socket.isConnected()
-        }
+        println("[MediaSFU-openSocket] connect() result.isSuccess=${result.isSuccess} error=${result.exceptionOrNull()?.message}")
+        return if (result.isSuccess) socket else null
     }
 
     private fun resolveSocketBaseUrl(link: String): String {
@@ -6181,12 +6580,7 @@ class MediasfuGenericState internal constructor(
         val pathIndex = remainder.indexOfAny(charArrayOf('/', '?', '#'))
         val hostPart = if (pathIndex >= 0) remainder.substring(0, pathIndex) else remainder
         if (hostPart.isBlank()) return DEFAULT_SOCKET_BASE
-        return "$scheme://$hostPart"
-    }
-
-    private fun ensureMediaNamespace(baseUrl: String): String {
-        val sanitized = baseUrl.trimEnd('/')
-        return if (sanitized.endsWith("/media")) sanitized else "$sanitized/media"
+        return "$scheme://$hostPart/media"
     }
 
     private fun appendCredentialQuery(
@@ -6237,18 +6631,56 @@ class MediasfuGenericState internal constructor(
 
     private fun effectiveLocalLink(): String = room.link.ifBlank { options.localLink }
 
-    private fun shouldUseLocalJoin(link: String, adminPasscode: String): Boolean {
+    private suspend fun prepareJoinResponseForConsumption(
+        response: ResponseJoinRoom,
+        socket: SocketManager?,
+        isLocal: Boolean
+    ): ResponseJoinRoom {
+        val missingRoomRecvIps = response.roomRecvIPs.isNullOrEmpty()
+        val normalizedResponse = if (missingRoomRecvIps) {
+            response.copy(roomRecvIPs = listOf("none"))
+        } else {
+            response
+        }
+
+        val linkValue = effectiveLocalLink()
+        if (
+            missingRoomRecvIps &&
+            !isLocal &&
+            socket != null &&
+            linkValue.contains("mediasfu.com", ignoreCase = true)
+        ) {
+            parameters.membersReceived = false
+            runCatching {
+                MediaSFURuntimeProbe.recordConsumerSignalStage(
+                    "receive-all-piped",
+                    "",
+                    "community"
+                )
+                parameters.receiveAllPipedTransports(
+                    com.mediasfu.sdk.consumers.ReceiveAllPipedTransportsOptions(
+                        community = true,
+                        nsock = socket,
+                        parameters = parameters
+                    )
+                )
+            }.onFailure { error ->
+                MediaSFURuntimeProbe.recordConsumerSignalStage(
+                    "receive-all-piped-fail",
+                    "",
+                    error.message.orEmpty().take(60)
+                )
+            }
+        }
+
+        return normalizedResponse
+    }
+
+    private fun shouldUseLocalJoin(link: String): Boolean {
         val normalizedLink = link.trim()
         val explicitLocalLink = normalizedLink.isNotBlank() &&
             !normalizedLink.contains("mediasfu.com", ignoreCase = true)
-
-        if (options.connectMediaSFU) {
-            return explicitLocalLink || connectivity.localSocket != null
-        }
-
-        if (explicitLocalLink) return true
-        if (connectivity.localSocket != null) return true
-        return adminPasscode.length == 32 && adminPasscode.all { it.isLetterOrDigit() }
+        return explicitLocalLink
     }
 
     private suspend fun socketJoinLocalRoom(options: JoinLocalRoomOptions) = joinLocalRoom(options)
@@ -6303,16 +6735,15 @@ class MediasfuGenericState internal constructor(
 
     private suspend fun initializeMediaStateAfterValidation(defaultMemberName: String) {
         val participantsSnapshot = parameters.participants
-        
-        // Even if participants are empty, we can still initialize with the member name
-        // This matches Flutter's behavior of calling prepopulateUserMedia immediately
-        // Priority: 1) defaultMemberName (the joining member), 2) mainScreenPerson, 3) hostLabel
+
+        // Keep the placeholder/self seed tied to the joining member, but drive the initial
+        // main-screen prepopulate from the same host-first path used by React/Flutter.
         val targetName = listOfNotNull(
             defaultMemberName.takeIf { it.isNotBlank() },
-            parameters.mainScreenPerson.takeIf { it.isNotBlank() },
-            participantsSnapshot.firstOrNull { it.isHost }?.name?.takeIf { it.isNotBlank() },
+            parameters.member.takeIf { it.isNotBlank() },
             participantsSnapshot.firstOrNull()?.name?.takeIf { it.isNotBlank() },
-            parameters.hostLabel.takeIf { it.isNotBlank() }
+            parameters.hostLabel.takeIf { it.isNotBlank() },
+            parameters.mainScreenPerson.takeIf { it.isNotBlank() }
         ).firstOrNull()
 
         if (targetName.isNullOrBlank()) {
@@ -6349,6 +6780,21 @@ class MediasfuGenericState internal constructor(
             effectiveParticipants = listOf(placeholderParticipant)
         }
 
+        val bootstrapLeadName = listOfNotNull(
+            effectiveParticipants
+                .firstOrNull { it.isHost || it.isAdmin || it.islevel == "2" }
+                ?.name
+                ?.takeIf { it.isNotBlank() },
+            parameters.hostLabel.takeIf { it.isNotBlank() },
+            parameters.mainScreenPerson.takeIf { it.isNotBlank() },
+            effectiveParticipants.firstOrNull()?.name?.takeIf { it.isNotBlank() },
+            targetName.takeIf { it.isNotBlank() }
+        ).firstOrNull() ?: targetName
+
+        val bootstrapLeadParticipant = effectiveParticipants.firstOrNull { participant ->
+            participant.name.equals(bootstrapLeadName, ignoreCase = true)
+        }
+
         // Seed placeholder streams if needed (only if we don't have real streams yet)
         val existingStreams = parameters.allVideoStreamsState
         val shouldSeedPlaceholders = existingStreams.isEmpty() || existingStreams.all { stream ->
@@ -6356,7 +6802,10 @@ class MediasfuGenericState internal constructor(
         }
 
         if (shouldSeedPlaceholders) {
-            val placeholderStreams = buildPlaceholderStreams(effectiveParticipants)
+            val placeholderStreams = buildPlaceholderStreams(
+                participants = effectiveParticipants,
+                selfMemberName = targetName
+            )
             if (placeholderStreams.isNotEmpty()) {
                 parameters.updateAllVideoStreams(placeholderStreams)
                 parameters.updateOldAllStreams(placeholderStreams)
@@ -6383,10 +6832,10 @@ class MediasfuGenericState internal constructor(
                 streams.updatePActiveNames(placeholderNames)
                 streams.updateDispActiveNames(placeholderNames)
                 streams.updatePDispActiveNames(placeholderNames)
-                streams.updateMainScreenPerson(targetName)
+                streams.updateMainScreenPerson(bootstrapLeadName)
                 streams.updateMainScreenFilled(true)
                 streams.updateAdminOnMainScreen(
-                    effectiveParticipants.firstOrNull()?.let { it.isHost || it.isAdmin } == true
+                    bootstrapLeadParticipant?.let { it.isHost || it.isAdmin || it.islevel == "2" } == true
                 )
                 streams.updateGotAllVids(true)
 
@@ -6398,7 +6847,7 @@ class MediasfuGenericState internal constructor(
 
         try {
             val prepopulateOptions = PrepopulateUserMediaOptions(
-                name = targetName,
+                name = bootstrapLeadName,
                 parameters = parameters
             )
             parameters.prepopulateUserMedia.invoke(prepopulateOptions)
@@ -6420,13 +6869,7 @@ class MediasfuGenericState internal constructor(
 
         propagateParameterChanges()
 
-        val hasRealParticipants = parameters.participants.any { participant ->
-            participant.extra["placeholder"] != JsonPrimitive(true)
-        }
-
-        if (hasRealParticipants) {
-            initialMediaHydrated = true
-        }
+        initialMediaHydrated = true
     }
 
     /** Socket-level room join using JoinRoomClientOptions */
@@ -6928,7 +7371,7 @@ class RoomState(private val parameters: MediasfuParameters, private val notifier
         private set
     var coHost by mutableStateOf(parameters.coHost)
     var youAreCoHost by mutableStateOf(parameters.youAreCoHost)
-    var youAreHost by mutableStateOf(parameters.youAreHost)
+    var youAreHost by mutableStateOf(parameters.islevel == "2")
     var confirmedToRecord by mutableStateOf(parameters.confirmedToRecord)
 
     var meetingDisplayType by mutableStateOf(parameters.meetingDisplayType)
@@ -6948,6 +7391,38 @@ class RoomState(private val parameters: MediasfuParameters, private val notifier
     var coHostResponsibility by mutableStateOf(parameters.coHostResponsibility)
     var adminRestrictSetting by mutableStateOf(parameters.adminRestrictSetting)
 
+    private fun resolveHostParticipant(source: List<Participant>): Participant? {
+        val hostLike = source.filter { participant ->
+            (participant.isHost || participant.isAdmin || participant.islevel == "2") &&
+                participant.name.isNotBlank()
+        }
+
+        return hostLike.firstOrNull { participant ->
+            participant.extra["placeholder"] != JsonPrimitive(true)
+        } ?: hostLike.firstOrNull()
+    }
+
+    private fun syncHostMetadata(source: List<Participant>) {
+        val hostParticipant = resolveHostParticipant(source)
+        val resolvedHostLabel = hostParticipant?.name?.takeIf { it.isNotBlank() }
+        if (!resolvedHostLabel.isNullOrBlank()) {
+            parameters.hostLabel = resolvedHostLabel
+        }
+
+        val currentMemberName = member.ifBlank { parameters.member }
+        val currentParticipant = source.firstOrNull { participant ->
+            currentMemberName.isNotBlank() &&
+                participant.name.equals(currentMemberName, ignoreCase = true)
+        }
+
+        val resolvedYouAreHost = currentParticipant?.let { participant ->
+            participant.isHost || participant.isAdmin || participant.islevel == "2"
+        } ?: (parameters.islevel == "2")
+
+        youAreHost = resolvedYouAreHost
+        parameters.youAreHost = resolvedYouAreHost
+    }
+
     fun updateRoomData(value: ResponseJoinRoom) {
         parameters.roomData = value
         notifier()
@@ -6964,13 +7439,16 @@ class RoomState(private val parameters: MediasfuParameters, private val notifier
         islevel = parameters.islevel
         coHost = parameters.coHost
         youAreCoHost = parameters.youAreCoHost
-        youAreHost = parameters.youAreHost
+        val resolvedHost = parameters.islevel == "2"
+        youAreHost = resolvedHost
+        parameters.youAreHost = resolvedHost
         confirmedToRecord = parameters.confirmedToRecord
         meetingDisplayType = parameters.meetingDisplayType
         meetingVideoOptimized = parameters.meetingVideoOptimized
         eventType = parameters.eventType
         participants.syncWith(parameters.participants)
         filteredParticipants.syncWith(parameters.filteredParticipants.ifEmpty { parameters.participants })
+        syncHostMetadata(parameters.participants)
         participantsCounter = parameters.participantsCounter
         participantsFilter = parameters.participantsFilter
         coHostResponsibility = parameters.coHostResponsibility
@@ -6998,6 +7476,9 @@ class RoomState(private val parameters: MediasfuParameters, private val notifier
     fun updateIslevel(value: String) {
         islevel = value
         parameters.islevel = value
+        val resolvedHost = value == "2"
+        youAreHost = resolvedHost
+        parameters.youAreHost = resolvedHost
         notifier()
     }
 
@@ -7050,6 +7531,7 @@ class RoomState(private val parameters: MediasfuParameters, private val notifier
         participants.clear()
         participants.addAll(newParticipants)
         parameters.participants = newParticipants
+        syncHostMetadata(newParticipants)
         updateFilteredParticipants(newParticipants)
         participantsCounter = newParticipants.size
         parameters.participantsCounter = participantsCounter
@@ -8247,14 +8729,25 @@ class MeetingState(
 
     fun startTimer() {
         if (timerJob?.isActive == true) return
-        timerJob = scope.launch {
-            parameters.isTimerRunning = true
+        parameters.isTimerRunning = true
+        val initialElapsedSeconds = parameters.meetingElapsedTime
+        progressTime = formatElapsed(initialElapsedSeconds)
+        parameters.meetingProgressTime = progressTime
+        notifier()
+        // Use Dispatchers.Default for the delay loop so the 1-second tick is
+        // driven by the background thread pool rather than the main RunLoop.
+        // On Kotlin/Native + iOS, delay() inside Dispatchers.Main can freeze if
+        // the RunLoop is saturated; Dispatchers.Default is reliable.
+        timerJob = CoroutineScope(Dispatchers.Default).launch {
             var elapsedSeconds = parameters.meetingElapsedTime
             while (isActive) {
-                progressTime = formatElapsed(elapsedSeconds)
-                parameters.meetingProgressTime = progressTime
-                parameters.meetingElapsedTime = elapsedSeconds
-                notifier()
+                val formatted = formatElapsed(elapsedSeconds)
+                withContext(Dispatchers.Main) {
+                    progressTime = formatted
+                    parameters.meetingProgressTime = formatted
+                    parameters.meetingElapsedTime = elapsedSeconds
+                    notifier()
+                }
                 delay(1000)
                 elapsedSeconds += 1
             }
@@ -8790,6 +9283,12 @@ class ModalState(
     var isConfigureWhiteboardVisible by mutableStateOf(parameters.isConfigureWhiteboardModalVisible)
     var isBreakoutRoomsVisible by mutableStateOf(parameters.isBreakoutRoomsModalVisible)
     var isBackgroundVisible by mutableStateOf(parameters.isBackgroundModalVisible)
+    // Parity modals – not backed by MediasfuParameters (managed entirely by KMP UI layer)
+    var isPanelistsVisible by mutableStateOf(false)
+    var isPermissionsVisible by mutableStateOf(false)
+    var isTranslationSettingsVisible by mutableStateOf(false)
+    /** Runtime dark-mode override: true = dark, false = light, null = follow system */
+    var isDarkModeOverride: Boolean? by mutableStateOf(null)
     
     /**
      * Callback invoked when a modal should close the unified sidebar.
@@ -8816,7 +9315,11 @@ class ModalState(
         isScreenboardVisible = false
         isWhiteboardVisible = false
         isConfigureWhiteboardVisible = false
+        isBreakoutRoomsVisible = false
         isBackgroundVisible = false
+        isPanelistsVisible = false
+        isPermissionsVisible = false
+        isTranslationSettingsVisible = false
         parameters.isMenuModalVisible = false
         parameters.isRecordingModalVisible = false
         parameters.isSettingsModalVisible = false
@@ -9207,6 +9710,27 @@ class ModalState(
         notifier()
     }
 
+    fun setPanelistsVisibility(visible: Boolean) {
+        if (isPanelistsVisible == visible) return
+        isPanelistsVisible = visible
+        if (!visible) onSidebarClose?.invoke(SidebarContent.Panelists)
+        notifier()
+    }
+
+    fun setPermissionsVisibility(visible: Boolean) {
+        if (isPermissionsVisible == visible) return
+        isPermissionsVisible = visible
+        if (!visible) onSidebarClose?.invoke(SidebarContent.Permissions)
+        notifier()
+    }
+
+    fun setTranslationSettingsVisibility(visible: Boolean) {
+        if (isTranslationSettingsVisible == visible) return
+        isTranslationSettingsVisible = visible
+        if (!visible) onSidebarClose?.invoke(SidebarContent.TranslationSettings)
+        notifier()
+    }
+
     fun refresh() {
         isMenuVisible = parameters.isMenuModalVisible
         isRecordingVisible = parameters.isRecordingModalVisible
@@ -9299,6 +9823,11 @@ data class MediasfuGenericOptions(
     var onToggleAudio: (suspend () -> Unit)? = null,
     /** Mutable holder for the toggle video callback - set by MediasfuGeneric when state is created */
     var onToggleVideo: (suspend () -> Unit)? = null,
+    /** Mutable holder for the toggle screen-share callback - set by MediasfuGeneric when state is created */
+    var onToggleScreenShare: (suspend () -> Unit)? = null,
+    /** Test/automation hook to show a named modal - set by MediasfuGeneric when state is created.
+     *  Supported names: media_settings, display_settings, recording, cohost, requests, waiting, confirm_exit */
+    var onShowModal: ((String) -> Unit)? = null,
 ) {
     init {
         if (customComponent == null && customWorkspaceBuilder != null) {
@@ -9318,19 +9847,84 @@ fun rememberMediasfuGenericState(options: MediasfuGenericOptions): MediasfuGener
     // externally (e.g., by launchMediaSfuCloudSession setting roomName, adminPasscode, etc.)
     val parameters = options.sourceParameters ?: remember { MediasfuParameters() }
     
-    // Key on both options AND the critical parameters to ensure state is recreated when they change
-    val stateKey = remember(options, parameters.roomName, parameters.validated) { Any() }
-    val state = remember(stateKey) {
+    val state = remember(parameters) {
         MediasfuGenericState(scope = scope, parameters = parameters, options = options)
+    }
+    SideEffect {
+        state.options = options
     }
     
     // Wire up the toggle callbacks so external code can control audio/video
     LaunchedEffect(state) {
-        options.onToggleAudio = { 
-            state.toggleAudio() 
+        options.onToggleAudio = {
+            state.performToggleAudio()
         }
-        options.onToggleVideo = { 
-            state.toggleVideo() 
+        options.onToggleVideo = {
+            state.performToggleVideo()
+        }
+        options.onToggleScreenShare = {
+            state.toggleScreenShare()
+        }
+        options.onShowModal = { name ->
+            val resetExternalModalState = {
+                state.modals.closeAll()
+                state.polls.setPollModalVisibility(false)
+            }
+
+            when (name) {
+                "media_settings" -> {
+                    resetExternalModalState()
+                    state.modals.showMediaSettings()
+                }
+                "display_settings" -> {
+                    resetExternalModalState()
+                    state.modals.showDisplaySettings()
+                }
+                "recording" -> {
+                    resetExternalModalState()
+                    state.modals.showRecording()
+                }
+                "cohost" -> {
+                    resetExternalModalState()
+                    state.modals.showCoHost()
+                }
+                "requests" -> {
+                    resetExternalModalState()
+                    state.modals.showRequests()
+                }
+                "waiting" -> {
+                    resetExternalModalState()
+                    state.modals.showWaiting()
+                }
+                "confirm_exit" -> {
+                    resetExternalModalState()
+                    state.modals.showConfirmExit()
+                }
+                "breakout_rooms" -> {
+                    resetExternalModalState()
+                    state.modals.updateIsBreakoutRoomsModalVisible(true)
+                }
+                "background" -> {
+                    resetExternalModalState()
+                    state.modals.updateIsBackgroundModalVisible(true)
+                }
+                "polls" -> {
+                    resetExternalModalState()
+                    state.polls.setPollModalVisibility(true)
+                }
+                "panelists" -> {
+                    resetExternalModalState()
+                    state.modals.setPanelistsVisibility(true)
+                }
+                "permissions" -> {
+                    resetExternalModalState()
+                    state.modals.setPermissionsVisibility(true)
+                }
+                "translation" -> {
+                    resetExternalModalState()
+                    state.modals.setTranslationSettingsVisibility(true)
+                }
+            }
         }
     }
 
@@ -9340,12 +9934,21 @@ fun rememberMediasfuGenericState(options: MediasfuGenericOptions): MediasfuGener
 
     DisposableEffect(state) {
         onDispose {
+            // Clean up state and sockets when component unmounts (matches React/Flutter)
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).launch {
+                try {
+                    state.closeAndReset()
+                } catch (_: Exception) {}
+            }
+            
             state.parameters.onParticipantsUpdated = null
             state.parameters.onOtherGridStreamsUpdated = null
             state.parameters.onAudioOnlyStreamsUpdated = null
             state.parameters.onRecordingStateChanged = null
             options.onToggleAudio = null
             options.onToggleVideo = null
+            options.onToggleScreenShare = null
+            options.onShowModal = null
         }
     }
 
@@ -9512,11 +10115,18 @@ private fun MediasfuGenericContent(state: MediasfuGenericState, modifier: Modifi
     val backgroundColor = containerStyle.backgroundColor ?: Color(0xFF0B172A)
     val useModernUI = state.options.useModernUI
 
-    val safeDrawingPadding = WindowInsets.safeDrawing.asPaddingValues()
+    // Apply only the TOP safe-area inset (status bar) at the root level.
+    // Bottom padding is intentionally excluded here: the meeting-room bottom
+    // control bar manages its own home-indicator clearance, so applying both
+    // would double-compensate and leave a visible empty gap at the bottom.
+    // The pre-join form (pure SwiftUI NavigationStack) is unaffected because
+    // SwiftUI already respects safe areas independently.
+    val rawSafeDrawingPadding = WindowInsets.safeDrawing.asPaddingValues()
+    val safeDrawingPadding = PaddingValues(top = rawSafeDrawingPadding.calculateTopPadding())
 
     // Unified modal state for modern UI
     var unifiedModalState by remember { mutableStateOf(UnifiedModalState()) }
-    
+
     // Wire up sidebar close callback for ModalState (matches Flutter lib_modern pattern)
     // When updateIs*ModalVisible(false) is called, also close the sidebar if showing that content
     LaunchedEffect(unifiedModalState, useModernUI, state) {
@@ -9558,27 +10168,104 @@ private fun MediasfuGenericContent(state: MediasfuGenericState, modifier: Modifi
     LaunchedEffect(unifiedModalState.activeContent) {
         if (useModernUI) {
             val content = unifiedModalState.activeContent
-            // Set the corresponding legacy flag to true (without triggering onSidebarClose)
-            // This ensures setRecordingVisibility(false) etc. will work when called from business logic
-            when (content) {
-                SidebarContent.Recording -> {
-                    if (!state.modals.isRecordingVisible) {
-                        state.modals.isRecordingVisible = true
-                        state.parameters.isRecordingModalVisible = true
-                    }
+
+            fun syncModalVisibility(
+                currentValue: Boolean,
+                targetValue: Boolean,
+                updateState: (Boolean) -> Unit,
+                updateParameter: (Boolean) -> Unit
+            ) {
+                if (currentValue != targetValue) {
+                    updateState(targetValue)
+                    updateParameter(targetValue)
                 }
-                SidebarContent.Menu -> {
-                    if (!state.modals.isMenuVisible) {
-                        state.modals.isMenuVisible = true
-                        state.parameters.isMenuModalVisible = true
-                    }
-                }
-                // Add more cases as needed for modals that can be navigated to from unified modal
-                else -> { /* Other modals use legacy visibility directly */ }
             }
+
+            // Each flag is explicitly set to true only when that panel is active, and false
+            // otherwise. This ensures that navigating back (e.g. Recording → Menu) clears
+            // the previous panel's flag so the forward-sync LaunchedEffect (which prioritises
+            // isRecordingVisible over isMenuVisible) cannot immediately re-route to it.
+            syncModalVisibility(
+                currentValue = state.modals.isMenuVisible,
+                targetValue = content == SidebarContent.Menu,
+                updateState = { state.modals.isMenuVisible = it },
+                updateParameter = { state.parameters.isMenuModalVisible = it }
+            )
+            syncModalVisibility(
+                currentValue = state.modals.isRecordingVisible,
+                targetValue = content == SidebarContent.Recording,
+                updateState = { state.modals.isRecordingVisible = it },
+                updateParameter = { state.parameters.isRecordingModalVisible = it }
+            )
+            syncModalVisibility(
+                currentValue = state.modals.isSettingsVisible,
+                targetValue = content == SidebarContent.Settings || content == SidebarContent.EventSettings,
+                updateState = { state.modals.isSettingsVisible = it },
+                updateParameter = { state.parameters.isSettingsModalVisible = it }
+            )
+            syncModalVisibility(
+                currentValue = state.modals.isMediaSettingsVisible,
+                targetValue = content == SidebarContent.MediaSettings,
+                updateState = { state.modals.isMediaSettingsVisible = it },
+                updateParameter = { state.parameters.isMediaSettingsModalVisible = it }
+            )
+            syncModalVisibility(
+                currentValue = state.modals.isDisplaySettingsVisible,
+                targetValue = content == SidebarContent.DisplaySettings,
+                updateState = { state.modals.isDisplaySettingsVisible = it },
+                updateParameter = { state.parameters.isDisplaySettingsModalVisible = it }
+            )
+            syncModalVisibility(
+                currentValue = state.modals.isRequestsVisible,
+                targetValue = content == SidebarContent.Requests,
+                updateState = { state.modals.isRequestsVisible = it },
+                updateParameter = { state.parameters.isRequestsModalVisible = it }
+            )
+            syncModalVisibility(
+                currentValue = state.modals.isWaitingVisible,
+                targetValue = content == SidebarContent.Waiting,
+                updateState = { state.modals.isWaitingVisible = it },
+                updateParameter = { state.parameters.isWaitingModalVisible = it }
+            )
+            syncModalVisibility(
+                currentValue = state.modals.isCoHostVisible,
+                targetValue = content == SidebarContent.CoHost,
+                updateState = { state.modals.isCoHostVisible = it },
+                updateParameter = { state.parameters.isCoHostModalVisible = it }
+            )
+            syncModalVisibility(
+                currentValue = state.modals.isShareEventVisible,
+                targetValue = content == SidebarContent.Share,
+                updateState = { state.modals.isShareEventVisible = it },
+                updateParameter = { state.parameters.isShareEventModalVisible = it }
+            )
+            syncModalVisibility(
+                currentValue = state.modals.isParticipantsVisible,
+                targetValue = content == SidebarContent.Participants,
+                updateState = { state.modals.isParticipantsVisible = it },
+                updateParameter = { state.parameters.isParticipantsModalVisible = it }
+            )
+            syncModalVisibility(
+                currentValue = state.modals.isMessagesVisible,
+                targetValue = content == SidebarContent.Messages,
+                updateState = { state.modals.isMessagesVisible = it },
+                updateParameter = { state.parameters.isMessagesModalVisible = it }
+            )
+            syncModalVisibility(
+                currentValue = state.modals.isConfirmExitVisible,
+                targetValue = content == SidebarContent.ConfirmExit,
+                updateState = { state.modals.isConfirmExitVisible = it },
+                updateParameter = { state.parameters.isConfirmExitModalVisible = it }
+            )
+            syncModalVisibility(
+                currentValue = state.modals.isBreakoutRoomsVisible,
+                targetValue = content == SidebarContent.BreakoutRooms,
+                updateState = { state.modals.isBreakoutRoomsVisible = it },
+                updateParameter = { state.parameters.isBreakoutRoomsModalVisible = it }
+            )
         }
     }
-    
+
     // Sync unified modal state with legacy modal visibility
     LaunchedEffect(
         state.modals.isMenuVisible,
@@ -9598,11 +10285,13 @@ private fun MediasfuGenericContent(state: MediasfuGenericState, modifier: Modifi
         state.modals.isScreenboardVisible,
         state.modals.isWhiteboardVisible,
         state.modals.isConfigureWhiteboardVisible,
-        state.modals.isBackgroundVisible
+        state.modals.isBackgroundVisible,
+        state.modals.isPanelistsVisible,
+        state.modals.isPermissionsVisible,
+        state.modals.isTranslationSettingsVisible
     ) {
         if (useModernUI) {
             val newContent = when {
-                state.modals.isMenuVisible -> SidebarContent.Menu
                 state.modals.isParticipantsVisible -> SidebarContent.Participants
                 state.modals.isMessagesVisible -> SidebarContent.Messages
                 state.modals.isRecordingVisible -> SidebarContent.Recording
@@ -9620,11 +10309,17 @@ private fun MediasfuGenericContent(state: MediasfuGenericState, modifier: Modifi
                 state.modals.isWhiteboardVisible -> SidebarContent.Whiteboard
                 state.modals.isConfigureWhiteboardVisible -> SidebarContent.Whiteboard // Map ConfigureWhiteboard to Whiteboard
                 state.modals.isBackgroundVisible -> SidebarContent.Background
+                state.modals.isPanelistsVisible -> SidebarContent.Panelists
+                state.modals.isPermissionsVisible -> SidebarContent.Permissions
+                state.modals.isTranslationSettingsVisible -> SidebarContent.TranslationSettings
+                state.modals.isMenuVisible -> SidebarContent.Menu
                 else -> null
             }
             if (newContent != null) {
-                unifiedModalState.show(newContent)
-            } else {
+                if (newContent != unifiedModalState.activeContent) {
+                    unifiedModalState.show(newContent)
+                }
+            } else if (unifiedModalState.activeContent == null) {
                 unifiedModalState.close()
             }
         }
@@ -9632,7 +10327,7 @@ private fun MediasfuGenericContent(state: MediasfuGenericState, modifier: Modifi
 
     // Wrapper to apply modern theme when useModernUI is true
     val content: @Composable () -> Unit = {
-        val isDark = state.options.darkMode ?: isSystemInDarkTheme()
+        val isDark = state.modals.isDarkModeOverride ?: state.options.darkMode ?: isSystemInDarkTheme()
         ModernTheme(isDark = isDark) {
             BoxWithConstraints(
                 modifier = modifier
@@ -9649,6 +10344,11 @@ private fun MediasfuGenericContent(state: MediasfuGenericState, modifier: Modifi
                     ) {
                         if (!isValidated) {
                             PreJoinOrWelcome(state)
+                        } else if (!state.initialMediaHydrated) {
+                            // Show a loading indicator until the UI is hydrated with prepopulateUserMedia to avoid layout glitch
+                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                            }
                         } else {
                             // MainContainer > MainAspect + SubAspect (matches React/Flutter structure)
                             // Use session key to force full recomposition when starting new meeting
@@ -9673,7 +10373,11 @@ private fun MediasfuGenericContent(state: MediasfuGenericState, modifier: Modifi
                                 )
                             }
                         )
-                        
+
+                        // BackgroundModal is a standalone Dialog() composable — it must be
+                        // rendered here (outside UnifiedModalHost) so it appears in modern-UI mode.
+                        BackgroundModalWrapper(state)
+
                         ConfirmHereModal(state)
                     } else {
                         MenuModal(state)
@@ -9731,16 +10435,43 @@ private fun UnifiedModalContentAdapter(
             val props = state.createMenuModalProps().copy(
                 onOpenPolls = { unifiedModalState.show(SidebarContent.Polls, pushToStack = true) },
                 onOpenConfigureWhiteboard = { unifiedModalState.show(SidebarContent.Whiteboard, pushToStack = true) },
-                onOpenRecording = { unifiedModalState.show(SidebarContent.Recording, pushToStack = true) },
-                onOpenSettings = { unifiedModalState.show(SidebarContent.Settings, pushToStack = true) },
-                onOpenMediaSettings = { unifiedModalState.show(SidebarContent.MediaSettings, pushToStack = true) },
-                onOpenDisplaySettings = { unifiedModalState.show(SidebarContent.DisplaySettings, pushToStack = true) },
-                onOpenRequests = { unifiedModalState.show(SidebarContent.Requests, pushToStack = true) },
-                onOpenWaiting = { unifiedModalState.show(SidebarContent.Waiting, pushToStack = true) },
-                onOpenCoHost = { unifiedModalState.show(SidebarContent.CoHost, pushToStack = true) },
-                onOpenShareEvent = { unifiedModalState.show(SidebarContent.Share, pushToStack = true) },
+                onOpenRecording = {
+                    unifiedModalState.show(SidebarContent.Recording, pushToStack = true)
+                    state.modals.showRecording()
+                },
+                onOpenSettings = {
+                    unifiedModalState.show(SidebarContent.Settings, pushToStack = true)
+                    state.modals.showSettings()
+                },
+                onOpenMediaSettings = {
+                    state.modals.setMenuVisibility(false)
+                    unifiedModalState.show(SidebarContent.MediaSettings, pushToStack = true)
+                    state.modals.showMediaSettings()
+                },
+                onOpenDisplaySettings = {
+                    unifiedModalState.show(SidebarContent.DisplaySettings, pushToStack = true)
+                    state.modals.showDisplaySettings()
+                },
+                onOpenRequests = {
+                    unifiedModalState.show(SidebarContent.Requests, pushToStack = true)
+                    state.modals.showRequests()
+                },
+                onOpenWaiting = {
+                    unifiedModalState.show(SidebarContent.Waiting, pushToStack = true)
+                    state.modals.showWaiting()
+                },
+                onOpenCoHost = {
+                    unifiedModalState.show(SidebarContent.CoHost, pushToStack = true)
+                    state.modals.showCoHost()
+                },
+                onOpenShareEvent = {
+                    unifiedModalState.show(SidebarContent.Share, pushToStack = true)
+                    state.modals.showShareEvent()
+                },
                 onOpenBreakoutRooms = { unifiedModalState.show(SidebarContent.BreakoutRooms, pushToStack = true) },
-                onClose = onClose
+                onClose = onClose,
+                onToggleTheme = { dark -> state.modals.isDarkModeOverride = dark },
+                isDarkMode = state.modals.isDarkModeOverride ?: isSystemInDarkTheme()
             )
             Column(modifier = Modifier.fillMaxSize()) {
                 UnifiedModalHeader(title = "Menu", onBack = onBack, onClose = onClose)
@@ -9750,7 +10481,7 @@ private fun UnifiedModalContentAdapter(
                 )
             }
         }
-        
+
         SidebarContent.Participants -> {
             val props = state.createParticipantsModalProps().copy(onClose = onClose)
             Column(modifier = Modifier.fillMaxSize()) {
@@ -9791,6 +10522,9 @@ private fun UnifiedModalContentAdapter(
         }
         
         SidebarContent.MediaSettings -> {
+            LaunchedEffect(Unit) {
+                state.modals.showMediaSettings()
+            }
             val props = state.createMediaSettingsModalProps()
             Column(modifier = Modifier.fillMaxSize()) {
                 UnifiedModalHeader(title = "Media Settings", onBack = onBack, onClose = onClose)
@@ -9848,7 +10582,7 @@ private fun UnifiedModalContentAdapter(
         SidebarContent.CoHost -> {
             val props = state.createCoHostModalProps()
             Column(modifier = Modifier.fillMaxSize()) {
-                UnifiedModalHeader(title = "Manage Co-Hosts", onBack = onBack, onClose = onClose)
+                UnifiedModalHeader(title = "Co-Host Settings", onBack = onBack, onClose = onClose)
                 CoHostModalContentBody(
                     props = props,
                     modifier = Modifier.fillMaxSize().padding(16.dp)
@@ -9910,7 +10644,10 @@ private fun UnifiedModalContentAdapter(
         
         SidebarContent.Background -> {
             LaunchedEffect(Unit) {
-                onClose()
+                // Use unifiedModalState.close() directly so that closeAll() is NOT
+                // called. Calling onClose() here would invoke closeAll() which sets
+                // isBackgroundVisible=false, starting an infinite open/close cycle.
+                unifiedModalState.close()
                 state.modals.updateIsBackgroundModalVisible(true)
             }
             Box(
@@ -9931,7 +10668,37 @@ private fun UnifiedModalContentAdapter(
                 )
             }
         }
-        
+
+        SidebarContent.Panelists -> {
+            Column(modifier = Modifier.fillMaxSize()) {
+                UnifiedModalHeader(title = "Panelists", onBack = onBack, onClose = onClose)
+                PanelistsModalContentEmbedded(
+                    state = state,
+                    modifier = Modifier.fillMaxSize().padding(16.dp)
+                )
+            }
+        }
+
+        SidebarContent.Permissions -> {
+            Column(modifier = Modifier.fillMaxSize()) {
+                UnifiedModalHeader(title = "Permissions", onBack = onBack, onClose = onClose)
+                PermissionsModalContentEmbedded(
+                    state = state,
+                    modifier = Modifier.fillMaxSize().padding(16.dp)
+                )
+            }
+        }
+
+        SidebarContent.TranslationSettings -> {
+            Column(modifier = Modifier.fillMaxSize()) {
+                UnifiedModalHeader(title = "Translation Settings", onBack = onBack, onClose = onClose)
+                TranslationSettingsModalContentEmbedded(
+                    state = state,
+                    modifier = Modifier.fillMaxSize().padding(16.dp)
+                )
+            }
+        }
+
         SidebarContent.None -> {}
         else -> {}
     }
@@ -9965,6 +10732,7 @@ private fun MenuModalContentEmbedded(
     val scrollState = rememberScrollState()
     val isHost = props.islevel == "2"
     val isCoHost = props.coHost == props.member
+    val isTranslationSupported by state.translationSupported.collectAsState()
 
     Column(
         modifier = Modifier
@@ -10010,6 +10778,26 @@ private fun MenuModalContentEmbedded(
                 description = "Create and manage breakout room sessions",
                 icon = Icons.Rounded.Group,
                 onClick = { onNavigate(SidebarContent.BreakoutRooms) }
+            )
+        }
+
+        // Permissions (Host only)
+        if (isHost) {
+            EmbeddedMenuButton(
+                label = "Permissions",
+                description = "Manage participant permission levels and capabilities",
+                icon = Icons.Rounded.Security,
+                onClick = { onNavigate(SidebarContent.Permissions) }
+            )
+        }
+
+        // Panelists (Host only)
+        if (isHost) {
+            EmbeddedMenuButton(
+                label = "Panelists",
+                description = "Select and manage featured panelists",
+                icon = Icons.Rounded.Star,
+                onClick = { onNavigate(SidebarContent.Panelists) }
             )
         }
 
@@ -10092,6 +10880,16 @@ private fun MenuModalContentEmbedded(
             onClick = { onNavigate(SidebarContent.Background) }
         )
 
+        // Translation Settings (when supported)
+        if (isTranslationSupported) {
+            EmbeddedMenuButton(
+                label = "Translation",
+                description = "Configure real-time translation settings",
+                icon = Icons.Rounded.Language,
+                onClick = { onNavigate(SidebarContent.TranslationSettings) }
+            )
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         // Exit button at bottom
@@ -10103,6 +10901,1016 @@ private fun MenuModalContentEmbedded(
             )
         ) {
             Text("Leave Event")
+        }
+    }
+}
+
+/**
+ * Panelists Modal — select and manage featured panelists (host only).
+ * Mirrors Flutter's ModernPanelistsModal / React panelists sidebar panel.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PanelistsModalContentEmbedded(
+    state: MediasfuGenericState,
+    modifier: Modifier = Modifier
+) {
+    val isHost = state.room.youAreHost || state.room.islevel == "2"
+    val panelists by state.panelists.collectAsState()
+    val panelistsFocused by state.panelistsFocused.collectAsState()
+    val muteOthersMic by state.muteOthersMic.collectAsState()
+    val muteOthersCamera by state.muteOthersCamera.collectAsState()
+
+    val availableToAdd = state.room.participants.filter { p ->
+        p.islevel != "2" && panelists.none { it.id == p.id && it.id != null }
+    }
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredAvailable = if (searchQuery.isBlank()) availableToAdd else {
+        availableToAdd.filter { it.name.contains(searchQuery, ignoreCase = true) }
+    }
+
+    Column(
+        modifier = modifier.verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // ── Section 1: Current Panelists ─────────────────────────────────────
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Rounded.Star, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                        Text("Current Panelists", style = MaterialTheme.typography.titleSmall,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    }
+                    if (isHost && panelists.isNotEmpty()) {
+                        TextButton(onClick = { state.clearAllPanelists() }) {
+                            Icon(Icons.Rounded.Remove, contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Clear All", color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
+                }
+                if (panelists.isEmpty()) {
+                    Text(
+                        "No panelists selected",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(vertical = 8.dp)
+                    )
+                } else {
+                    // Chip-style panelist list matching Flutter's Wrap of pill chips
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        panelists.forEach { panelist ->
+                            Surface(
+                                shape = androidx.compose.foundation.shape.CircleShape,
+                                color = MaterialTheme.colorScheme.primaryContainer,
+                                tonalElevation = 4.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    // Avatar initial
+                                    Surface(
+                                        shape = androidx.compose.foundation.shape.CircleShape,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(22.dp)
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                panelist.name.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onPrimary
+                                            )
+                                        }
+                                    }
+                                    Text(panelist.name,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer)
+                                    if (isHost) {
+                                        androidx.compose.material3.IconButton(
+                                            onClick = { state.removePanelist(panelist) },
+                                            modifier = Modifier.size(18.dp)
+                                        ) {
+                                            Icon(Icons.Rounded.Close, contentDescription = "Remove",
+                                                tint = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f),
+                                                modifier = Modifier.size(12.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Section 2: Focus Mode (host only) ────────────────────────────────
+        if (isHost) {
+            val hasPanelists = panelists.isNotEmpty()
+            val borderColor = if (panelistsFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                border = androidx.compose.foundation.BorderStroke(1.dp, borderColor)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                if (panelistsFocused) Icons.Rounded.Videocam else Icons.Rounded.VideocamOff,
+                                contentDescription = null,
+                                tint = if (panelistsFocused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text("Focus Mode", style = MaterialTheme.typography.titleSmall,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                        }
+                        Switch(
+                            checked = panelistsFocused,
+                            onCheckedChange = { if (hasPanelists) state.togglePanelistFocus() },
+                            enabled = hasPanelists
+                        )
+                    }
+                    if (!hasPanelists) {
+                        Text(
+                            "Add panelists to enable focus mode",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.tertiary
+                        )
+                    }
+                    // Mute options — always visible so host can pre-configure
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.Checkbox(
+                            checked = muteOthersMic,
+                            onCheckedChange = { state.togglePanelistFocusMuteMic() }
+                        )
+                        Text("Mute Others' Mic", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.Checkbox(
+                            checked = muteOthersCamera,
+                            onCheckedChange = { state.togglePanelistFocusMuteCamera() }
+                        )
+                        Text("Mute Others' Camera", style = MaterialTheme.typography.bodySmall)
+                    }
+                    // Active banner
+                    if (panelistsFocused) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Rounded.Check, contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                Text(
+                                    "Focus mode active — only panelists visible",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ── Section 3: Add Panelists (host only) ─────────────────────────────
+        if (isHost) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Rounded.Group, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                        Text("Add Panelists", style = MaterialTheme.typography.titleSmall,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    }
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Search participants…") },
+                        leadingIcon = { Icon(Icons.Rounded.Person, contentDescription = null) },
+                        singleLine = true
+                    )
+                    if (filteredAvailable.isEmpty()) {
+                        Text(
+                            if (searchQuery.isBlank()) "No participants available to add."
+                            else "No results for \"$searchQuery\".",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        filteredAvailable.forEach { participant ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(participant.name, style = MaterialTheme.typography.bodyMedium)
+                                FilledTonalButton(
+                                    onClick = { state.addPanelist(participant) },
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    Text("Add", style = MaterialTheme.typography.labelMedium)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Permissions Modal — manage participant permission levels and capability config (host only).
+ * Tab 0: User Permissions — search + per-participant level assignment.
+ * Tab 1: Level Config — capability settings per level (FilterChip matrix).
+ * Mirrors Flutter's ModernPermissionsModal two-tab UI.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PermissionsModalContentEmbedded(
+    state: MediasfuGenericState,
+    modifier: Modifier = Modifier
+) {
+    val permissionConfig by state.permissionConfig.collectAsState()
+    val participants = state.room.participants
+
+    // Tabs
+    var selectedTab by remember { mutableStateOf(0) }
+    val tabTitles = listOf("User Permissions", "Level Config")
+
+    // User Permissions tab local state
+    var searchFilter by remember { mutableStateOf("") }
+    var isUpdatingBulk by remember { mutableStateOf(false) }
+    var updatingId by remember { mutableStateOf<String?>(null) }
+
+    val filteredParticipants = remember(participants, searchFilter) {
+        participants
+            .filter { it.islevel != "2" } // Exclude host
+            .filter { searchFilter.isEmpty() || it.name.contains(searchFilter, ignoreCase = true) }
+    }
+    val byLevel = remember(filteredParticipants) {
+        mapOf(
+            "1" to filteredParticipants.filter { it.islevel == "1" },
+            "0" to filteredParticipants.filter { it.islevel != "1" }
+        )
+    }
+
+    // Level Config tab constants
+    val levelKeys = listOf("level0", "level1")
+    val levelLabels = mapOf("level0" to "Audience (Level 0)", "level1" to "Elevated (Level 1)")
+    val capabilityKeys = listOf("useMic", "useCamera", "useScreen", "useChat")
+    val capabilityLabels = mapOf(
+        "useMic" to "Microphone",
+        "useCamera" to "Camera",
+        "useScreen" to "Screen Share",
+        "useChat" to "Chat"
+    )
+    val statusOptions = listOf("allow", "approval", "disallow")
+
+    Column(modifier = modifier) {
+        TabRow(selectedTabIndex = selectedTab) {
+            tabTitles.forEachIndexed { index, title ->
+                Tab(
+                    selected = selectedTab == index,
+                    onClick = { selectedTab = index },
+                    text = { Text(title, style = MaterialTheme.typography.labelMedium) },
+                    icon = {
+                        Icon(
+                            imageVector = if (index == 0) Icons.Rounded.Group else Icons.Rounded.Settings,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        when (selectedTab) {
+            // ── Tab 0: User Permissions ───────────────────────────────────────
+            0 -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Search bar
+                    OutlinedTextField(
+                        value = searchFilter,
+                        onValueChange = { searchFilter = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Search participants…") },
+                        leadingIcon = { Icon(Icons.Rounded.Person, contentDescription = null) },
+                        singleLine = true
+                    )
+
+                    // Bulk actions (host only)
+                    if (state.room.youAreHost || state.room.islevel == "2") {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            FilledTonalButton(
+                                onClick = {
+                                    isUpdatingBulk = true
+                                    state.bulkUpdateParticipantLevel(
+                                        filteredParticipants, "1"
+                                    ) { isUpdatingBulk = false }
+                                },
+                                enabled = !isUpdatingBulk && filteredParticipants.isNotEmpty(),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Elevate All", style = MaterialTheme.typography.labelSmall)
+                            }
+                            FilledTonalButton(
+                                onClick = {
+                                    isUpdatingBulk = true
+                                    state.bulkUpdateParticipantLevel(
+                                        filteredParticipants, "0"
+                                    ) { isUpdatingBulk = false }
+                                },
+                                enabled = !isUpdatingBulk && filteredParticipants.isNotEmpty(),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Demote All", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                        if (isUpdatingBulk) {
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+
+                    // Participants grouped by level
+                    listOf("1" to "Elevated (Level 1)", "0" to "Basic (Level 0)").forEach { (level, label) ->
+                        val group = byLevel[level] ?: emptyList()
+                        if (group.isNotEmpty()) {
+                            Card(modifier = Modifier.fillMaxWidth()) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Surface(
+                                            shape = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
+                                            color = if (level == "1") MaterialTheme.colorScheme.secondaryContainer
+                                                    else MaterialTheme.colorScheme.surfaceVariant
+                                        ) {
+                                            Text(
+                                                label,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = if (level == "1") MaterialTheme.colorScheme.onSecondaryContainer
+                                                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                        Text("${group.size}", style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    group.forEach { participant ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Icon(Icons.Rounded.Person, contentDescription = null,
+                                                    modifier = Modifier.size(16.dp),
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                Text(participant.name, style = MaterialTheme.typography.bodyMedium,
+                                                    maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                                            }
+                                            if (updatingId == participant.id) {
+                                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                            } else {
+                                                val targetLevel = if (participant.islevel == "1") "0" else "1"
+                                                val actionLabel = if (participant.islevel == "1") "Demote" else "Elevate"
+                                                AssistChip(
+                                                    onClick = {
+                                                        updatingId = participant.id
+                                                        state.updateParticipantLevel(participant, targetLevel) {
+                                                            updatingId = null
+                                                        }
+                                                    },
+                                                    label = {
+                                                        Text(actionLabel, style = MaterialTheme.typography.labelSmall)
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (filteredParticipants.isEmpty()) {
+                        Text(
+                            if (searchFilter.isBlank()) "No participants to show." else "No results for \"$searchFilter\".",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            // ── Tab 1: Level Config ───────────────────────────────────────────
+            else -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        "Configure capability permissions for each participant level.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    levelKeys.forEach { levelKey ->
+                        val levelLabel = levelLabels[levelKey] ?: levelKey
+                        Card(modifier = Modifier.fillMaxWidth()) {
+                            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Text(levelLabel, style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                capabilityKeys.forEach { capKey ->
+                                    val currentValue = state.permissionValue(levelKey, capKey, "allow")
+                                    val capLabel = capabilityLabels[capKey] ?: capKey
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(capLabel, style = MaterialTheme.typography.bodyMedium)
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            statusOptions.forEach { option ->
+                                                val isSelected = currentValue == option
+                                                FilterChip(
+                                                    selected = isSelected,
+                                                    onClick = {
+                                                        val currentValues = permissionConfig?.values?.toMutableMap() ?: mutableMapOf()
+                                                        @Suppress("UNCHECKED_CAST")
+                                                        val levelMap = ((currentValues[levelKey] as? Map<*, *>)?.entries?.associate { (k, v) -> k.toString() to v } ?: emptyMap()).toMutableMap()
+                                                        levelMap[capKey] = option
+                                                        currentValues[levelKey] = levelMap.toMap()
+                                                        state.applyPermissionConfig(currentValues)
+                                                    },
+                                                    label = {
+                                                        Text(option.replaceFirstChar { it.uppercase() },
+                                                            style = MaterialTheme.typography.labelSmall)
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Translation Settings Modal — configure spoken language and listen preferences.
+ * Mirrors Flutter's translation settings drawer — two-tab layout (Speaking / Listening)
+ * matching the React and Flutter ref_sources exactly, excluding voice-clone creation
+ * (clones are managed on the MediaSFU website and passed in from app level).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TranslationSettingsModalContentEmbedded(
+    state: MediasfuGenericState,
+    modifier: Modifier = Modifier
+) {
+    val translationConfig by state.translationConfig.collectAsState()
+    val mySpokenLanguage by state.mySpokenLanguage.collectAsState()
+    val mySpokenLanguageEnabled by state.mySpokenLanguageEnabled.collectAsState()
+    val myDefaultOutputLanguage by state.myDefaultOutputLanguage.collectAsState()
+    val showSubtitles by state.showTranslationSubtitles.collectAsState()
+    val listenPreferences by state.listenPreferences.collectAsState()
+    val member = state.room.member
+    val islevel = state.room.islevel
+
+    // ── Language data ──────────────────────────────────────────────────────
+    val commonLanguages = remember {
+        listOf(
+            "en" to "English", "es" to "Spanish", "fr" to "French",
+            "de" to "German", "it" to "Italian", "pt" to "Portuguese",
+            "nl" to "Dutch", "ru" to "Russian", "zh" to "Chinese",
+            "ja" to "Japanese", "ko" to "Korean", "ar" to "Arabic",
+            "hi" to "Hindi", "bn" to "Bengali", "tr" to "Turkish",
+            "pl" to "Polish", "vi" to "Vietnamese", "th" to "Thai",
+            "id" to "Indonesian", "ms" to "Malay", "sw" to "Swahili",
+            "yo" to "Yoruba", "ha" to "Hausa", "ig" to "Igbo",
+            "zu" to "Zulu", "am" to "Amharic", "tw" to "Twi",
+            "he" to "Hebrew", "fa" to "Persian", "uk" to "Ukrainian",
+            "el" to "Greek", "cs" to "Czech", "ro" to "Romanian",
+            "hu" to "Hungarian", "sv" to "Swedish", "da" to "Danish",
+            "no" to "Norwegian", "fi" to "Finnish"
+        )
+    }
+    val availableSpokenLanguages = remember(translationConfig) {
+        val cfg = translationConfig ?: return@remember commonLanguages
+        val allowedCodes = cfg.allowedSpokenLanguages?.map { it.code } ?: emptyList()
+        val blockedCodes = cfg.blockedSpokenLanguages ?: emptyList()
+        when (cfg.spokenLanguageMode) {
+            LanguageMode.ALLOWLIST -> if (allowedCodes.isEmpty()) commonLanguages else commonLanguages.filter { it.first in allowedCodes }
+            LanguageMode.BLOCKLIST -> commonLanguages.filter { it.first !in blockedCodes }
+            else -> commonLanguages
+        }
+    }
+    val availableListenLanguages = remember(translationConfig) {
+        val cfg = translationConfig ?: return@remember commonLanguages
+        val allowedCodes = cfg.allowedListenLanguages?.map { it.code } ?: emptyList()
+        val blockedCodes = cfg.blockedListenLanguages ?: emptyList()
+        when (cfg.listenLanguageMode) {
+            LanguageMode.ALLOWLIST -> if (allowedCodes.isEmpty()) commonLanguages else commonLanguages.filter { it.first in allowedCodes }
+            LanguageMode.BLOCKLIST -> commonLanguages.filter { it.first !in blockedCodes }
+            else -> commonLanguages
+        }
+    }
+
+    // ── Tabs ───────────────────────────────────────────────────────────────
+    var activeTab by remember { mutableIntStateOf(0) }
+
+    // ── Speaking state ──────────────────────────────────────────────────────
+    var localSpokenLang by remember(mySpokenLanguage) { mutableStateOf(mySpokenLanguage) }
+    var localSpokenEnabled by remember(mySpokenLanguageEnabled) { mutableStateOf(mySpokenLanguageEnabled) }
+    var localOutputLang by remember(myDefaultOutputLanguage) { mutableStateOf(myDefaultOutputLanguage) }
+    var voiceMode by remember { mutableStateOf("basic") }   // "basic" | "advanced" | "clone"
+    var voiceGender by remember { mutableStateOf("female") }
+    var selectedVoiceId by remember { mutableStateOf<String?>(null) }
+
+    // ── Listening state ─────────────────────────────────────────────────────
+    var localDefaultListen by remember { mutableStateOf<String?>(null) }
+    var localListenPrefs by remember(listenPreferences) {
+        mutableStateOf(listenPreferences.toMutableMap() as Map<String, String>)
+    }
+    var perSpeakerMode by remember(listenPreferences) { mutableStateOf(listenPreferences.isNotEmpty()) }
+
+    // ── Subtitles ───────────────────────────────────────────────────────────
+    var localShowSubtitles by remember(showSubtitles) { mutableStateOf(showSubtitles) }
+
+    // ── Rate limiting (30s cooldown per save, KMP-compatible countdown) ────
+    var spokenCooldown by remember { mutableIntStateOf(0) }
+    var listenCooldown by remember { mutableIntStateOf(0) }
+    LaunchedEffect(spokenCooldown, listenCooldown) {
+        if (spokenCooldown > 0 || listenCooldown > 0) {
+            delay(1_000L)
+            if (spokenCooldown > 0) spokenCooldown--
+            if (listenCooldown > 0) listenCooldown--
+        }
+    }
+
+    // ── Dropdown expanded state ─────────────────────────────────────────────
+    var spokenExpanded by remember { mutableStateOf(false) }
+    var outputExpanded by remember { mutableStateOf(false) }
+    var listenExpanded by remember { mutableStateOf(false) }
+
+    // ── Other participants (for per-speaker tab) ────────────────────────────
+    val otherParticipants = remember(state.room.participants, member) {
+        state.room.participants.filter { it.name != member }
+    }
+
+    // ── Save handler ────────────────────────────────────────────────────────
+    val onSave: () -> Unit = {
+        val vc: Map<String, Any?> = when (voiceMode) {
+            "advanced" -> if (selectedVoiceId != null)
+                mapOf("voiceId" to selectedVoiceId!!)
+            else mapOf("voiceGender" to voiceGender)
+            else -> mapOf("voiceGender" to voiceGender)
+        }
+        state.applyTranslationSettings(
+            spokenLanguage = localSpokenLang,
+            spokenEnabled = localSpokenEnabled,
+            defaultOutputLanguage = localOutputLang,
+            defaultListenLanguage = if (!perSpeakerMode) localDefaultListen else null,
+            perSpeakerListenPreferences = if (perSpeakerMode) localListenPrefs else emptyMap(),
+            showSubtitles = localShowSubtitles,
+            voiceConfig = if (localSpokenEnabled && localOutputLang != null) vc else emptyMap()
+        )
+        if (localSpokenEnabled) spokenCooldown = 30
+    }
+
+    // ── Layout ──────────────────────────────────────────────────────────────
+    Column(modifier = modifier) {
+        // Tabs
+        TabRow(selectedTabIndex = activeTab) {
+            Tab(
+                selected = activeTab == 0,
+                onClick = { activeTab = 0 },
+                text = { Text("My Voice Output") },
+                icon = { Icon(Icons.Rounded.Mic, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            )
+            Tab(
+                selected = activeTab == 1,
+                onClick = { activeTab = 1 },
+                text = { Text("Listen To") },
+                icon = { Icon(Icons.Rounded.Headphones, contentDescription = null, modifier = Modifier.size(16.dp)) }
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            if (activeTab == 0) {
+                // ── Speaking tab ─────────────────────────────────────────────
+                Text(
+                    "Optionally specify your spoken language. Choose an output language to have your voice translated for everyone.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (spokenCooldown > 0) TranslationCooldownBanner("Wait ${spokenCooldown}s before changing spoken language")
+
+                // Spoken language
+                Text("Spoken Language", style = MaterialTheme.typography.labelLarge)
+                TranslationLanguageDropdown(
+                    value = localSpokenLang,
+                    onChange = { localSpokenLang = it },
+                    languages = availableSpokenLanguages,
+                    expanded = spokenExpanded,
+                    onExpandedChange = { spokenExpanded = it }
+                )
+
+                // Enable translation switch
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Speak in a different language (translate my voice)", style = MaterialTheme.typography.bodyMedium)
+                        Switch(checked = localSpokenEnabled, onCheckedChange = { localSpokenEnabled = it })
+                    }
+                }
+
+                // Output language + voice settings (only when translation is enabled)
+                if (localSpokenEnabled) {
+                    Text("Output Language (Everyone Hears)", style = MaterialTheme.typography.labelLarge)
+                    TranslationLanguageDropdown(
+                        value = localOutputLang ?: "",
+                        onChange = { localOutputLang = it.ifBlank { null } },
+                        languages = availableSpokenLanguages.filter { it.first != localSpokenLang },
+                        expanded = outputExpanded,
+                        onExpandedChange = { outputExpanded = it },
+                        placeholder = "No translation (speak in my original language)"
+                    )
+
+                    // Voice Settings (only when output language selected)
+                    if (localOutputLang != null) {
+                        TranslationVoiceSettingsCard(
+                            voiceMode = voiceMode,
+                            onVoiceModeChange = { voiceMode = it },
+                            voiceGender = voiceGender,
+                            onVoiceGenderChange = { voiceGender = it; selectedVoiceId = null },
+                            selectedVoiceId = selectedVoiceId,
+                            onVoiceIdChange = { selectedVoiceId = it }
+                        )
+                    }
+                }
+
+                // Subtitles toggle
+                TranslationSubtitlesToggle(checked = localShowSubtitles, onCheckedChange = { localShowSubtitles = it })
+
+                Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) { Text("Save Settings") }
+
+            } else {
+                // ── Listening tab ────────────────────────────────────────────
+                Text(
+                    "Choose which language to hear translations in. Set a default or configure per speaker.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (listenCooldown > 0) TranslationCooldownBanner("Wait ${listenCooldown}s before changing listen language")
+
+                // Mode toggle: Same for All | Per Speaker
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(false to ("Same for All" to Icons.Rounded.Group), true to ("Per Speaker" to Icons.Rounded.Tune)).forEach { (isPerSpeaker, pair) ->
+                        val (label, icon) = pair
+                        val sel = perSpeakerMode == isPerSpeaker
+                        Card(
+                            onClick = { perSpeakerMode = isPerSpeaker },
+                            modifier = Modifier.weight(1f),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (sel) MaterialTheme.colorScheme.primaryContainer
+                                                else MaterialTheme.colorScheme.surfaceVariant
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text(label, style = MaterialTheme.typography.labelMedium)
+                            }
+                        }
+                    }
+                }
+
+                if (!perSpeakerMode) {
+                    Text("Default Language for All Speakers", style = MaterialTheme.typography.labelLarge)
+                    TranslationLanguageDropdown(
+                        value = localDefaultListen ?: "",
+                        onChange = { localDefaultListen = it.ifBlank { null } },
+                        languages = availableListenLanguages,
+                        expanded = listenExpanded,
+                        onExpandedChange = { listenExpanded = it },
+                        placeholder = "Speaker's Output (default)"
+                    )
+                } else {
+                    Text("Configure Per Speaker", style = MaterialTheme.typography.labelLarge)
+                    if (otherParticipants.isEmpty()) {
+                        Text(
+                            "No other participants in the meeting yet.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        otherParticipants.forEach { participant ->
+                            TranslationSpeakerRow(
+                                participantName = participant.name,
+                                selectedLang = localListenPrefs[participant.name],
+                                languages = availableListenLanguages,
+                                isHost = islevel == "2",
+                                onLangChange = { lang ->
+                                    localListenPrefs = localListenPrefs.toMutableMap().apply {
+                                        if (lang == null) remove(participant.name) else set(participant.name, lang)
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+
+                // Subtitles toggle (also in listening tab, per Flutter/React ref)
+                Divider(modifier = Modifier.padding(vertical = 4.dp))
+                TranslationSubtitlesToggle(checked = localShowSubtitles, onCheckedChange = { localShowSubtitles = it })
+
+                Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) { Text("Save Settings") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TranslationCooldownBanner(message: String) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Rounded.AccessTime, contentDescription = null, modifier = Modifier.size(14.dp))
+            Text(message, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TranslationLanguageDropdown(
+    value: String,
+    onChange: (String) -> Unit,
+    languages: List<Pair<String, String>>,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    placeholder: String = "Select language"
+) {
+    val display = languages.firstOrNull { it.first == value }?.let { "${it.second} (${it.first})" }
+        ?: value.ifBlank { placeholder }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = onExpandedChange) {
+        OutlinedTextField(
+            value = display,
+            onValueChange = {},
+            readOnly = true,
+            singleLine = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.fillMaxWidth().menuAnchor()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
+            if (placeholder.isNotBlank()) {
+                DropdownMenuItem(
+                    text = { Text(placeholder, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    onClick = { onChange(""); onExpandedChange(false) }
+                )
+            }
+            languages.forEach { (code, name) ->
+                DropdownMenuItem(
+                    text = { Text("$name ($code)") },
+                    onClick = { onChange(code); onExpandedChange(false) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TranslationVoiceSettingsCard(
+    voiceMode: String,
+    onVoiceModeChange: (String) -> Unit,
+    voiceGender: String,
+    onVoiceGenderChange: (String) -> Unit,
+    selectedVoiceId: String?,
+    onVoiceIdChange: (String?) -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Rounded.Star, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                Text("Voice Settings", style = MaterialTheme.typography.titleSmall)
+            }
+
+            // Mode selector
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf("✨ Basic" to "basic", "⚙️ Advanced" to "advanced", "🎤 Clone" to "clone").forEach { (label, mode) ->
+                    FilterChip(
+                        selected = voiceMode == mode,
+                        onClick = { onVoiceModeChange(mode) },
+                        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            when (voiceMode) {
+                "basic" -> {
+                    Text("Voice Gender Preference", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf("female" to "👩 Female", "male" to "👨 Male", "neutral" to "🧑 Neutral").forEach { (gender, label) ->
+                            FilterChip(
+                                selected = voiceGender == gender,
+                                onClick = { onVoiceGenderChange(gender); onVoiceIdChange(null) },
+                                label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
+                "advanced" -> {
+                    // Voices are fetched from server on demand — show empty state
+                    Text(
+                        "No voices available. Select an output language and voices will load when the server responds.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                "clone" -> {
+                    // Clones are managed on the MediaSFU website and passed from the app level.
+                    // Show empty state matching the Flutter/React ref.
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text("🎤", style = MaterialTheme.typography.headlineMedium)
+                            Text("No cloned voices found", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "Create a voice clone on the MediaSFU website, then select it here.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Icon(Icons.Rounded.Info, contentDescription = null, modifier = Modifier.size(12.dp))
+                                Text("mediasfu.com/lite/voice-clone", style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TranslationSubtitlesToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Rounded.ClosedCaption,
+                    contentDescription = null,
+                    tint = if (checked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Column {
+                    Text("Show Subtitles on Video", style = MaterialTheme.typography.bodyMedium)
+                    Text("Display live captions on participant video cards", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TranslationSpeakerRow(
+    participantName: String,
+    selectedLang: String?,
+    languages: List<Pair<String, String>>,
+    isHost: Boolean,
+    onLangChange: (String?) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val display = selectedLang?.let { l -> languages.firstOrNull { it.first == l }?.let { "${it.second} (${it.first})" } ?: l }
+        ?: "Speaker's Output"
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                Icon(Icons.Rounded.Person, contentDescription = null, modifier = Modifier.size(14.dp))
+                Text(participantName, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+            }
+            Spacer(Modifier.width(8.dp))
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = it },
+                modifier = Modifier.width(180.dp)
+            ) {
+                OutlinedTextField(
+                    value = display,
+                    onValueChange = {},
+                    readOnly = true,
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodySmall,
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                )
+                ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Speaker's Output", style = MaterialTheme.typography.bodySmall) },
+                        onClick = { onLangChange(null); expanded = false }
+                    )
+                    if (isHost) {
+                        DropdownMenuItem(
+                            text = { Text("Original (raw audio)", style = MaterialTheme.typography.bodySmall) },
+                            onClick = { onLangChange("original"); expanded = false }
+                        )
+                    }
+                    languages.forEach { (code, name) ->
+                        DropdownMenuItem(
+                            text = { Text("$name ($code)", style = MaterialTheme.typography.bodySmall) },
+                            onClick = { onLangChange(code); expanded = false }
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -12210,7 +14018,7 @@ private fun MainContainerInline(state: MediasfuGenericState) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(40.dp)
+                        .height(72.dp)
                 ) {
                     SubAspectInline(state)
                 }
@@ -12275,7 +14083,12 @@ private fun MainAspectInline(
         return
     }
 
-    val placeholderStreams = remember(participantList) { buildPlaceholderStreams(participantList) }
+    val placeholderStreams = remember(participantList, state.room.member, state.parameters.member) {
+        buildPlaceholderStreams(
+            participants = participantList,
+            selfMemberName = state.room.member.ifBlank { state.parameters.member }
+        )
+    }
 
     val totalPages = state.totalPages()
     val showPagination = display.doPaginate && totalPages > 1
@@ -12292,12 +14105,29 @@ private fun MainAspectInline(
         streams.currentStreams.isNotEmpty() -> streams.currentStreams.toList()
         else -> emptyList()
     }
+
+    val dedupedMainStreams = remember(activeMainStreams, state.room.member) {
+        val memberName = state.room.member
+        val hasRealSelf = activeMainStreams.any { stream ->
+            stream.producerId == "youyouyou" ||
+                (stream.producerId != "youyou" &&
+                memberName.isNotBlank() &&
+                stream.name.equals(memberName, ignoreCase = true))
+        }
+        if (hasRealSelf) {
+            activeMainStreams.filterNot { it.producerId == "youyou" }
+        } else {
+            activeMainStreams
+        }
+    }
     
     // Debug stream sources
     
     val audioDecibels = remember(state.parameters.audioDecibels) {
         state.parameters.audioDecibels.toList()
     }
+    val currentMemberName = state.room.member.ifBlank { state.parameters.member }
+    val currentMemberLevel = state.room.islevel.ifBlank { state.parameters.islevel }
 
     // React pattern: prepopulateUserMedia builds VideoCard/AudioCard/MiniCard components
     // and stores them in mainGridStream. If available, use those directly.
@@ -12308,8 +14138,8 @@ private fun MainAspectInline(
         prebuiltComponents
     } else {
         // Priority 2: Convert raw streams to components
-        val rawStreams = if (activeMainStreams.isNotEmpty()) {
-            activeMainStreams
+        val rawStreams = if (dedupedMainStreams.isNotEmpty()) {
+            dedupedMainStreams
         } else {
             placeholderStreams
         }
@@ -12318,6 +14148,8 @@ private fun MainAspectInline(
             audioDecibels = audioDecibels,
             isVideoCard = true,
             showControls = false,
+            currentMemberName = currentMemberName,
+            currentMemberLevel = currentMemberLevel,
             eventType = state.room.eventType
         )
     }
@@ -12358,6 +14190,42 @@ private fun MainAspectInline(
                     showPagination = showPagination,
                     totalPages = totalPages
                 )
+            }
+
+            // When screensharing, cover the video grid with an opaque overlay so that
+            // ReplayKit in-app capture does not pick up camera tiles – preventing the
+            // recursive hall-of-mirrors effect seen on the web side.
+            if (state.media.screenAlreadyOn) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(androidx.compose.ui.graphics.Color(0xFF0D1B2A)),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
+                ) {
+                    androidx.compose.foundation.layout.Column(
+                        horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                    ) {
+                        androidx.compose.material3.Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.ScreenShare,
+                            contentDescription = null,
+                            tint = androidx.compose.ui.graphics.Color(0xFF4FC3F7),
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        androidx.compose.material3.Text(
+                            text = "Screen Sharing Active",
+                            color = androidx.compose.ui.graphics.Color.White,
+                            fontSize = 18.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        androidx.compose.material3.Text(
+                            text = "Camera preview hidden to prevent feedback",
+                            color = androidx.compose.ui.graphics.Color(0xFFB0BEC5),
+                            fontSize = 13.sp
+                        )
+                    }
+                }
             }
 
             MiniAudioOverlay(
@@ -12878,12 +14746,15 @@ private fun BoxScope.MainGridInline(
     mainGridHeight: Int,
     shouldRenderMainGrid: Boolean
 ) {
+    val meetingTimerVisible = state.meeting.isVisible
+    val meetingProgressTime = state.meeting.progressTime
     val mainGridComponent = remember(
         mainGridComponents,
         mainGridWidth,
         mainGridHeight,
         display.mainHeightWidth,
-        state.meeting.isVisible,
+        meetingTimerVisible,
+        meetingProgressTime,
         shouldRenderMainGrid
     ) {
         DefaultMainGridComponent(
@@ -12894,7 +14765,7 @@ private fun BoxScope.MainGridInline(
                 mainSize = display.mainHeightWidth,
                 showAspect = shouldRenderMainGrid,
                 timeBackgroundColor = 0xFF2E7D32.toInt(),
-                showTimer = state.meeting.isVisible
+                showTimer = meetingTimerVisible
             )
         )
     }
@@ -12909,8 +14780,8 @@ private fun BoxScope.MainGridInline(
     }
 
     mainGridComponent.renderCompose(
-        renderTimer = state.meeting.isVisible,
-        timer = if (state.meeting.isVisible) timerSlot else null
+        renderTimer = meetingTimerVisible,
+        timer = if (meetingTimerVisible) timerSlot else null
     ) {
         if (shouldRenderMainGrid && mainGridComponents.isNotEmpty()) {
             flexibleVideo.renderCompose()
@@ -13224,74 +15095,81 @@ private fun SubAspectInline(state: MediasfuGenericState) {
         }
 
         if (visibleButtons.isNotEmpty()) {
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(40.dp)
-                    .padding(horizontal = 12.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
+                    .height(72.dp),
+                contentAlignment = Alignment.Center
             ) {
-                visibleButtons.forEach { button ->
-                    val iconVector = if (button.isActive && button.alternateIcon != null) {
-                        button.alternateIcon
-                    } else {
-                        button.icon
-                    }
-                    val baseTint = if (button.isActive) button.activeTint else button.inactiveTint
-                    val iconTint = if (button.isEnabled) baseTint else baseTint.copy(alpha = 0.4f)
-                    val backgroundTint = if (button.isActive) {
-                        button.activeTint.copy(alpha = 0.2f)
-                    } else {
-                        Color.Transparent
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(backgroundTint)
-                            .clickable(enabled = button.isEnabled && !button.isLoading) { button.onClick() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (button.isLoading) {
-                            // Show loading spinner instead of icon
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = button.activeTint,
-                                strokeWidth = 2.dp
-                            )
+                Row(
+                    modifier = Modifier
+                        .background(Color(0x40000000), RoundedCornerShape(14.dp))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    visibleButtons.forEach { button ->
+                        val iconVector = if (button.isActive && button.alternateIcon != null) {
+                            button.alternateIcon
                         } else {
-                            Icon(
-                                imageVector = iconVector,
-                                contentDescription = button.label,
-                                tint = iconTint,
-                                modifier = Modifier.size(20.dp)
-                            )
+                            button.icon
+                        }
+                        val baseTint = if (button.isActive) button.activeTint else Color.White.copy(alpha = 0.85f)
+                        val iconTint = if (button.isEnabled) baseTint else baseTint.copy(alpha = 0.4f)
+                        val backgroundTint = if (button.isActive) {
+                            button.activeTint.copy(alpha = 0.25f)
+                        } else {
+                            Color.White.copy(alpha = 0.1f)
                         }
 
-                        button.badgeText?.let { badgeText ->
-                            if (badgeText.isNotEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .background(button.badgeColor, CircleShape)
-                                        .size(12.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = badgeText,
-                                        color = Color.White,
-                                        fontSize = 8.sp
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(backgroundTint)
+                                .clickable(enabled = button.isEnabled && !button.isLoading) { button.onClick() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (button.isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(22.dp),
+                                    color = button.activeTint,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = iconVector,
+                                    contentDescription = button.label,
+                                    tint = iconTint,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+
+                            button.badgeText?.let { badgeText ->
+                                if (badgeText.isNotEmpty()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .offset(x = 2.dp, y = (-2).dp)
+                                            .background(button.badgeColor, CircleShape)
+                                            .size(14.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = badgeText,
+                                            color = Color.White,
+                                            fontSize = 8.sp
+                                        )
+                                    }
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .offset(x = 2.dp, y = (-2).dp)
+                                            .background(button.badgeColor, CircleShape)
+                                            .size(8.dp)
                                     )
                                 }
-                            } else {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .background(button.badgeColor, CircleShape)
-                                        .size(8.dp)
-                                )
                             }
                         }
                     }
@@ -13347,8 +15225,8 @@ internal fun MediasfuGenericState.primaryControlButtons(includeExtended: Boolean
         ),
         ControlButtonModel(
             label = if (mediaState.videoAlreadyOn) "Stop Video" else "Video",
-            icon = Icons.Rounded.VideoCall,
-            alternateIcon = Icons.Rounded.VideoCameraFront,
+            icon = Icons.Rounded.VideocamOff,
+            alternateIcon = Icons.Rounded.Videocam,
             isActive = mediaState.videoAlreadyOn,
             onClick = { toggleVideo() }
         ),
@@ -13508,8 +15386,8 @@ internal fun MediasfuGenericState.controlBroadcastButtons(): List<ControlButtonM
         // Video button (host only)
         ControlButtonModel(
             label = "",
-            icon = Icons.Rounded.Videocam,
-            alternateIcon = Icons.Rounded.VideocamOff,
+            icon = Icons.Rounded.VideocamOff,
+            alternateIcon = Icons.Rounded.Videocam,
             isActive = mediaState.videoAlreadyOn,
             onClick = { toggleVideo() },
             activeTint = Color(0xFF52C41A),
@@ -13519,8 +15397,8 @@ internal fun MediasfuGenericState.controlBroadcastButtons(): List<ControlButtonM
         // Mic button (host only)
         ControlButtonModel(
             label = "",
-            icon = Icons.Rounded.Mic,
-            alternateIcon = Icons.Rounded.MicOff,
+            icon = Icons.Rounded.MicOff,
+            alternateIcon = Icons.Rounded.Mic,
             isActive = mediaState.audioAlreadyOn,
             onClick = { toggleAudio() },
             activeTint = Color(0xFF52C41A),
@@ -13589,8 +15467,8 @@ internal fun MediasfuGenericState.controlChatButtons(): List<ControlButtonModel>
         // Video button (host only)
         ControlButtonModel(
             label = "",
-            icon = Icons.Rounded.Videocam,
-            alternateIcon = Icons.Rounded.VideocamOff,
+            icon = Icons.Rounded.VideocamOff,
+            alternateIcon = Icons.Rounded.Videocam,
             isActive = mediaState.videoAlreadyOn,
             onClick = { toggleVideo() },
             activeTint = Color(0xFF52C41A),
@@ -13600,8 +15478,8 @@ internal fun MediasfuGenericState.controlChatButtons(): List<ControlButtonModel>
         // Mic button
         ControlButtonModel(
             label = "",
-            icon = Icons.Rounded.Mic,
-            alternateIcon = Icons.Rounded.MicOff,
+            icon = Icons.Rounded.MicOff,
+            alternateIcon = Icons.Rounded.Mic,
             isActive = mediaState.audioAlreadyOn,
             onClick = { toggleAudio() },
             activeTint = Color(0xFF52C41A),
@@ -13871,15 +15749,42 @@ private fun LoadingOverlay() {
     }
 }
 
+private class AlertThemeInfo(
+    val backgroundColor: Color,
+    val borderColor: Color,
+    val accentColor: Color,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector
+)
+
 @Composable
 private fun AlertBanner(state: MediasfuGenericState, isVisible: Boolean, modifier: Modifier = Modifier) {
     val alertState = state.alert
     
-    val containerColor = when (alertState.type) {
-        "danger", "error" -> Color(0xFFFF4D4F)
-        "warning" -> Color(0xFFFFC53D)
-        "success" -> Color(0xFF52C41A)
-        else -> Color(0xFF1890FF)
+    val themeInfo = when (alertState.type) {
+        "danger", "error" -> AlertThemeInfo(
+            backgroundColor = Color(0xE61F0E11), // Dark translucent rose
+            borderColor = Color(0x33EF4444), // Translucent red border
+            accentColor = Color(0xFFEF4444), // Red accent
+            icon = Icons.Rounded.Warning
+        )
+        "warning" -> AlertThemeInfo(
+            backgroundColor = Color(0xE6201608), // Dark translucent amber
+            borderColor = Color(0x33F59E0B), // Translucent amber border
+            accentColor = Color(0xFFF59E0B), // Amber accent
+            icon = Icons.Rounded.Warning
+        )
+        "success" -> AlertThemeInfo(
+            backgroundColor = Color(0xE60A1F13), // Dark translucent emerald
+            borderColor = Color(0x3310B981), // Translucent emerald border
+            accentColor = Color(0xFF10B981), // Emerald accent
+            icon = Icons.Rounded.Check
+        )
+        else -> AlertThemeInfo(
+            backgroundColor = Color(0xE60E182A), // Dark translucent indigo
+            borderColor = Color(0x333B82F6), // Translucent blue border
+            accentColor = Color(0xFF3B82F6), // Blue accent
+            icon = Icons.Rounded.Info
+        )
     }
 
     LaunchedEffect(alertState.visible) {
@@ -13891,27 +15796,77 @@ private fun AlertBanner(state: MediasfuGenericState, isVisible: Boolean, modifie
 
     AnimatedVisibility(
         visible = isVisible,
-        enter = fadeIn(animationSpec = TweenSpec(durationMillis = 200)),
-        exit = fadeOut(animationSpec = TweenSpec(durationMillis = 200)),
-        modifier = modifier.fillMaxWidth()
+        enter = fadeIn(animationSpec = TweenSpec(durationMillis = 250)) + androidx.compose.animation.slideInVertically(
+            animationSpec = TweenSpec(durationMillis = 250),
+            initialOffsetY = { -it / 2 }
+        ),
+        exit = fadeOut(animationSpec = TweenSpec(durationMillis = 200)) + androidx.compose.animation.slideOutVertically(
+            animationSpec = TweenSpec(durationMillis = 200),
+            targetOffsetY = { -it / 2 }
+        ),
+        modifier = modifier
+            .widthIn(max = 480.dp)
+            .fillMaxWidth(0.9f)
     ) {
-        ElevatedCard(
-            colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
-            shape = RoundedCornerShape(12.dp)
+        Surface(
+            color = themeInfo.backgroundColor,
+            shape = RoundedCornerShape(16.dp),
+            border = BorderStroke(1.dp, themeInfo.borderColor),
+            shadowElevation = 8.dp,
+            modifier = Modifier.fillMaxWidth()
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(end = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Colored left accent bar
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .height(48.dp)
+                        .background(themeInfo.accentColor, RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp))
+                )
+                
+                Spacer(modifier = Modifier.width(12.dp))
+                
+                // Icon
+                Icon(
+                    imageVector = themeInfo.icon,
+                    contentDescription = alertState.type,
+                    tint = themeInfo.accentColor,
+                    modifier = Modifier.size(22.dp)
+                )
+                
+                Spacer(modifier = Modifier.width(12.dp))
+                
+                // Message
                 Text(
                     text = alertState.message,
-                    modifier = Modifier.fillMaxWidth(0.85f),
-                    color = Color.White,
-                    style = MaterialTheme.typography.bodyLarge
+                    color = Color.White.copy(alpha = 0.95f),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontWeight = FontWeight.Medium,
+                        lineHeight = 18.sp
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(vertical = 12.dp)
                 )
-                IconButton(onClick = alertState::hide) {
-                    Icon(Icons.Rounded.Close, contentDescription = "Dismiss alert", tint = Color.White)
+                
+                // Dismiss Button
+                IconButton(
+                    onClick = alertState::hide,
+                    modifier = Modifier
+                        .padding(4.dp)
+                        .size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = "Dismiss alert",
+                        tint = Color.White.copy(alpha = 0.6f),
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         }

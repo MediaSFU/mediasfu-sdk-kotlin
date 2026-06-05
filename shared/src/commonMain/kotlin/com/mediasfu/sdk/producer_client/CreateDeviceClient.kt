@@ -48,19 +48,28 @@ suspend fun createDeviceClient(options: CreateDeviceClientOptions): WebRtcDevice
         // Initialize the mediasoup client device
         val device = WebRtcFactory.createDevice()
 
-        val routerCaps = options.rtpCapabilities!!
-        
-        // Remove orientation capabilities if present in rtpCapabilities directly
-        val filteredCapabilities = routerCaps.copy(
-            headerExtensions = routerCaps.headerExtensions.filter { ext ->
-                ext.uri != "urn:3gpp:video-orientation"
-            }
-        )
-        
-        // Load the provided RTP capabilities into the device
-        device.load(filteredCapabilities).getOrThrow()
+        val originalRouterCaps = options.rtpCapabilities!!
 
+        // Remove orientation capabilities to prevent rotated video on iOS endpoints
+        val filteredHeaderExtensions = originalRouterCaps.headerExtensions.filter { ext ->
+            ext.uri != "urn:3gpp:video-orientation"
+        }
+        val routerCaps = originalRouterCaps.copy(headerExtensions = filteredHeaderExtensions)
+
+        device.load(routerCaps).getOrThrow()
+
+        // === DIAGNOSTIC: Verify urn:3gpp:video-orientation was filtered out ===
+        val removedCount = originalRouterCaps.headerExtensions.size - filteredHeaderExtensions.size
+        Logger.w(
+            "CreateDeviceClient",
+            "ORIENTATION-CHECK device loaded: originalHeaderExts=${originalRouterCaps.headerExtensions.size} filteredHeaderExts=${filteredHeaderExtensions.size} removedOrientationExts=$removedCount"
+        )
         device.currentRtpCapabilities()?.let { currentCaps ->
+            val deviceHasOrientation = currentCaps.headerExtensions.any { it.uri == "urn:3gpp:video-orientation" }
+            Logger.w(
+                "CreateDeviceClient",
+                "ORIENTATION-CHECK device.currentRtpCapabilities headerExts=${currentCaps.headerExtensions.size} hasVideoOrientation=$deviceHasOrientation uris=${currentCaps.headerExtensions.map { it.uri }}"
+            )
         }
         
         device

@@ -8,6 +8,7 @@ import kotlinx.coroutines.*
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Android implementation of SocketManager using Socket.IO Java client.
@@ -30,6 +31,7 @@ class SocketManagerImpl : SocketManager {
     private var reconnectFailedHandler: (suspend () -> Unit)? = null
     
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var lastConfig: SocketConfig = SocketConfig()
     
     @Volatile
     private var currentState: ConnectionState = ConnectionState.DISCONNECTED
@@ -61,6 +63,7 @@ class SocketManagerImpl : SocketManager {
                     }
                 }
                 
+                lastConfig = config
                 currentState = ConnectionState.CONNECTING
                 
                 socket = IO.socket(URI.create(url), options).apply {
@@ -176,7 +179,19 @@ class SocketManagerImpl : SocketManager {
             arrayOf(SocketDataConverter.fromMap(data))
         }
 
+        val completed = AtomicBoolean(false)
+        val timeoutMillis = lastConfig.timeout.coerceAtLeast(5_000)
+        val timeoutJob = scope.launch {
+            delay(timeoutMillis)
+            if (completed.compareAndSet(false, true)) {
+                Logger.w("SocketManager", "Acknowledgment timeout for event '$event' after ${timeoutMillis}ms")
+                callback(mapOf("error" to "Acknowledgment timeout for event '$event'"))
+            }
+        }
+
         socket.emit(event, emitArgs) { args: Array<Any> ->
+            if (!completed.compareAndSet(false, true)) return@emit
+            timeoutJob.cancel()
             val payload = args.firstOrNull()
             val normalized = when (payload) {
                 is JSONObject -> SocketDataConverter.toMap(payload)

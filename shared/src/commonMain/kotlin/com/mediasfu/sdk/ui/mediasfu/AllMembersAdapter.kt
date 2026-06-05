@@ -7,8 +7,6 @@ import com.mediasfu.sdk.consumers.ChangeVidsOptions
 import com.mediasfu.sdk.consumers.ChangeVidsParameters
 import com.mediasfu.sdk.consumers.ComponentSizes
 import com.mediasfu.sdk.consumers.ConsumerTransportInfo
-import com.mediasfu.sdk.consumers.ConnectIpsOptions as ConsumerConnectIpsOptions
-import com.mediasfu.sdk.consumers.ConnectIpsParameters as ConsumerConnectIpsParameters
 import com.mediasfu.sdk.consumers.ConnectLocalIpsOptions as ConsumerConnectLocalIpsOptions
 import com.mediasfu.sdk.consumers.ConnectLocalIpsParameters as ConsumerConnectLocalIpsParameters
 import com.mediasfu.sdk.consumers.ControlMediaOptions
@@ -33,7 +31,6 @@ import com.mediasfu.sdk.consumers.UpdateMiniCardsGridOptions
 import com.mediasfu.sdk.consumers.calculateRowsAndColumns as consumerCalculateRowsAndColumns
 import com.mediasfu.sdk.consumers.updateMiniCardsGridImpl
 import com.mediasfu.sdk.consumers.changeVids as consumerChangeVids
-import com.mediasfu.sdk.consumers.connectIps as consumerConnectIps
 import com.mediasfu.sdk.consumers.connectLocalIps as consumerConnectLocalIps
 import com.mediasfu.sdk.consumers.dispStreams as consumerDispStreams
 import com.mediasfu.sdk.consumers.getEstimate as consumerGetEstimate
@@ -90,21 +87,7 @@ private class MediasfuAllMembersParameters(
     GetEstimateParameters {
 
     private val connectIpsLambda: suspend (ConnectIpsOptions) -> Pair<List<ConsumeSocket>, List<String>> = { options ->
-        val consumerOptions = ConsumerConnectIpsOptions(
-            consumeSockets = options.consumeSockets.toSocketManagerMaps(),
-            remIP = options.remoteIps,
-            apiUserName = options.apiUserName,
-            apiKey = options.apiKey ?: backing.apiKey,
-            apiToken = options.apiToken,
-            parameters = backing
-        )
-
-        val result = consumerConnectIps(consumerOptions).getOrThrow()
-        val converted = result.consumeSockets.toConsumeSockets()
-        state.media.consumeSockets = converted
-        backing.consumeSocketsState = converted
-        propagate()
-        Pair(converted, result.roomRecvIPs)
+        backing.connectIps(options)
     }
 
     private val connectLocalIpsLambda: (suspend (ConnectLocalIpsOptions) -> Unit)? =
@@ -255,8 +238,7 @@ private class MediasfuAllMembersParameters(
     override val updateShareScreenStarted: (Boolean) -> Unit
         get() = { value ->
             if (state.media.shareScreenStarted != value || backing.shareScreenStarted != value) {
-                backing.shareScreenStarted = value
-                state.media.shareScreenStarted = value
+                backing.updateShareScreenStarted(value)
                 propagate()
             }
         }
@@ -272,6 +254,9 @@ private class MediasfuAllMembersParameters(
 
     override val updateChatSetting: (String) -> Unit
         get() = { value -> state.media.updateChatSetting(value) }
+
+    override val updateIslevel: (String) -> Unit
+        get() = { value -> state.room.updateIslevel(value) }
 
     override val updateIsLoadingModalVisible: (Boolean) -> Unit
         get() = { visible ->

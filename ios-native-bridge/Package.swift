@@ -10,6 +10,7 @@ let package = Package(
     products: [
         .library(
             name: "MediaSFUIosBridge",
+            type: .dynamic,
             targets: ["MediaSFUIosBridge"]
         )
     ],
@@ -20,7 +21,7 @@ let package = Package(
         .target(
             name: "MediaSFUIosBridge",
             dependencies: [
-                .product(name: "MediaSFUMediasoupClient", package: "MediaSFUMediasoupClient")
+                .product(name: "MediaSFUMediasoupClient", package: "mediasfu-mediasoup-client-ios")
             ]
         ),
         .testTarget(

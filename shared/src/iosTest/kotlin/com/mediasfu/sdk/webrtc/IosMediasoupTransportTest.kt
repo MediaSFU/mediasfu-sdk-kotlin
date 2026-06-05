@@ -3,12 +3,16 @@
 package com.mediasfu.sdk.webrtc
 
 import cocoapods.WebRTC.RTCMediaStreamTrack
+import com.mediasfu.sdk.network.mediaSfuJson
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 class IosMediasoupTransportTest {
 
@@ -155,6 +159,65 @@ class IosMediasoupTransportTest {
     }
 
     @Test
+    fun buildIosProduceEncodingsJson_preservesVideoSimulcastIdentity() {
+        val json = buildIosProduceEncodingsJson(
+            kind = "video",
+            encodings = listOf(
+                RtpEncodingParameters(
+                    rid = "r0",
+                    active = true,
+                    maxBitrate = 200_000,
+                    minBitrate = 40_000,
+                    scalabilityMode = "L1T3",
+                    scaleResolutionDownBy = 4.0
+                )
+            )
+        )
+
+        val encoding = mediaSfuJson.parseToJsonElement(requireNotNull(json))
+            .jsonArray
+            .first()
+            .jsonObject
+
+        assertEquals("r0", encoding["rid"]?.jsonPrimitive?.content)
+        assertEquals("200000", encoding["maxBitrate"]?.jsonPrimitive?.content)
+        assertEquals("40000", encoding["minBitrate"]?.jsonPrimitive?.content)
+        assertEquals("L1T3", encoding["scalabilityMode"]?.jsonPrimitive?.content)
+        assertEquals("4.0", encoding["scaleResolutionDownBy"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun buildIosProduceEncodingsJson_stripsVideoOnlyKeysForAudio() {
+        val json = buildIosProduceEncodingsJson(
+            kind = "audio",
+            encodings = listOf(
+                RtpEncodingParameters(
+                    rid = "r0",
+                    active = true,
+                    maxBitrate = 64_000,
+                    scalabilityMode = "L1T3",
+                    scaleResolutionDownBy = 4.0
+                )
+            )
+        )
+
+        val encoding = mediaSfuJson.parseToJsonElement(requireNotNull(json))
+            .jsonArray
+            .first()
+            .jsonObject
+
+        assertTrue("rid" !in encoding)
+        assertTrue("scalabilityMode" !in encoding)
+        assertTrue("scaleResolutionDownBy" !in encoding)
+        assertEquals("64000", encoding["maxBitrate"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun buildIosProduceEncodingsJson_returnsNullForEmptyEncodings() {
+        assertEquals(null, buildIosProduceEncodingsJson("video", emptyList()))
+    }
+
+    @Test
     fun missingBridge_throwsHelpfulError() {
         IosNativeMediasoupBridgeProvider.reset()
 
@@ -205,6 +268,8 @@ private class FakeSendTransportHandle(
     override fun produce(
         track: RTCMediaStreamTrack,
         encodingsJson: String?,
+        codecOptionsJson: String?,
+        codecJson: String?,
         appDataJson: String?
     ): IosNativeProducerHandle = producerHandle
 

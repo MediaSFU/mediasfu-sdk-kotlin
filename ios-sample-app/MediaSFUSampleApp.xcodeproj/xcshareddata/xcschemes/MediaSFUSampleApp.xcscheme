@@ -15,7 +15,7 @@
         buildForAnalyzing = "YES">
 <BuildableReference
   BuildableIdentifier = "primary"
-  BlueprintIdentifier = "E2B1F972ABEBCA042FF7C5B3"
+  BlueprintIdentifier = "268D11BB7BF973FD55FBDE86"
   BuildableName = "MediaSFUSampleApp.app"
   BlueprintName = "MediaSFUSampleApp"
   ReferencedContainer = "container:MediaSFUSampleApp.xcodeproj">
@@ -33,7 +33,7 @@
         skipped = "NO">
 <BuildableReference
   BuildableIdentifier = "primary"
-  BlueprintIdentifier = "69A6F5021AEC246389E3F590"
+  BlueprintIdentifier = "C768593C5625DE8894D29028"
   BuildableName = "MediaSFUSampleAppUITests.xctest"
   BlueprintName = "MediaSFUSampleAppUITests"
   ReferencedContainer = "container:MediaSFUSampleApp.xcodeproj">
@@ -55,7 +55,7 @@
       runnableDebuggingMode = "0">
 <BuildableReference
   BuildableIdentifier = "primary"
-  BlueprintIdentifier = "E2B1F972ABEBCA042FF7C5B3"
+  BlueprintIdentifier = "268D11BB7BF973FD55FBDE86"
   BuildableName = "MediaSFUSampleApp.app"
   BlueprintName = "MediaSFUSampleApp"
   ReferencedContainer = "container:MediaSFUSampleApp.xcodeproj">
@@ -72,7 +72,7 @@
       runnableDebuggingMode = "0">
 <BuildableReference
   BuildableIdentifier = "primary"
-  BlueprintIdentifier = "E2B1F972ABEBCA042FF7C5B3"
+  BlueprintIdentifier = "268D11BB7BF973FD55FBDE86"
   BuildableName = "MediaSFUSampleApp.app"
   BlueprintName = "MediaSFUSampleApp"
   ReferencedContainer = "container:MediaSFUSampleApp.xcodeproj">

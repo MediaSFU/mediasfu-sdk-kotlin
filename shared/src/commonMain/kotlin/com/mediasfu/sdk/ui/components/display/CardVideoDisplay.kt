@@ -1,6 +1,7 @@
 package com.mediasfu.sdk.ui.components.display
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
@@ -20,13 +22,20 @@ import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -52,20 +61,20 @@ data class CardVideoDisplayOptions(
     val eventType: String = "",
     val forceFullDisplay: Boolean = false,
     val customStyle: Map<String, Any> = emptyMap(),
-    val backgroundColor: Int = 0xFF2C678F.toInt(),
+    val backgroundColor: Int = 0xFF0D1B2A.toInt(),
     val doMirror: Boolean = false,
     val displayLabel: String = "",
     // Controls overlay options
     val showControls: Boolean = false,
     val showInfo: Boolean = true,
     val controlsPosition: String = "topLeft",
-    val infoPosition: String = "topRight",
+    val infoPosition: String = "bottomLeft",
     val participant: Participant? = null,
     val onAudioToggle: ((Participant) -> Unit)? = null,
     val onVideoToggle: ((Participant) -> Unit)? = null,
     // Audio waveform options (like Flutter's VideoCard)
     val audioDecibels: List<AudioDecibels> = emptyList(),
-    val barColor: Int = 0xFFE82E2E.toInt() // Red waveform bars
+    val barColor: Int = 0xFF818CF8.toInt() // Indigo waveform bars
 )
 
 interface CardVideoDisplay : MediaSfuUIComponent {
@@ -195,13 +204,39 @@ fun CardVideoDisplay.renderCompose() {
         ?.getVideoTracks()
         ?.firstOrNull()
     val label = options.displayLabel.ifBlank { options.remoteProducerId }
-    
-    // Debug: Log what we're rendering
+
+    val participantName = options.participant?.name ?: options.displayLabel
+    val isMutedP = options.participant?.muted ?: false
+    val isVideoOn = options.participant?.videoOn ?: true
+    val audioLevel = if (!isMutedP) {
+        options.audioDecibels
+            .find { it.name.equals(participantName, ignoreCase = true) }
+            ?.averageLoudness ?: 0.0
+    } else 0.0
+    val showWaveform = !isMutedP && audioLevel > 0.0
+
+    // Animated inline waveform bars (5 bars, like React ModernVideoCard)
+    val waveformValues = remember { mutableStateListOf(*Array(5) { 0f }) }
+    LaunchedEffect(showWaveform) {
+        while (showWaveform) {
+            for (i in 0 until 5) waveformValues[i] = kotlin.random.Random.nextFloat() * 12f + 4f
+            delay(100L)
+        }
+        for (i in 0 until 5) waveformValues[i] = 0f
+    }
+
+    val barColor = Color(options.barColor)
+    val speakingBorderColor = if (showWaveform) Color(0xFF34D399) else Color.Transparent
+    val cardShape = RoundedCornerShape(8.dp)
+    val infoAlignment = getAlignmentForPosition(options.infoPosition)
+    val controlsAlignment = getAlignmentForPosition(options.controlsPosition)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(options.backgroundColor)),
+            .clip(cardShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .border(2.5.dp, speakingBorderColor, cardShape),
         contentAlignment = Alignment.Center
     ) {
         // Video or placeholder
@@ -220,100 +255,128 @@ fun CardVideoDisplay.renderCompose() {
             )
         }
 
-        // Name badge with audio waveform (info overlay) - matches Flutter's VideoCard
+        // Bottom gradient overlay — matches React gradientOverlayStyle
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.5f)
+                        ),
+                        start = Offset(0f, 0f),
+                        end = Offset(0f, Float.POSITIVE_INFINITY)
+                    )
+                )
+        )
+
+        // Status indicator: top-right colored dot (green=videoOn, red=videoOff)
         if (options.showInfo) {
-            val infoAlignment = getAlignmentForPosition(options.infoPosition)
-            val participantName = options.participant?.name ?: options.displayLabel
-            val isMuted = options.participant?.muted ?: false
-            
-            // Get audio level for this participant
-            val audioLevel = if (!isMuted) {
-                options.audioDecibels
-                    .find { it.name.equals(participantName, ignoreCase = true) }
-                    ?.averageLoudness ?: 0.0
-            } else {
-                0.0
-            }
-            val showWaveform = !isMuted && audioLevel > 0.0
-            
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .size(10.dp)
+                    .background(
+                        if (isVideoOn) Color(0xFF34D399) else Color(0xFFEF4444),
+                        CircleShape
+                    )
+            )
+        }
+
+        // Info overlay: transparent bg, speaking pulse dot + name + inline waveform
+        if (options.showInfo) {
             Row(
                 modifier = Modifier
                     .align(infoAlignment)
-                    .padding(4.dp)
-                    .background(
-                        color = Color.White.copy(alpha = 0.25f),
-                        shape = RoundedCornerShape(0.dp)
-                    )
-                    .padding(horizontal = 4.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Name badge
+                if (showWaveform) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .background(Color(0xFF34D399), CircleShape)
+                    )
+                }
                 if (label.isNotBlank()) {
                     Text(
                         text = label,
-                        color = Color.White,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold
+                        maxLines = 1,
+                        style = TextStyle(
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            shadow = Shadow(
+                                color = Color.Black.copy(alpha = 0.7f),
+                                blurRadius = 4f
+                            )
+                        )
                     )
                 }
-                
-                // Audio waveform (like Flutter's VideoCard)
-                if (showWaveform) {
-                    VideoCardWaveform(
-                        audioLevel = audioLevel,
-                        barColor = Color(options.barColor)
-                    )
+                // Inline waveform bars
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .height(16.dp)
+                        .alpha(if (showWaveform) 1f else 0f)
+                ) {
+                    waveformValues.forEach { value ->
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height((if (showWaveform) value else 0f).dp)
+                                .background(barColor, RoundedCornerShape(2.dp))
+                        )
+                    }
                 }
             }
         }
-        
-        // Controls overlay (mic/video toggle buttons)
+
+        // Controls overlay: glassmorphic pill with mic + video buttons
         val participantForControls = options.participant
         if (options.showControls && participantForControls != null) {
-            val controlsAlignment = getAlignmentForPosition(options.controlsPosition)
             val isMuted = participantForControls.muted ?: false
-            val isVideoOn = participantForControls.videoOn ?: true
-            
+            val videoOn = participantForControls.videoOn ?: true
+
             Row(
                 modifier = Modifier
                     .align(controlsAlignment)
-                    .padding(4.dp)
+                    .padding(6.dp)
+                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+                    .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(6.dp))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Audio toggle button
                 Box(
                     modifier = Modifier
-                        .background(
-                            color = Color.White.copy(alpha = 0.25f),
-                            shape = RoundedCornerShape(0.dp)
-                        )
-                        .clickable { options.onAudioToggle?.invoke(participantForControls) }
-                        .padding(2.dp)
+                        .size(28.dp)
+                        .background(Color.Transparent)
+                        .clickable { options.onAudioToggle?.invoke(participantForControls) },
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = if (isMuted) Icons.Filled.MicOff else Icons.Filled.Mic,
                         contentDescription = if (isMuted) "Unmute" else "Mute",
-                        tint = if (isMuted) Color.Red else Color.Green,
+                        tint = if (isMuted) Color(0xFFEF4444) else Color(0xFF34D399),
                         modifier = Modifier.size(14.dp)
                     )
                 }
-                
-                Spacer(modifier = Modifier.width(8.dp))
-                
-                // Video toggle button
                 Box(
                     modifier = Modifier
-                        .background(
-                            color = Color.White.copy(alpha = 0.25f),
-                            shape = RoundedCornerShape(0.dp)
-                        )
-                        .clickable { options.onVideoToggle?.invoke(participantForControls) }
-                        .padding(2.dp)
+                        .size(28.dp)
+                        .background(Color.Transparent)
+                        .clickable { options.onVideoToggle?.invoke(participantForControls) },
+                    contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (isVideoOn) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
-                        contentDescription = if (isVideoOn) "Turn off video" else "Turn on video",
-                        tint = if (isVideoOn) Color.Green else Color.Red,
+                        imageVector = if (videoOn) Icons.Filled.Videocam else Icons.Filled.VideocamOff,
+                        contentDescription = if (videoOn) "Turn off video" else "Turn on video",
+                        tint = if (videoOn) Color(0xFF34D399) else Color(0xFFEF4444),
                         modifier = Modifier.size(14.dp)
                     )
                 }
@@ -349,7 +412,7 @@ private fun VideoPlaceholder(
     val text = if (label.isNotBlank()) label else message
     Text(
         text = text,
-        color = Color.White.copy(alpha = 0.9f),
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.9f),
         fontSize = 16.sp,
         fontWeight = FontWeight.SemiBold,
         textAlign = TextAlign.Center,

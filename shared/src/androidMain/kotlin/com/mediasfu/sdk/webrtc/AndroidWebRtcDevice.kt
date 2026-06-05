@@ -1258,7 +1258,12 @@ class AndroidWebRtcDevice private constructor(
                 for (index in 0 until array.length()) {
                     val codecObject = array.optJSONObject(index) ?: continue
                     val parametersObject = codecObject.optJSONObject("parameters") ?: JSONObject()
-                    val parameters = parametersObject.keySet().associateWith { key -> parametersObject.optString(key) }
+                    val parameters = mutableMapOf<String, String>()
+                    val keysIterator = parametersObject.keys()
+                    while (keysIterator.hasNext()) {
+                        val key = keysIterator.next()
+                        parameters[key] = parametersObject.optString(key)
+                    }
                     add(
                         RtpCodecParameters(
                             mimeType = codecObject.optString("mimeType"),
@@ -1896,6 +1901,7 @@ class AndroidWebRtcDevice private constructor(
             track: MediaStreamTrack,
             encodings: List<RtpEncodingParameters>,
             codecOptions: ProducerCodecOptions?,
+            codec: RtpCodecCapability?,
             appData: Map<String, Any?>?
         ): WebRtcProducer {
             val sendTransport = nativeTransport as? SendTransport
@@ -2281,7 +2287,9 @@ class AndroidWebRtcDevice private constructor(
             val type = entry.optString("type")
             when (type) {
                 "media-source", "outbound-rtp", "track" -> {
-                    entry.optDoubleOrNullCompat("audioLevel")?.let { return it }
+                    if (entry.has("audioLevel")) {
+                        return entry.optDouble("audioLevel")
+                    }
                 }
             }
         }

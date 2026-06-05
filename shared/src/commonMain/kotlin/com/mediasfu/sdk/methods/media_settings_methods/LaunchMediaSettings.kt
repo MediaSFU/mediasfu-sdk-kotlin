@@ -4,6 +4,7 @@ import com.mediasfu.sdk.util.Logger
 import com.mediasfu.sdk.webrtc.MediaDeviceInfo
 import com.mediasfu.sdk.webrtc.WebRtcDevice
 import com.mediasfu.sdk.webrtc.WebRtcFactory
+import kotlinx.coroutines.yield
 
 /**
  * Defines options for launching the media settings modal, including visibility toggling,
@@ -53,73 +54,63 @@ typealias LaunchMediaSettingsType = suspend (LaunchMediaSettingsOptions) -> Unit
  * ```
  */
 suspend fun launchMediaSettings(options: LaunchMediaSettingsOptions) {
-    
     if (!options.isMediaSettingsModalVisible) {
-        try {
-            // Check if device is available
-            val device = options.device
-            if (device == null) {
-                options.updateIsMediaSettingsModalVisible(!options.isMediaSettingsModalVisible)
-                return
-            }
-            
-            // Force permission prompt by attempting to get media stream
-            options.updateIsLoadingModalVisible(true)
-            
-            // Request permissions if media is not already on
-            // On web: only if both audio and video are off
-            // On mobile: always request to ensure proper device labels
-            val shouldRequestPermissions = if (options.onWeb) {
-                !options.videoAlreadyOn && !options.audioAlreadyOn
-            } else {
-                // On mobile, always request permissions to get device labels
-                true
-            }
-            
-            
-            if (shouldRequestPermissions) {
-                try {
-                    val stream = device.getUserMedia(mapOf(
-                        "audio" to true,
-                        "video" to true
-                    ))
-                    
-                    
-                    // Close the stream as it's not needed
-                    stream.getTracks().forEach { track ->
-                        track.stop()
-                    }
-                } catch (permError: Exception) {
-                    Logger.e("LaunchMediaSettings", "MediaSFU - Permission request warning: ${permError.message}")
-                    // Continue anyway - enumerate will show what's available
-                }
-            }
-            
-            // Get the list of all available media devices
-            val devices = device.enumerateDevices()
-            
-            devices.forEachIndexed { index, dev ->
-            }
-            
-            // Filter devices to get audio inputs, video inputs, and audio outputs
-            val videoInputs = devices.filter { it.kind == "videoinput" }
-            val audioInputs = devices.filter { it.kind == "audioinput" }
-            val audioOutputs = devices.filter { it.kind == "audiooutput" }
-            
-            
-            options.updateVideoInputs(videoInputs)
-            options.updateAudioInputs(audioInputs)
-            options.updateAudioOutputs(audioOutputs)
-            
-            options.updateIsLoadingModalVisible(false)
-        } catch (error: Exception) {
-            options.updateIsLoadingModalVisible(false)
-            Logger.e("LaunchMediaSettings", "MediaSFU - Error getting media devices: ${error.message}")
-            error.printStackTrace()
-        }
-    } else {
+        options.updateIsMediaSettingsModalVisible(true)
+        // Yield once so the modal can render before permission/device work begins.
+        yield()
     }
-    
-    // Toggle the media settings modal visibility
-    options.updateIsMediaSettingsModalVisible(!options.isMediaSettingsModalVisible)
+
+    try {
+        // Check if device is available
+        val device = options.device
+        if (device == null) {
+            return
+        }
+
+        // Force permission prompt by attempting to get media stream
+        options.updateIsLoadingModalVisible(true)
+
+        // Request only the inactive/missing permissions. On iOS a fresh video
+        // getUserMedia call replaces the active camera capture in IOSWebRtcDevice,
+        // so requesting audio+video while already in-room can freeze the live feed.
+        val needsAudioPermission = !options.audioAlreadyOn && options.audioInputs.isEmpty()
+        val needsVideoPermission = !options.videoAlreadyOn && options.videoInputs.isEmpty()
+        val shouldRequestPermissions = needsAudioPermission || needsVideoPermission
+
+        if (shouldRequestPermissions) {
+            try {
+                val stream = device.getUserMedia(
+                    mapOf(
+                        "audio" to needsAudioPermission,
+                        "video" to needsVideoPermission
+                    )
+                )
+
+                // Close the stream as it's not needed
+                stream.getTracks().forEach { track ->
+                    track.stop()
+                }
+            } catch (permError: Exception) {
+                Logger.e("LaunchMediaSettings", "MediaSFU - Permission request warning: ${permError.message}")
+                // Continue anyway - enumerate will show what's available
+            }
+        }
+
+        // Get the list of all available media devices
+        val devices = device.enumerateDevices()
+
+        // Filter devices to get audio inputs, video inputs, and audio outputs
+        val videoInputs = devices.filter { it.kind == "videoinput" }
+        val audioInputs = devices.filter { it.kind == "audioinput" }
+        val audioOutputs = devices.filter { it.kind == "audiooutput" }
+
+        options.updateVideoInputs(videoInputs)
+        options.updateAudioInputs(audioInputs)
+        options.updateAudioOutputs(audioOutputs)
+    } catch (error: Exception) {
+        Logger.e("LaunchMediaSettings", "MediaSFU - Error getting media devices: ${error.message}")
+        error.printStackTrace()
+    } finally {
+        options.updateIsLoadingModalVisible(false)
+    }
 }

@@ -2,6 +2,9 @@ package com.mediasfu.sdk.ui.mediasfu
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -15,11 +18,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import com.mediasfu.sdk.methods.utils.*
 import androidx.compose.runtime.mutableStateMapOf
@@ -29,7 +37,6 @@ import com.mediasfu.sdk.socket.CreateLocalRoomOptions
 import com.mediasfu.sdk.socket.CreateLocalRoomParameters
 import com.mediasfu.sdk.socket.JoinEventRoomOptions
 import com.mediasfu.sdk.socket.JoinEventRoomParameters
-import com.mediasfu.sdk.socket.JoinRoomOptions
 import com.mediasfu.sdk.socket.ResponseLocalConnectionData
 import com.mediasfu.sdk.socket.SocketEmitException
 import com.mediasfu.sdk.socket.SocketManager
@@ -38,14 +45,14 @@ import com.mediasfu.sdk.socket.createLocalRoom
 import com.mediasfu.sdk.socket.createSocketManager
 import com.mediasfu.sdk.socket.defaultMeetingRoomParams
 import com.mediasfu.sdk.socket.joinEventRoom
-import com.mediasfu.sdk.socket.joinRoom
-import com.mediasfu.sdk.producer_client.UpdateRoomParametersClientOptions
-import com.mediasfu.sdk.producer_client.updateRoomParametersClient
 import kotlinx.coroutines.launch
+import com.mediasfu.sdk.util.MediaSFURuntimeProbe
 import com.mediasfu.sdk.EngineParameterAdapters
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.yield
 import kotlinx.datetime.Clock
+import kotlin.coroutines.resume
 import kotlin.random.Random
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -54,6 +61,8 @@ fun PreJoinPage(state: MediasfuGenericState) {
     val options = state.options
     val parameters = state.parameters
     val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     var isCreateMode by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
@@ -97,6 +106,12 @@ fun PreJoinPage(state: MediasfuGenericState) {
         val nanoPart = now.nanosecondsOfSecond.toString(30)
         val randomDigits = Random.nextInt(10, 100)
         return "m$timePart$nanoPart$randomDigits"
+    }
+
+    fun dismissPreJoinKeyboard() {
+        expanded = false
+        focusManager.clearFocus(force = true)
+        keyboardController?.hide()
     }
 
     fun Map<String, Any?>.string(key: String): String? = when (val value = this[key]) {
@@ -224,6 +239,43 @@ fun PreJoinPage(state: MediasfuGenericState) {
         }
     }
 
+    suspend fun connectAndValidateCloudRoom(
+        roomName: String,
+        socketSecret: String,
+        memberName: String,
+        islevel: String,
+        link: String,
+        adminPasscode: String
+    ): Boolean {
+        // The shared state observer can prefetch sockets whenever credentials change.
+        // Pause that path during the cloud room handoff so the explicit join flow owns
+        // the first connection attempt with the resolved room credentials.
+        state.suspendCredentialSocketPrefetch()
+        state.room.updateApiUserName(roomName)
+        state.room.updateApiToken(socketSecret)
+        state.room.updateLink(link)
+        state.room.updateRoomName(roomName)
+        state.room.updateMember(memberName)
+        state.room.updateIslevel(islevel)
+        state.room.updateAdminPasscode(adminPasscode)
+
+        return suspendCancellableCoroutine { continuation ->
+            state.connectAndValidate(
+                roomName = roomName,
+                member = memberName,
+                adminPasscode = adminPasscode,
+                islevel = islevel,
+                apiUserName = roomName,
+                apiToken = socketSecret,
+                showLoadingModal = false
+            ) { success ->
+                if (continuation.isActive) {
+                    continuation.resume(success)
+                }
+            }
+        }
+    }
+
     suspend fun handleCreateRoom(auto: Boolean = false, createOverride: CreateMediaSFURoomOptions? = null) {
         if (pending) return
         pending = true
@@ -333,6 +385,13 @@ fun PreJoinPage(state: MediasfuGenericState) {
 
                     if (response.success && response.data is CreateJoinRoomResponse) {
                         val data = response.data as CreateJoinRoomResponse
+                        state.room.updateApiUserName(data.roomName)
+                        state.room.updateApiToken(data.secret)
+                        state.room.updateLink(data.link)
+                        state.room.updateRoomName(data.roomName)
+                        state.room.updateMember(userNameValue)
+                        state.room.updateIslevel("2")
+                        state.room.updateAdminPasscode(data.secureCode?.takeIf { it.isNotBlank() } ?: data.secret)
                         checkLimitsAndMakeRequest(
                             CheckLimitsAndMakeRequestOptions(
                                 apiUserName = data.roomName,
@@ -342,7 +401,7 @@ fun PreJoinPage(state: MediasfuGenericState) {
                                 parameters = EngineParameterAdapters.checkLimitsAndMakeRequestParameters(
                                     parameters,
                                     connectSocket = { user, token, link, _ ->
-                                        state.openSocket(link, user, token, localData?.apiKey)
+                                        state.openSocket(link, user, token, null)
                                     }
                                 ),
                                 validate = false
@@ -386,6 +445,12 @@ fun PreJoinPage(state: MediasfuGenericState) {
                     return
                 }
 
+                MediaSFURuntimeProbe.recordConsumerSignalStage(
+                    "pre-rest",
+                    "",
+                    "create-user=${userNameValue},event=${eventValue}"
+                )
+
                 val response = options.createMediaSFURoom(
                     CreateMediaSFUOptions(
                         payload = payload,
@@ -397,64 +462,33 @@ fun PreJoinPage(state: MediasfuGenericState) {
 
                 if (response.success && response.data is CreateJoinRoomResponse) {
                     val data = response.data as CreateJoinRoomResponse
-                    checkLimitsAndMakeRequest(
-                        CheckLimitsAndMakeRequestOptions(
-                            apiUserName = data.roomName,
-                            apiToken = data.secret,
-                            link = data.link,
-                            userName = userNameValue,
-                            parameters = EngineParameterAdapters.checkLimitsAndMakeRequestParameters(
-                                parameters,
-                                connectSocket = { user, token, link, _ ->
-                                    state.openSocket(link, user, token, options.credentials?.apiKey)
-                                }
-                            )
-                        )
+                    MediaSFURuntimeProbe.recordConsumerSignalStage(
+                        "rest-ok",
+                        "",
+                        "create-room=${data.roomName},link=${data.link.takeLast(20)}"
                     )
-                    
-                    val socket = parameters.socket
-                    if (socket != null) {
-                        // Emit joinRoom to complete the join
-                        val joinResult = joinRoom(
-                            JoinRoomOptions(
-                                socket = socket,
-                                roomName = data.roomName,
-                                islevel = "2", // Host level
-                                member = userNameValue,
-                                sec = data.secret,
-                                apiUserName = data.roomName
-                            )
-                        )
-                        
-                        joinResult.onSuccess { joinResponse ->
-                            state.room.updateApiUserName(options.credentials?.apiUserName ?: "")
-                            state.room.updateApiToken(data.secret)
-                            state.room.updateLink(data.link)
-                            state.room.updateRoomName(data.roomName)
-                            state.room.updateMember(userNameValue)
-                            state.room.updateIslevel("2")
-                            state.room.updateAdminPasscode(data.secureCode?.takeIf { it.isNotBlank() } ?: data.secret)
-                            state.room.updateRoomData(joinResponse)
-                            state.connectivity.updateSocket(socket)
-                            state.connectivity.updateRoomResponse(joinResponse)
-                            
-                            updateRoomParametersClient(
-                                UpdateRoomParametersClientOptions(
-                                    parameters = state.createUpdateRoomParametersBridge()
-                                )
-                            )
-                            
-                            state.updateValidated(true)
-                        }.onFailure { e ->
-                            error = "Failed to create room: ${e.message}"
-                        }
+                    val adminPasscode = data.secureCode?.takeIf { it.isNotBlank() } ?: data.secret
+                    MediaSFURuntimeProbe.recordConsumerSignalStage("handoff", "", "create-cloud-generic")
+                    val connected = connectAndValidateCloudRoom(
+                        roomName = data.roomName,
+                        socketSecret = data.secret,
+                        memberName = userNameValue,
+                        islevel = "2",
+                        link = data.link,
+                        adminPasscode = adminPasscode
+                    )
+                    if (connected) {
+                        MediaSFURuntimeProbe.recordConsumerSignalStage("join-ok", "", "create")
                     } else {
-                        error = "Socket connection failed"
+                        MediaSFURuntimeProbe.recordConsumerSignalStage("join-fail", "", "create-cloud-generic")
+                        error = "Unable to create room. Media connection failed."
                     }
                 } else if (!response.success && response.data is CreateJoinRoomError) {
                     val err = response.data as CreateJoinRoomError
+                    MediaSFURuntimeProbe.recordConsumerSignalStage("rest-fail", "", err.error.take(50))
                     error = "Unable to create room. ${err.error}"
                 } else {
+                    MediaSFURuntimeProbe.recordConsumerSignalStage("rest-unexpected", "", "create-success=${response.success}")
                     error = "Unexpected error occurred."
                 }
             }
@@ -553,6 +587,8 @@ fun PreJoinPage(state: MediasfuGenericState) {
                     userName = nameValue
                 ))
 
+                MediaSFURuntimeProbe.recordConsumerSignalStage("pre-rest", "", "room=${payload.meetingID},user=${nameValue}")
+
                 val response = options.joinMediaSFURoom(
                     JoinMediaSFUOptions(
                         payload = payload,
@@ -564,68 +600,38 @@ fun PreJoinPage(state: MediasfuGenericState) {
 
                 if (response.success && response.data is CreateJoinRoomResponse) {
                     val data = response.data as CreateJoinRoomResponse
-                    checkLimitsAndMakeRequest(
-                        CheckLimitsAndMakeRequestOptions(
-                            apiUserName = data.roomName,
-                            apiToken = data.secret,
-                            link = data.link,
-                            userName = nameValue,
-                            parameters = EngineParameterAdapters.checkLimitsAndMakeRequestParameters(
-                                parameters,
-                                connectSocket = { user, token, link, _ ->
-                                    state.openSocket(link, user, token, options.credentials?.apiKey)
-                                }
-                            )
-                        )
+                    MediaSFURuntimeProbe.recordConsumerSignalStage("rest-ok", "", "room=${data.roomName},link=${data.link.takeLast(20)}")
+                    val joinLevel = (resolvedOverride?.islevel ?: "0").ifBlank { "0" }
+                    val adminPasscode = resolvedOverride?.adminPasscode?.takeIf { it.isNotBlank() } ?: data.secureCode?.takeIf { it.isNotBlank() } ?: ""
+                    MediaSFURuntimeProbe.recordConsumerSignalStage("handoff", "", "join-cloud-generic")
+                    val connected = connectAndValidateCloudRoom(
+                        roomName = data.roomName,
+                        socketSecret = data.secret,
+                        memberName = nameValue,
+                        islevel = joinLevel,
+                        link = data.link,
+                        adminPasscode = adminPasscode
                     )
-                    
-                    val socket = parameters.socket
-                    if (socket != null) {
-                        // Emit joinRoom to complete the join
-                        val joinResult = joinRoom(
-                            JoinRoomOptions(
-                                socket = socket,
-                                roomName = data.roomName,
-                                islevel = "0", // Participant level
-                                member = nameValue,
-                                sec = data.secret,
-                                apiUserName = data.roomName
-                            )
-                        )
-                        
-                        joinResult.onSuccess { joinResponse ->
-                            state.room.updateApiUserName(options.credentials?.apiUserName ?: "")
-                            state.room.updateApiToken(data.secret)
-                            state.room.updateLink(data.link)
-                            state.room.updateRoomName(data.roomName)
-                            state.room.updateMember(nameValue)
-                            state.room.updateRoomData(joinResponse)
-                            state.connectivity.updateSocket(socket)
-                            state.connectivity.updateRoomResponse(joinResponse)
-                            
-                            updateRoomParametersClient(
-                                UpdateRoomParametersClientOptions(
-                                    parameters = state.createUpdateRoomParametersBridge()
-                                )
-                            )
-                            
-                            state.updateValidated(true)
-                        }.onFailure { e ->
-                            error = "Failed to join room: ${e.message}"
-                        }
+                    if (connected) {
+                        MediaSFURuntimeProbe.recordConsumerSignalStage("join-ok", "", "")
                     } else {
-                        error = "Socket connection failed"
+                        MediaSFURuntimeProbe.recordConsumerSignalStage("join-fail", "", "join-cloud-generic")
+                        error = "Unable to join room. Media connection failed."
                     }
                 } else if (!response.success && response.data is CreateJoinRoomError) {
                     val err = response.data as CreateJoinRoomError
+                    MediaSFURuntimeProbe.recordConsumerSignalStage("rest-fail", "", err.error.take(50))
                     error = "Unable to join room. ${err.error}"
                 } else {
+                    MediaSFURuntimeProbe.recordConsumerSignalStage("rest-unexpected", "", "success=${response.success}")
                     error = "Unexpected error occurred."
                 }
             }
         } catch (e: SocketEmitException) {
+            MediaSFURuntimeProbe.recordDeviceLoadError("socket-exc:${e.message.orEmpty().take(50)}")
             error = "Unable to join room. ${e.message ?: "Unknown error"}"
         } catch (e: Exception) {
+            MediaSFURuntimeProbe.recordDeviceLoadError("exc:${e.message.orEmpty().take(50)}")
             error = "Unable to join room. ${e.message ?: "Unknown error"}"
         } finally {
             pending = false
@@ -672,53 +678,117 @@ fun PreJoinPage(state: MediasfuGenericState) {
         }
     }
 
-    Scaffold(
-        containerColor = Color(0xFF53C6E0)
-    ) { paddingValues ->
-        if (!options.returnUI) {
-            return@Scaffold
-        }
-        Box(
+    // Color palette (matches React/Flutter dark theme)
+    val bgGradient = Brush.linearGradient(colors = listOf(Color(0xFF0F172A), Color(0xFF1E1B4B)))
+    val logoRingGradient = Brush.linearGradient(colors = listOf(Color(0xFF818CF8), Color(0xFF60A5FA), Color(0xFF22D3EE)))
+    val buttonGradient = Brush.linearGradient(colors = listOf(Color(0xFF818CF8), Color(0xFF60A5FA)))
+    val glassBackground = Color(0x0FFFFFFF)
+    val glassBorder = Color(0x14FFFFFF)
+    val inputBackground = Color(0x14FFFFFF)
+    val inputBorder = Color(0x33FFFFFF)
+    val textPrimary = Color(0xFFFFFFFF)
+    val textSecondary = Color(0xB3FFFFFF)
+    val textMuted = Color(0x80FFFFFF)
+    val switchBorder = Color(0x80818CF8)
+    val dangerColor = Color(0xFFFC8181)
+
+    val inputTextFieldColors = OutlinedTextFieldDefaults.colors(
+        focusedTextColor = textPrimary,
+        unfocusedTextColor = textPrimary,
+        focusedLabelColor = textSecondary,
+        unfocusedLabelColor = textMuted,
+        focusedBorderColor = Color(0xFF818CF8),
+        unfocusedBorderColor = inputBorder,
+        cursorColor = textPrimary,
+        focusedContainerColor = inputBackground,
+        unfocusedContainerColor = inputBackground,
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(brush = bgGradient)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                dismissPreJoinKeyboard()
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        if (!options.returnUI) return@Box
+
+        Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues),
-            contentAlignment = Alignment.Center
+                .widthIn(max = 420.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Card(
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Glassmorphic container
+            Box(
                 modifier = Modifier
-                    .width(320.dp)
-                    .padding(16.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White)
+                    .fillMaxWidth()
+                    .background(color = glassBackground, shape = RoundedCornerShape(24.dp))
+                    .border(width = 1.dp, color = glassBorder, shape = RoundedCornerShape(24.dp))
+                    .padding(24.dp)
             ) {
                 Column(
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .verticalScroll(rememberScrollState()),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // Logo
+                    // Logo with gradient ring
                     Box(
-                        modifier = Modifier.size(100.dp),
+                        modifier = Modifier
+                            .size(96.dp)
+                            .background(brush = logoRingGradient, shape = CircleShape)
+                            .padding(3.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         AsyncImage(
                             model = "https://mediasfu.com/images/logo192.png",
                             contentDescription = "MediaSFU Logo",
                             modifier = Modifier
-                                .size(100.dp)
+                                .size(90.dp)
                                 .clip(CircleShape),
-                            contentScale = ContentScale.Fit
+                            contentScale = ContentScale.Crop
                         )
                     }
 
-                    // Inputs
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Title
+                    Text(
+                        text = if (isCreateMode) "Create a Room" else "Join a Room",
+                        color = textPrimary,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    // Subtitle
+                    Text(
+                        text = if (isCreateMode)
+                            "Start a new session with your audience."
+                        else
+                            "Enter the meeting ID to connect.",
+                        color = textSecondary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Normal
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Display Name input
                     OutlinedTextField(
                         value = name,
                         onValueChange = { name = it },
-                        label = { Text("Display Name") },
+                        placeholder = { Text("Display Name (2-10 characters)", color = textMuted, fontSize = 14.sp) },
                         singleLine = true,
+                        colors = inputTextFieldColors,
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -726,9 +796,22 @@ fun PreJoinPage(state: MediasfuGenericState) {
                         OutlinedTextField(
                             value = duration,
                             onValueChange = { duration = it },
-                            label = { Text("Duration (minutes)") },
+                            placeholder = { Text("Duration (minutes)", color = textMuted, fontSize = 14.sp) },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = inputTextFieldColors,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        OutlinedTextField(
+                            value = capacity,
+                            onValueChange = { capacity = it },
+                            placeholder = { Text("Capacity (max participants)", color = textMuted, fontSize = 14.sp) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = inputTextFieldColors,
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         )
 
@@ -742,9 +825,10 @@ fun PreJoinPage(state: MediasfuGenericState) {
                                 value = eventType.replaceFirstChar { it.uppercase() },
                                 onValueChange = {},
                                 readOnly = true,
-                                label = { Text("Event Type") },
+                                placeholder = { Text("Select Event Type", color = textMuted, fontSize = 14.sp) },
                                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                                colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                                colors = inputTextFieldColors,
+                                shape = RoundedCornerShape(12.dp),
                                 modifier = Modifier.menuAnchor().fillMaxWidth()
                             )
                             ExposedDropdownMenu(
@@ -762,41 +846,47 @@ fun PreJoinPage(state: MediasfuGenericState) {
                                 }
                             }
                         }
-
-                        OutlinedTextField(
-                            value = capacity,
-                            onValueChange = { capacity = it },
-                            label = { Text("Room Capacity") },
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth()
-                        )
                     } else {
                         OutlinedTextField(
                             value = eventID,
                             onValueChange = { eventID = it },
-                            label = { Text("Event ID") },
+                            placeholder = { Text("Meeting ID", color = textMuted, fontSize = 14.sp) },
                             singleLine = true,
+                            colors = inputTextFieldColors,
+                            shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
 
+
+
                     if (error.isNotEmpty()) {
                         Text(
                             text = error,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
+                            color = dangerColor,
+                            fontSize = 13.sp
                         )
                     }
 
-                    Button(
-                        onClick = {
-                            scope.launch {
-                                if (isCreateMode) handleCreateRoom() else handleJoinRoom()
-                            }
-                        },
-                        enabled = !pending,
-                        modifier = Modifier.fillMaxWidth()
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Gradient action button
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(brush = if (!pending) buttonGradient else Brush.linearGradient(listOf(Color(0xFF818CF8).copy(alpha = 0.5f), Color(0xFF60A5FA).copy(alpha = 0.5f))))
+                            .clickable(
+                                enabled = !pending,
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                scope.launch {
+                                    if (isCreateMode) handleCreateRoom() else handleJoinRoom()
+                                }
+                            },
+                        contentAlignment = Alignment.Center
                     ) {
                         if (pending) {
                             CircularProgressIndicator(
@@ -805,20 +895,47 @@ fun PreJoinPage(state: MediasfuGenericState) {
                                 strokeWidth = 2.dp
                             )
                         } else {
-                            Text(if (isCreateMode) "Create Room" else "Join Room")
+                            Text(
+                                text = if (isCreateMode) "Create Room" else "Join Room",
+                                color = Color.White,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
 
-                    Text("OR", fontWeight = FontWeight.Bold)
+                    // OR divider
+                    Text(
+                        text = "OR",
+                        color = textMuted,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
 
-                    OutlinedButton(
-                        onClick = { isCreateMode = !isCreateMode; error = "" },
-                        modifier = Modifier.fillMaxWidth()
+                    // Switch mode button (border only, no fill)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(width = 1.dp, color = switchBorder, shape = RoundedCornerShape(12.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { isCreateMode = !isCreateMode; error = "" },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(if (isCreateMode) "Switch to Join Mode" else "Switch to Create Mode")
+                        Text(
+                            text = if (isCreateMode) "Switch to Join Mode" else "Switch to Create Mode",
+                            color = Color(0xFF818CF8),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
             }
+
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }

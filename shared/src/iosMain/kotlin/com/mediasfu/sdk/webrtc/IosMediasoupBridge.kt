@@ -10,6 +10,11 @@ interface IosNativeMediasoupBridge {
     fun createRecvTransport(params: Map<String, Any?>): IosNativeRecvTransportHandle
 }
 
+interface IosNativeLoadableMediasoupBridge : IosNativeMediasoupBridge {
+    fun loadRtpCapabilitiesJson(rtpCapabilitiesJson: String): String?
+    fun currentRtpCapabilitiesJson(): String?
+}
+
 interface IosNativeTransportHandle {
     val id: String
     fun connectionState(): String
@@ -23,6 +28,8 @@ interface IosNativeSendTransportHandle : IosNativeTransportHandle {
     fun produce(
         track: RTCMediaStreamTrack,
         encodingsJson: String?,
+        codecOptionsJson: String?,
+        codecJson: String?,
         appDataJson: String?
     ): IosNativeProducerHandle
 }

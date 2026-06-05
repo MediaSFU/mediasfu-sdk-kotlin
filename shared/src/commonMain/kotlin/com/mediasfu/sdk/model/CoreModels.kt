@@ -1077,7 +1077,8 @@ data class SocketConfig(
     val reconnectionDelayMax: Long = 5000,
     val timeout: Long = 20000,
     val autoConnect: Boolean = true,
-    val transports: List<String> = listOf("websocket", "polling")
+    val transports: List<String> = listOf("websocket", "polling"),
+    val waitForConnectionSuccess: Boolean = true
 )
 
 /**

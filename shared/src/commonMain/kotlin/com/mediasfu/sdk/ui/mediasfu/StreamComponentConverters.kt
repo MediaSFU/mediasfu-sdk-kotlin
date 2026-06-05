@@ -73,29 +73,34 @@ fun Stream.toDisplayComponent(
             )
         }
 
-        // Placeholder video tiles (no media yet but we want a slot rendered)
-        isPlaceholder && isVideoCard -> {
-            DefaultCardVideoDisplay(
-                CardVideoDisplayOptions(
-                    videoStream = null,
-                    remoteProducerId = this.producerId,
-                    displayLabel = displayName,
-                    backgroundColor = 0xFF1C2B4A.toInt(),
-                    doMirror = false
-                )
-            )
-        }
-
         // Audio-only stream
-        shouldRenderAsAudio -> {
+        shouldRenderAsAudio || (isPlaceholder && representativeParticipant.audioOn) -> {
             DefaultAudioCard(
                 AudioCardOptions(
                     name = displayName,
                     participant = representativeParticipant,
                     audioDecibels = audioDecibels,
                     showControls = showControls,
-                    barColor = 0xFFE82E2E.toInt(),
-                    waveformColor = 0xFF4CAF50.toInt()
+                    barColor = 0xFF818CF8.toInt(),
+                    waveformColor = 0xFF818CF8.toInt(),
+                    backgroundColor = 0xFF1E1E2E.toInt(),
+                    controlsPosition = "topLeft",
+                    infoPosition = "topRight",
+                    roundedImage = true
+                )
+            )
+        }
+
+        // Placeholder tiles with no live media yet should look like participant cards, not raw text.
+        isPlaceholder && isVideoCard -> {
+            DefaultMiniCard(
+                MiniCardOptions(
+                    name = displayName,
+                    participant = representativeParticipant,
+                    videoStream = null,
+                    backgroundColor = 0xFF1C2B4A.toInt(),
+                    showVideo = false,
+                    roundedImage = true
                 )
             )
         }

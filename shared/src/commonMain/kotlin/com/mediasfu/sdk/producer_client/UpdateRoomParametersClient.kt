@@ -325,23 +325,23 @@ private fun getVideoConstraints(targetOrientation: String, targetResolution: Str
             when (targetResolution) {
                 "hd" -> {
                     vdCons = buildVidCons(1280, 720)
-                    frameRate = 30
+                    frameRate = 15
                 }
                 "fhd" -> {
                     vdCons = buildVidCons(1920, 1080)
-                    frameRate = 30
+                    frameRate = 20
                 }
                 "qhd" -> {
                     vdCons = buildVidCons(2560, 1440)
-                    frameRate = 30
+                    frameRate = 25
                 }
                 "QnHD" -> {
                     vdCons = buildVidCons(960, 540)
-                    frameRate = 30
+                    frameRate = 5
                 }
                 else -> {
                     vdCons = buildVidCons(640, 480)
-                    frameRate = 30
+                    frameRate = 10
                 }
             }
         }
@@ -349,23 +349,23 @@ private fun getVideoConstraints(targetOrientation: String, targetResolution: Str
             when (targetResolution) {
                 "hd" -> {
                     vdCons = buildVidCons(1280, 720)
-                    frameRate = 30
+                    frameRate = 15
                 }
                 "fhd" -> {
                     vdCons = buildVidCons(1920, 1080)
-                    frameRate = 30
+                    frameRate = 20
                 }
                 "qhd" -> {
                     vdCons = buildVidCons(2560, 1440)
-                    frameRate = 30
+                    frameRate = 25
                 }
                 "QnHD" -> {
                     vdCons = buildVidCons(960, 540)
-                    frameRate = 30
+                    frameRate = 5
                 }
                 else -> {
                     vdCons = buildVidCons(640, 480)
-                    frameRate = 30
+                    frameRate = 10
                 }
             }
         }
@@ -373,23 +373,23 @@ private fun getVideoConstraints(targetOrientation: String, targetResolution: Str
             when (targetResolution) {
                 "hd" -> {
                     vdCons = buildVidCons(720, 1280)
-                    frameRate = 30
+                    frameRate = 15
                 }
                 "fhd" -> {
                     vdCons = buildVidCons(1080, 1920)
-                    frameRate = 30
+                    frameRate = 20
                 }
                 "qhd" -> {
                     vdCons = buildVidCons(1440, 2560)
-                    frameRate = 30
+                    frameRate = 25
                 }
                 "QnHD" -> {
                     vdCons = buildVidCons(540, 960)
-                    frameRate = 30
+                    frameRate = 5
                 }
                 else -> {
                     vdCons = buildVidCons(480, 640)
-                    frameRate = 30
+                    frameRate = 10
                 }
             }
         }

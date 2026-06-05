@@ -368,11 +368,16 @@ private fun AddVideosGridParameters.buildComponentForStream(
             )
         } else {
             // Video on - render video card with virtual/local stream
+            val renderableVirtualStream = if (keepBackground && virtualStream.hasRenderableVideoTrack()) {
+                virtualStream
+            } else {
+                null
+            }
             val effectiveStream = stream.copy(
                 id = "youyouyou",
                 producerId = "youyouyou",
                 name = "youyouyou",
-                stream = if (keepBackground && virtualStream != null) virtualStream else localStreamVideo
+                stream = renderableVirtualStream ?: localStreamVideo
             )
             val participant = findParticipantByName(member) ?: placeholderParticipant(baseName, videoId = "youyouyou")
             val selfForceFullDisplay = when {
@@ -477,6 +482,11 @@ private fun AddVideosGridParameters.renderVideoCard(input: VideoCardRenderInput)
             barColor = 0xFFE82E2E.toInt() // Red waveform bars
         )
     )
+}
+
+private fun MediaStream?.hasRenderableVideoTrack(): Boolean {
+    val track = this?.getVideoTracks()?.firstOrNull() ?: return false
+    return active && track.enabled
 }
 
 /**

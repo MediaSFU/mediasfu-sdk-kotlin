@@ -19,9 +19,12 @@ struct MediaSFUHostContainer: UIViewControllerRepresentable {
 
     @available(iOS 16.0, *)
     func sizeThatFits(_ proposal: ProposedViewSize, uiViewController: UIViewController, context: Context) -> CGSize? {
-        CGSize(
-            width: proposal.width ?? UIScreen.main.bounds.width,
-            height: proposal.height ?? UIScreen.main.bounds.height
-        )
+        // Use the SwiftUI-proposed size directly.  By the time this is called
+        // (after the window-settle delay in prepareSessionIfNeeded), the parent
+        // Group's .ignoresSafeArea() has already given us the full-screen proposal
+        // (393 × 852 on iPhone 15 Pro), so we don't need to read UIScreen APIs.
+        let w = proposal.width  ?? 393
+        let h = proposal.height ?? 852
+        return CGSize(width: w, height: h)
     }
 }

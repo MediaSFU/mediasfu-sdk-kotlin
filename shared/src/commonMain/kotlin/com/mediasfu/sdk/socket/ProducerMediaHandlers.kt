@@ -1,5 +1,6 @@
 package com.mediasfu.sdk.socket
 import com.mediasfu.sdk.util.Logger
+import com.mediasfu.sdk.util.MediaSFURuntimeProbe
 import com.mediasfu.sdk.util.toLooseBoolean
 
 import kotlinx.datetime.Clock
@@ -65,25 +66,22 @@ import com.mediasfu.sdk.socket.SocketManager
 /** Kotlin replica of mediasfu_sdk/lib/producers/socket_receive_methods/all_members.dart. */
 suspend fun allMembers(options: AllMembersOptions) {
     var params = options.parameters.getUpdatedAllParams()
+
+    syncLocalIslevelFromServer(
+        members = options.members,
+        memberName = params.member,
+        localLevel = params.isLevel,
+        updateIslevel = params.updateIslevel
+    )
     
     params.allVideoStreams.forEachIndexed { index, stream ->
     }
 
-    params.updateParticipantsAll(
-        options.members.map { member ->
-            Participant(
-                id = member.id,
-                audioID = member.audioID,
-                videoID = member.videoID,
-                name = member.name,
-                isBanned = member.isBanned,
-                isSuspended = member.isSuspended
-            )
-        }
-    )
+    val mappedMembers = options.members.map(::preserveParticipantIdentity)
+    params.updateParticipantsAll(mappedMembers)
 
     params.updateParticipants(
-        options.members.filterNot { participant ->
+        mappedMembers.filterNot { participant ->
             participant.isBanned || participant.isSuspended
         }
     )
@@ -128,6 +126,7 @@ suspend fun allMembers(options: AllMembersOptions) {
     }
 
     if (onLocal && !params.membersReceived) {
+        MediaSFURuntimeProbe.recordConsumerSignalStage("connect-local", "", "allMembers")
         params.connectLocalIps?.let { connectLocalIps ->
             val refreshed = params.getUpdatedAllParams()
             val localSocket = (refreshed as? PrepopulateUserMediaParameters)?.localSocket
@@ -230,9 +229,18 @@ suspend fun allMembersRest(options: AllMembersRestOptions) {
     }
     var params: AllMembersRestParameters = options.parameters.getUpdatedAllParams()
 
-    val activeMembers = options.members.filterNot { participant ->
-        participant.isBanned || participant.isSuspended
-    }
+    syncLocalIslevelFromServer(
+        members = options.members,
+        memberName = params.member,
+        localLevel = params.isLevel,
+        updateIslevel = params.updateIslevel
+    )
+
+    val activeMembers = options.members
+        .map(::preserveParticipantIdentity)
+        .filterNot { participant ->
+            participant.isBanned || participant.isSuspended
+        }
     params.updateParticipantsAll(activeMembers)
     params.updateParticipants(activeMembers)
 
@@ -291,6 +299,7 @@ suspend fun allMembersRest(options: AllMembersRestOptions) {
     }
 
     if (onLocal && !params.membersReceived) {
+        MediaSFURuntimeProbe.recordConsumerSignalStage("connect-local", "", "allMembersRest")
         params.connectLocalIps?.let { connectLocalIps ->
             connectLocalIps(
                 ConnectLocalIpsOptions(
@@ -371,6 +380,32 @@ private suspend fun handleServerConnection(
     params.updateRoomRecvIps(ips)
     params.updateMembersReceived(true)
     params.sleep(SleepOptions(ms = 250))
+}
+
+private fun syncLocalIslevelFromServer(
+    members: List<Participant>,
+    memberName: String,
+    localLevel: String,
+    updateIslevel: (String) -> Unit
+) {
+    if (memberName.isBlank()) return
+
+    val currentMember = members.firstOrNull { it.name == memberName } ?: return
+    val serverLevel = currentMember.islevel ?: return
+    if ((serverLevel == "0" || serverLevel == "1") && serverLevel != localLevel) {
+        updateIslevel(serverLevel)
+    }
+}
+
+private fun preserveParticipantIdentity(participant: Participant): Participant {
+    val normalizedLevel = participant.islevel ?: "1"
+    val normalizedHost = participant.isHost || participant.isAdmin || normalizedLevel == "2"
+
+    return participant.copy(
+        islevel = normalizedLevel,
+        isAdmin = participant.isAdmin || normalizedLevel == "2",
+        isHost = normalizedHost
+    )
 }
 
 /** Kotlin replica of mediasfu_sdk/lib/producers/socket_receive_methods/all_waiting_room_members.dart. */

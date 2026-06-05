@@ -40,6 +40,7 @@ import com.mediasfu.sdk.webrtc.MediaStream
 import com.mediasfu.sdk.webrtc.MediaStreamTrack
 import com.mediasfu.sdk.webrtc.ProducerSource
 import com.mediasfu.sdk.webrtc.RtpCapabilities
+import com.mediasfu.sdk.webrtc.RtpCodecCapability
 import com.mediasfu.sdk.webrtc.RtpEncodingParameters
 import com.mediasfu.sdk.webrtc.TransportConnectionState
 import com.mediasfu.sdk.webrtc.TransportType
@@ -322,6 +323,7 @@ class TestWebRtcTransport(
         track: MediaStreamTrack,
         encodings: List<RtpEncodingParameters>,
         codecOptions: com.mediasfu.sdk.methods.utils.producer.ProducerCodecOptions?,
+        codec: RtpCodecCapability?,
         appData: Map<String, Any?>?
     ): WebRtcProducer {
         val kind = when (track.kind.lowercase()) {
@@ -329,7 +331,7 @@ class TestWebRtcTransport(
             else -> MediaKind.AUDIO
         }
         val producer = TestWebRtcProducer(kind = kind)
-        produceCalls += ProducedCall(track, encodings, codecOptions, appData, producer)
+        produceCalls += ProducedCall(track, encodings, codecOptions, codec, appData, producer)
         return producer
     }
 
@@ -360,6 +362,7 @@ class TestWebRtcTransport(
         val track: MediaStreamTrack,
         val encodings: List<RtpEncodingParameters>,
         val codecOptions: com.mediasfu.sdk.methods.utils.producer.ProducerCodecOptions?,
+        val codec: RtpCodecCapability?,
         val appData: Map<String, Any?>?,
         val producer: TestWebRtcProducer
     )

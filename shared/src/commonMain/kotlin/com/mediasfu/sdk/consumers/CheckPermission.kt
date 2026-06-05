@@ -1,6 +1,7 @@
 // CheckPermission.kt
 package com.mediasfu.sdk.consumers
 import com.mediasfu.sdk.util.Logger
+import com.mediasfu.sdk.model.PermissionConfig
 
 /**
  * Options for checking permission based on specific settings.
@@ -10,7 +11,9 @@ data class CheckPermissionOptions(
     val videoSetting: String,
     val screenshareSetting: String,
     val chatSetting: String,
-    val permissionType: String
+    val permissionType: String,
+    val permissionConfig: PermissionConfig? = null,
+    val participantLevel: String? = null
 )
 
 /**
@@ -71,6 +74,13 @@ suspend fun checkPermission(
 ): Int {
     return try {
         val permissionType = options.permissionType
+
+        resolvePermissionFromConfig(
+            permissionConfig = options.permissionConfig,
+            participantLevel = options.participantLevel,
+            permissionType = permissionType
+        )?.let { return it }
+
         val audioSetting = options.audioSetting
         val videoSetting = options.videoSetting
         val screenshareSetting = options.screenshareSetting
@@ -103,5 +113,39 @@ suspend fun checkPermission(
             "checkPermission error: ${error.message}",
             error
         )
+    }
+}
+
+private fun resolvePermissionFromConfig(
+    permissionConfig: PermissionConfig?,
+    participantLevel: String?,
+    permissionType: String
+): Int? {
+    if (permissionConfig == null || participantLevel.isNullOrBlank() || participantLevel == "2") {
+        return null
+    }
+
+    val levelKey = when (participantLevel) {
+        "0" -> "level0"
+        "1" -> "level1"
+        else -> return null
+    }
+
+    val capability = when (permissionType) {
+        "audioSetting" -> "useMic"
+        "videoSetting" -> "useCamera"
+        "screenshareSetting" -> "useScreen"
+        "chatSetting" -> "useChat"
+        else -> return null
+    }
+
+    val levelMap = permissionConfig.values[levelKey] as? Map<*, *> ?: return null
+    val configValue = levelMap[capability]?.toString()?.lowercase() ?: return null
+
+    return when (configValue) {
+        "allow" -> 0
+        "approval" -> 1
+        "disallow" -> 2
+        else -> 2
     }
 }

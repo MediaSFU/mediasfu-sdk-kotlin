@@ -880,9 +880,9 @@ suspend fun joinRoom(options: JoinRoomOptions): Result<ResponseJoinRoom> {
         validateAlphanumeric(options.apiUserName, "apiUserName")
         validateAlphanumeric(options.member, "member")
 
-        // Validate roomName prefix (cloud rooms start with 's' or 'p')
-        if (!(options.roomName.startsWith("s") || options.roomName.startsWith("p"))) {
-            throw SocketEmitException("Invalid roomName, must start with 's' or 'p'")
+        // Validate roomName prefix (cloud rooms start with 's' or 'p' or 'd')
+        if (!(options.roomName.startsWith("s") || options.roomName.startsWith("p") || options.roomName.startsWith("d"))) {
+            throw SocketEmitException("Invalid roomName, must start with 's' or 'p' or 'd'")
         }
 
         // Additional constraints mirroring Flutter implementation
@@ -989,8 +989,8 @@ suspend fun joinConRoom(options: JoinConRoomOptions): Result<ResponseJoinRoom> {
         validateAlphanumeric(options.apiUserName, "apiUserName")
         validateAlphanumeric(options.member, "member")
 
-        if (!(options.roomName.startsWith("s") || options.roomName.startsWith("p"))) {
-            throw SocketEmitException("Invalid roomName, must start with 's' or 'p'")
+        if (!(options.roomName.startsWith("s") || options.roomName.startsWith("p") || options.roomName.startsWith("d"))) {
+            throw SocketEmitException("Invalid roomName, must start with 's' or 'p' or 'd'")
         }
 
         if (!(options.sec.length == 64 &&

@@ -561,6 +561,8 @@ suspend fun changeVids(options: ChangeVidsOptions) {
             }
         }
 
+        val orderedStreams = allStreamsPaged.normalizeSelfStreamPlacement()
+
         // Reset paginated streams
         paginatedStreams = mutableListOf()
         var limit = itemPageLimit
@@ -584,7 +586,7 @@ suspend fun changeVids(options: ChangeVidsOptions) {
         var filterHost = false
 
         if (breakOutRoomStarted && !breakOutRoomEnded) {
-            for ((idx, s) in allStreamsPaged.withIndex()) {
+            for ((idx, s) in orderedStreams.withIndex()) {
             }
             val tempBreakoutRooms = breakoutRooms.toMutableList()
             val host = participants.firstOrNull { it.islevel == "2" }
@@ -616,7 +618,7 @@ suspend fun changeVids(options: ChangeVidsOptions) {
                             parameters.updateMemberRoom(memberRoom)
                         }
 
-                        val streams = allStreamsPaged.filter { stream ->
+                        val streams = orderedStreams.filter { stream ->
                             val hasProducerId = stream.producerId.isNotEmpty()
                             val hasAudioId = stream.audioID?.isNotEmpty() == true
 
@@ -654,7 +656,7 @@ suspend fun changeVids(options: ChangeVidsOptions) {
             }
 
             // Identify remaining streams not in breakout rooms
-            val remainingStreams = allStreamsPaged.filter { stream ->
+            val remainingStreams = orderedStreams.filter { stream ->
                 val hasProducerId = stream.producerId.isNotEmpty()
                 val hasAudioId = stream.audioID?.isNotEmpty() == true
 
@@ -684,7 +686,7 @@ suspend fun changeVids(options: ChangeVidsOptions) {
 
             // Ensure member's stream is included
             if (memberInRoom) {
-                val memberStream = allStreamsPaged.firstOrNull { stream ->
+                val memberStream = orderedStreams.firstOrNull { stream ->
                     stream.producerId.isNotEmpty()
                 }
                 if (memberStream != null && !remainingStreams.contains(memberStream)) {
@@ -727,23 +729,23 @@ suspend fun changeVids(options: ChangeVidsOptions) {
             }
         } else {
             // Handle pagination when not in breakout rooms
-            val listEnd = allStreamsPaged.size
+            val listEnd = orderedStreams.size
             if (listEnd > limit) {
-                firstPage = allStreamsPaged.subList(0, limit_).toMutableList()
+                firstPage = orderedStreams.subList(0, limit_).toMutableList()
                 paginatedStreams.add(firstPage)
 
                 var i = limit_
-                while (i < allStreamsPaged.size) {
+                while (i < orderedStreams.size) {
                     page = if (i + limit > listEnd) {
-                        allStreamsPaged.subList(i, listEnd)
+                        orderedStreams.subList(i, listEnd)
                     } else {
-                        allStreamsPaged.subList(i, i + limit)
+                        orderedStreams.subList(i, i + limit)
                     }
                     paginatedStreams.add(page)
                     i += limit
                 }
             } else {
-                firstPage = allStreamsPaged.toMutableList()
+                firstPage = orderedStreams.toMutableList()
                 paginatedStreams.add(firstPage)
             }
         }
@@ -851,3 +853,25 @@ suspend fun changeVids(options: ChangeVidsOptions) {
     }
 }
 
+private fun MutableList<Stream>.normalizeSelfStreamPlacement(): MutableList<Stream> {
+    val selfStreams = filter { stream ->
+        stream.producerId == "youyou" || stream.producerId == "youyouyou"
+    }
+    if (selfStreams.size <= 1) {
+        return this
+    }
+
+    val preferredSelf = selfStreams.firstOrNull { stream ->
+        stream.producerId == "youyouyou" && stream.stream != null
+    } ?: selfStreams.firstOrNull { stream ->
+        stream.producerId == "youyouyou"
+    } ?: selfStreams.firstOrNull { stream ->
+        stream.stream != null
+    } ?: selfStreams.first()
+
+    val normalized = filterNot { stream ->
+        stream.producerId == "youyou" || stream.producerId == "youyouyou"
+    }.toMutableList()
+    normalized.add(0, preferredSelf)
+    return normalized
+}

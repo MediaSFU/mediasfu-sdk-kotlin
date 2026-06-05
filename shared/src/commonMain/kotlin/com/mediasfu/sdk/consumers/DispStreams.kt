@@ -177,6 +177,11 @@ suspend fun dispStreams(options: DispStreamsOptions) {
         }
 
         if (!proceed && auto) {
+            if (eventTypeName != "broadcast" && eventTypeName != "chat") {
+                // Flutter keeps working with the local `lStreams` variable here, but Compose
+                // needs the reactive state updated before auto-prepopulate returns.
+                params.updateLStreams(lStreams.toList())
+            }
             if ((updateMainWindow && !lockScreen && !shared) || !firstRound) {
                 if (prepopulateParams != null) {
                     params.prepopulateUserMedia(
@@ -249,6 +254,7 @@ suspend fun dispStreams(options: DispStreamsOptions) {
                 // Keep the lStreams passed from changeVids (which already includes all participants).
                 // Only use filteredStreams for name resolution, not for stream selection.
                 // The lStreams from changeVids already contains the correct set of streams to display.
+                params.updateLStreams(lStreams.toList())
             }
         }
 

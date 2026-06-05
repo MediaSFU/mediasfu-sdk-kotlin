@@ -3,7 +3,11 @@
 package com.mediasfu.sdk.webrtc
 
 import cocoapods.WebRTC.RTCMediaStreamTrack
+import cocoapods.WebRTC.RTCAudioTrack
+import cocoapods.WebRTC.RTCVideoTrack
+import com.mediasfu.sdk.util.Logger
 import kotlinx.cinterop.ExperimentalForeignApi
+import platform.Foundation.NSLock
 import platform.Foundation.NSUUID
 
 internal class IosMediasoupTransport private constructor(
@@ -42,9 +46,18 @@ internal class IosMediasoupTransport private constructor(
         val sendHandle = handle as? IosNativeSendTransportHandle ?: return
         sendHandle.setOnProduce(
             IosNativeProduceListener { kind, rtpParametersJson, appDataJson, callback, errback ->
+                val nativeKind = kind.toMediaKind()
+                val hintedKind = consumePendingProduceKindHint(sendHandle.id)
+                val effectiveKind = hintedKind ?: nativeKind
+                if (hintedKind != null && effectiveKind != nativeKind) {
+                    Logger.w(
+                        "IosMediasoupTransport",
+                        "produce kind override native=$kind effective=${effectiveKind.name.lowercase()} transportId=${sendHandle.id}"
+                    )
+                }
                 handler(
                     ProduceData(
-                        kind = kind.toMediaKind(),
+                        kind = effectiveKind,
                         rtpParameters = parseRtpParametersBridgeJson(rtpParametersJson),
                         appData = parseAppDataBridgeJson(appDataJson),
                         callback = callback,
@@ -63,17 +76,47 @@ internal class IosMediasoupTransport private constructor(
         track: MediaStreamTrack,
         encodings: List<RtpEncodingParameters>,
         codecOptions: com.mediasfu.sdk.methods.utils.producer.ProducerCodecOptions?,
+        codec: RtpCodecCapability?,
         appData: Map<String, Any?>?
     ): WebRtcProducer {
         val sendHandle = handle as? IosNativeSendTransportHandle
             ?: throw IllegalStateException("produce called on non-send iOS transport")
+        Logger.i(
+            "IosMediasoupTransport",
+            "produce begin transportId=${sendHandle.id} trackId=${track.id} kind=${track.kind} encodings=${encodings.size} hasAppData=${appData != null}"
+        )
+        throwIfBridgeReportedError(
+            rawId = sendHandle.id,
+            operation = "send transport setup"
+        )
         val nativeTrack = track.asPlatformNativeTrack() as? RTCMediaStreamTrack
             ?: throw IllegalArgumentException("Unsupported iOS track implementation: ${track::class.simpleName}")
 
-        val producerHandle = sendHandle.produce(
-            track = nativeTrack,
-            encodingsJson = encodings.takeIf { it.isNotEmpty() }?.map { it.toMap() }.toIosBridgeJsonString(),
-            appDataJson = appData.toIosBridgeJsonString()
+        val encodingsJson = buildIosProduceEncodingsJson(track.kind, encodings)
+        val codecOptionsJson: String? = null
+        val codecJson: String? = null
+
+        val kindHint = track.kind.toMediaKind()
+        enqueuePendingProduceKindHint(sendHandle.id, kindHint)
+        val producerHandle = try {
+            sendHandle.produce(
+                track = nativeTrack,
+                encodingsJson = encodingsJson,
+                codecOptionsJson = codecOptionsJson,
+                codecJson = codecJson,
+                appDataJson = appData.toIosBridgeJsonString()
+            )
+        } catch (error: Throwable) {
+            removePendingProduceKindHint(sendHandle.id, kindHint)
+            throw error
+        }
+        throwIfBridgeReportedError(
+            rawId = producerHandle.id,
+            operation = "produce"
+        )
+        Logger.i(
+            "IosMediasoupTransport",
+            "produce success transportId=${sendHandle.id} producerId=${producerHandle.id}"
         )
         return IosWebRtcProducer(producerHandle, appData)
     }
@@ -86,6 +129,14 @@ internal class IosMediasoupTransport private constructor(
     ): WebRtcConsumer {
         val recvHandle = handle as? IosNativeRecvTransportHandle
             ?: throw IllegalStateException("consume called on non-receive iOS transport")
+        Logger.i(
+            "IosMediasoupTransport",
+            "consume begin transportId=${recvHandle.id} consumerId=$id producerId=$producerId kind=$kind"
+        )
+        throwIfBridgeReportedError(
+            rawId = recvHandle.id,
+            operation = "receive transport setup"
+        )
         val consumerHandle = recvHandle.consume(
             id = id,
             producerId = producerId,
@@ -93,10 +144,58 @@ internal class IosMediasoupTransport private constructor(
             rtpParametersJson = rtpParameters.toIosBridgeJsonString()
                 ?: throw IllegalArgumentException("Failed to serialize RTP parameters for iOS consume")
         )
+        throwIfBridgeReportedError(
+            rawId = consumerHandle.id,
+            operation = "consume"
+        )
+        val nativeTrack = consumerHandle.track
+        Logger.i(
+            "IosMediasoupTransport",
+            "consume success transportId=${recvHandle.id} consumerId=${consumerHandle.id} producerId=$producerId kind=$kind nativeTrackId=${nativeTrack?.trackId ?: "none"} nativeTrackKind=${nativeTrack?.kind ?: "none"} nativeTrackEnabled=${nativeTrack?.isEnabled ?: false}"
+        )
         return IosWebRtcConsumer(consumerHandle)
     }
 
     companion object {
+        private val pendingProduceKindHintLock = NSLock()
+        private val pendingProduceKindHintsByTransport = mutableMapOf<String, MutableList<MediaKind>>()
+
+        private fun enqueuePendingProduceKindHint(transportId: String, kind: MediaKind) {
+            pendingProduceKindHintLock.lock()
+            try {
+                pendingProduceKindHintsByTransport.getOrPut(transportId) { mutableListOf() }.add(kind)
+            } finally {
+                pendingProduceKindHintLock.unlock()
+            }
+        }
+
+        private fun consumePendingProduceKindHint(transportId: String): MediaKind? {
+            pendingProduceKindHintLock.lock()
+            try {
+                val hints = pendingProduceKindHintsByTransport[transportId] ?: return null
+                val kind = hints.removeAt(0)
+                if (hints.isEmpty()) {
+                    pendingProduceKindHintsByTransport.remove(transportId)
+                }
+                return kind
+            } finally {
+                pendingProduceKindHintLock.unlock()
+            }
+        }
+
+        private fun removePendingProduceKindHint(transportId: String, kind: MediaKind) {
+            pendingProduceKindHintLock.lock()
+            try {
+                val hints = pendingProduceKindHintsByTransport[transportId] ?: return
+                hints.remove(kind)
+                if (hints.isEmpty()) {
+                    pendingProduceKindHintsByTransport.remove(transportId)
+                }
+            } finally {
+                pendingProduceKindHintLock.unlock()
+            }
+        }
+
         fun createSend(handle: IosNativeSendTransportHandle): IosMediasoupTransport =
             IosMediasoupTransport(handle = handle, type = TransportType.SEND)
 
@@ -104,6 +203,23 @@ internal class IosMediasoupTransport private constructor(
             IosMediasoupTransport(handle = handle, type = TransportType.RECEIVE)
     }
 }
+
+internal fun buildIosProduceEncodingsJson(
+    kind: String,
+    encodings: List<RtpEncodingParameters>
+): String? = encodings
+    .takeIf { it.isNotEmpty() }
+    ?.map { encoding ->
+        val map = encoding.toMap().toMutableMap()
+        if (kind.equals("audio", ignoreCase = true)) {
+            // Audio producers do not need simulcast/video-specific encoding keys.
+            map.remove("rid")
+            map.remove("scalabilityMode")
+            map.remove("scaleResolutionDownBy")
+        }
+        map
+    }
+    .toIosBridgeJsonString()
 
 @OptIn(ExperimentalForeignApi::class)
 internal class IosWebRtcProducer(
@@ -141,6 +257,8 @@ internal class IosWebRtcConsumer(
     private val handle: IosNativeConsumerHandle
 ) : WebRtcConsumer {
 
+    private var cachedStream: MediaStream? = null
+
     override val id: String
         get() = handle.id
 
@@ -148,11 +266,23 @@ internal class IosWebRtcConsumer(
         get() = handle.kind.toMediaKind()
 
     override val track: MediaStreamTrack?
-        get() = handle.track?.let(::BridgeIosMediaStreamTrack)
+        get() {
+            val nativeTrack = handle.track
+            if (nativeTrack == null) {
+                Logger.w("IosMediasoupTransport", "consumer track unavailable consumerId=$id kind=$kind")
+            }
+            return nativeTrack?.let(::BridgeIosMediaStreamTrack)
+        }
 
     override val stream: MediaStream?
-        get() = handle.track?.let { nativeTrack ->
-            BridgeIosSingleTrackMediaStream(nativeTrack)
+        get() {
+            cachedStream?.let { return it }
+            val nativeTrack = handle.track ?: return null
+            Logger.i(
+                "IosMediasoupTransport",
+                "consumer stream wrap consumerId=$id nativeTrackId=${nativeTrack.trackId} nativeTrackKind=${nativeTrack.kind} enabled=${nativeTrack.isEnabled}"
+            )
+            return BridgeIosSingleTrackMediaStream(nativeTrack).also { cachedStream = it }
         }
 
     override val paused: Boolean
@@ -201,7 +331,11 @@ private class BridgeIosMediaStreamTrack(
         get() = nativeTrack.trackId
 
     override val kind: String
-        get() = nativeTrack.kind
+        get() = when (nativeTrack) {
+            is RTCAudioTrack -> "audio"
+            is RTCVideoTrack -> "video"
+            else -> nativeTrack.kind
+        }
 
     override val enabled: Boolean
         get() = nativeTrack.isEnabled
@@ -240,4 +374,18 @@ private fun Map<String, Any?>?.toProducerSource(kind: MediaKind): ProducerSource
         "camera", "video" -> ProducerSource.CAMERA
         else -> if (kind == MediaKind.VIDEO) ProducerSource.CAMERA else ProducerSource.MICROPHONE
     }
+}
+
+private fun throwIfBridgeReportedError(rawId: String, operation: String) {
+    val errorPrefixes = listOf("send-error", "recv-error", "producer-error", "consumer-error")
+    val matchedPrefix = errorPrefixes.firstOrNull { rawId.startsWith(it) } ?: return
+    val compactMessage = rawId
+        .removePrefix(matchedPrefix)
+        .removePrefix(":")
+        .ifBlank { "unknown" }
+    val readableMessage = compactMessage
+        .replace('-', ' ')
+        .replace('_', ' ')
+        .trim()
+    throw IllegalStateException("iOS bridge $operation failed: $readableMessage")
 }

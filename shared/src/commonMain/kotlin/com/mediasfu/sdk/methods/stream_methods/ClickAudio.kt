@@ -20,6 +20,7 @@ import com.mediasfu.sdk.methods.recording_methods.RecordPauseTimerOptions
 import com.mediasfu.sdk.methods.recording_methods.RecordResumeTimerType
 import com.mediasfu.sdk.methods.recording_methods.RecordResumeTimerOptions
 import com.mediasfu.sdk.model.Participant
+import com.mediasfu.sdk.model.PermissionConfig
 import com.mediasfu.sdk.model.ShowAlert
 import com.mediasfu.sdk.socket.SocketManager
 import com.mediasfu.sdk.webrtc.MediaStream
@@ -60,6 +61,7 @@ interface ClickAudioParameters :
     val videoSetting: String
     val screenshareSetting: String
     val chatSetting: String
+    val permissionConfig: PermissionConfig?
     val updateRequestIntervalSeconds: Int
     override val participants: List<Participant>
     override var transportCreated: Boolean
@@ -246,7 +248,9 @@ suspend fun clickAudio(options: ClickAudioOptions) {
                     audioSetting = audioSetting,
                     videoSetting = videoSetting,
                     screenshareSetting = screenshareSetting,
-                    chatSetting = chatSetting
+                    chatSetting = chatSetting,
+                    permissionConfig = parameters.permissionConfig,
+                    participantLevel = islevel
                 )
                 response = try {
                     checkPermission(optionsCheck)
