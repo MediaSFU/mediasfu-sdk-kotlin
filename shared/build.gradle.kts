@@ -8,6 +8,7 @@ plugins {
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.vanniktech.maven.publish")
+    signing
 }
 
 repositories {
@@ -275,5 +276,14 @@ val darwinFoundationOverlay = generateDarwinFoundationOverlay()
 tasks.withType<org.jetbrains.kotlin.gradle.tasks.CInteropProcess>().configureEach {
     darwinFoundationOverlay?.let { overlayFile ->
         settings.compilerOpts("-ivfsoverlay", overlayFile.absolutePath)
+    }
+}
+
+signing {
+    val secretKeyFile = file("${project.rootDir}/private-key-one.asc")
+    if (secretKeyFile.exists()) {
+        val secretKey = secretKeyFile.readText()
+        val password = project.findProperty("signing.password") as String? ?: ""
+        useInMemoryPgpKeys(secretKey, password)
     }
 }
