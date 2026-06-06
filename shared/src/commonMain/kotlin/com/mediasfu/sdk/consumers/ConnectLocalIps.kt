@@ -165,13 +165,6 @@ suspend fun connectLocalIps(options: ConnectLocalIpsOptions): Result<Unit> {
         // Check if listener is already set (prevent duplicates)
         val alreadyListening = hasListener(socket, "new-producer")
         if (alreadyListening) {
-            receiveAllPipedTransportsMethod(
-                ReceiveAllPipedTransportsOptions(
-                    community = true,
-                    nsock = socket,
-                    parameters = parameters
-                )
-            )
             return Result.success(Unit)
         }
 

@@ -3365,12 +3365,15 @@ class MediasfuGenericState internal constructor(
         try {
             parameters.device?.close()
         } catch (_: Exception) {}
+        connectivity.updateDevice(null)
 
         val localStreams = listOfNotNull(
             parameters.localStream,
             parameters.localStreamAudio,
             parameters.localStreamVideo,
-            parameters.localStreamScreen
+            parameters.localStreamScreen,
+            parameters.virtualStream,
+            parameters.processedStream
         ).distinctBy { it.id }
 
         localStreams.forEach { stream ->
@@ -3387,6 +3390,12 @@ class MediasfuGenericState internal constructor(
         parameters.localStreamAudio = null
         parameters.localStreamVideo = null
         parameters.localStreamScreen = null
+        parameters.virtualStream = null
+        parameters.processedStream = null
+        parameters.keepBackground = false
+        parameters.selectedBackground = null
+        parameters.backgroundHasChanged = false
+        parameters.isBackgroundModalVisible = false
 
         parameters.audioProducer = null
         parameters.videoProducer = null
@@ -3394,6 +3403,11 @@ class MediasfuGenericState internal constructor(
         parameters.localAudioProducer = null
         parameters.localVideoProducer = null
         parameters.localScreenProducer = null
+        parameters.videoAlreadyOn = false
+        parameters.audioAlreadyOn = false
+        parameters.screenAlreadyOn = false
+        parameters.shared = false
+        parameters.shareScreenStarted = false
     }
 
     /**
@@ -3458,6 +3472,11 @@ class MediasfuGenericState internal constructor(
         room.updateFilteredParticipants(emptyList())
 
         // MEDIA STATE - camera, mic, screen share flags
+        parameters.videoAlreadyOn = false
+        parameters.audioAlreadyOn = false
+        parameters.screenAlreadyOn = false
+        parameters.shared = false
+        parameters.shareScreenStarted = false
         media.syncVideoAlreadyOn(false)
         media.syncAudioAlreadyOn(false)
         media.syncScreenAlreadyOn(false)
@@ -3503,6 +3522,16 @@ class MediasfuGenericState internal constructor(
         parameters.audStreamNames = emptyList()
         parameters.youYouStream = emptyList()
         parameters.youYouStreamIDs = emptyList()
+        parameters.localStream = null
+        parameters.localStreamAudio = null
+        parameters.localStreamVideo = null
+        parameters.localStreamScreen = null
+        parameters.virtualStream = null
+        parameters.keepBackground = false
+        parameters.selectedBackground = null
+        parameters.isBackgroundModalVisible = false
+        parameters.backgroundHasChanged = false
+        parameters.processedStream = null
         
         // Admin/Screen IDs (CRITICAL)
         parameters.adminVidID = ""
@@ -3566,6 +3595,7 @@ class MediasfuGenericState internal constructor(
         // CONNECTIVITY STATE - roomResponse (CRITICAL for auto-join)
         connectivity.updateSocket(null)
         connectivity.updateLocalSocket(null)
+        connectivity.updateDevice(null)
         connectivity.updateRoomResponse(ResponseJoinRoom())
 
         // CORE PARAMETERS - flags and counters

@@ -402,14 +402,8 @@ suspend fun signalNewConsumerTransport(
             null
         }
 
-        val rtpCapabilities = deviceRtpCapabilities ?: cachedNegotiatedCaps ?: freshlyNegotiatedCaps ?: baseRtpCapabilities
-        
-        // Filter out problematic header extensions (urn:3gpp:video-orientation)
-        val filteredRtpCapabilities = rtpCapabilities.copy(
-            headerExtensions = rtpCapabilities.headerExtensions.filter { ext ->
-                ext.uri != "urn:3gpp:video-orientation"
-            }
-        )
+        val rtpCapabilities = (deviceRtpCapabilities ?: cachedNegotiatedCaps ?: freshlyNegotiatedCaps ?: baseRtpCapabilities)
+            .applyCurrentPlatformHeaderExtensionPolicy()
         
         // Check if already consuming this producer
         if (parameters.consumingTransports.contains(producerId)) {
@@ -476,15 +470,14 @@ suspend fun signalNewConsumerTransport(
             return Result.failure(SignalNewConsumerTransportException("No transport ID"))
         }
         
-        // Convert FILTERED rtpCapabilities to JSON-serializable map
-        val rtpCapsMap = filteredRtpCapabilities.toMap()
+        val rtpCapsMap = rtpCapabilities.toMap()
         Logger.i(
             "SignalNewConsumerTransport",
-            "consume-capabilities producerId=$producerId source=${if (deviceRtpCapabilities != null) "device" else if (cachedNegotiatedCaps != null) "cached-negotiated" else if (freshlyNegotiatedCaps != null) "fresh-negotiated" else "base"} codecs=${filteredRtpCapabilities.codecDebugSummary()} headerExts=${filteredRtpCapabilities.headerExtensions.size}"
+            "consume-capabilities producerId=$producerId source=${if (deviceRtpCapabilities != null) "device" else if (cachedNegotiatedCaps != null) "cached-negotiated" else if (freshlyNegotiatedCaps != null) "fresh-negotiated" else "base"} codecs=${rtpCapabilities.codecDebugSummary()} headerExts=${rtpCapabilities.headerExtensions.size}"
         )
         
         // === CODEC DEBUG: Log client RTP capabilities being sent ===
-        val videoCodecs = filteredRtpCapabilities.codecs.filter { it.mimeType.startsWith("video/", ignoreCase = true) }
+        val videoCodecs = rtpCapabilities.codecs.filter { it.mimeType.startsWith("video/", ignoreCase = true) }
         videoCodecs.forEach { codec ->
             codec.parameters?.let { params ->
             }

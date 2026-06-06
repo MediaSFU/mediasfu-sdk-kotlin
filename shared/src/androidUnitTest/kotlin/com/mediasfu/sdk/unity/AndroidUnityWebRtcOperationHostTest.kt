@@ -8,6 +8,7 @@ import com.mediasfu.sdk.webrtc.MediaStream
 import com.mediasfu.sdk.webrtc.MediaStreamTrack
 import com.mediasfu.sdk.webrtc.ProduceData
 import com.mediasfu.sdk.webrtc.RtcpParameters
+import com.mediasfu.sdk.webrtc.RtpCodecCapability
 import com.mediasfu.sdk.webrtc.RtpCodecParameters
 import com.mediasfu.sdk.webrtc.RtpEncodingParameters
 import com.mediasfu.sdk.webrtc.RtpHeaderExtensionParameters

@@ -88,7 +88,8 @@ suspend fun receiveAllPipedTransportsImpl(
 
         val response = nsock.emitWithAck<Any?>(
             event = emitName,
-            data = details
+            data = details,
+            timeout = 30_000
         )
         Logger.d(
             "ReceiveAllPipedTrans",
@@ -131,14 +132,6 @@ suspend fun receiveAllPipedTransportsImpl(
             val producersExistFlag = responseMap?.get("producersExist").toLooseBoolean()
             val producersExist = producersExistFlag || (producerCount ?: 0) > 0 || (producerIdsCount ?: 0) > 0
 
-            val onlyProducersExistKey = responseMap != null && responseMap.keys
-                .map { it.toString() }
-                .all { it == "producersExist" }
-
-            // Some server lanes only return { producersExist: false } here even when
-            // producers are available via getProducers* calls, so attempt a fallback query.
-            val shouldAttemptProducerFetch = producersExist || onlyProducersExistKey
-
             val responseShape = when {
                 responseMap != null -> "map(keys=" + responseMap.keys
                     .map { it.toString() }
@@ -156,10 +149,10 @@ suspend fun receiveAllPipedTransportsImpl(
             MediaSFURuntimeProbe.recordConsumerSignalStage(
                 "receive-all-ack",
                 "",
-                "community=${if (community) 1 else 0},producers=${if (producersExist) 1 else 0},pCount=${producerCount ?: -1},pidCount=${producerIdsCount ?: -1},shape=$responseShape,fallback=${if (onlyProducersExistKey) 1 else 0}"
+                "community=${if (community) 1 else 0},producers=${if (producersExist) 1 else 0},pCount=${producerCount ?: -1},pidCount=${producerIdsCount ?: -1},shape=$responseShape"
             )
 
-            if (shouldAttemptProducerFetch) {
+            if (producersExist) {
                 // Retrieve piped producers for each level if producers exist
                 for (islevel in levels) {
                     val optionsGetPipedProducersAlt = GetPipedProducersAltOptions(

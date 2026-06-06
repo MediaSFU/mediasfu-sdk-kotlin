@@ -12,9 +12,6 @@ import platform.AVFoundation.AVCaptureDevice
 import platform.AVFoundation.AVCaptureDeviceFormat
 import platform.AVFoundation.AVFrameRateRange
 import cocoapods.WebRTC.RTCAudioSource
-import platform.AVFoundation.AVCaptureVideoDataOutput
-import platform.AVFoundation.AVCaptureConnection
-import platform.AVFoundation.AVCaptureVideoOrientationPortrait
 
 import cocoapods.WebRTC.RTCAudioSession
 import cocoapods.WebRTC.RTCAudioTrack
@@ -28,14 +25,12 @@ import cocoapods.WebRTC.RTCVideoCapturerDelegateProtocol
 import cocoapods.WebRTC.RTCVideoFrame
 import cocoapods.WebRTC.RTCVideoSource
 import cocoapods.WebRTC.RTCVideoTrack
-import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.CPointerVar
 import kotlinx.cinterop.CValuesRef
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.pointed
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.useContents
 import kotlinx.cinterop.usePinned
@@ -194,9 +189,10 @@ class IOSWebRtcDevice private constructor() : WebRtcDevice {
                 // still provides a good quality preview on physical devices.
                 val requestedWidth = resolveIntConstraint(effectiveVideoConstraints["width"], fallback = 640)
                 val requestedHeight = resolveIntConstraint(effectiveVideoConstraints["height"], fallback = 480)
-                // Cap iOS defaults to VGA to keep capture/encode smooth on physical devices.
-                val captureWidth = requestedWidth.coerceAtMost(640)
-                val captureHeight = requestedHeight.coerceAtMost(480)
+                // Cap iOS capture to VGA-ish sizes while preserving portrait/landscape shape.
+                val cappedCaptureSize = capCameraCaptureSize(requestedWidth, requestedHeight)
+                val captureWidth = cappedCaptureSize.width
+                val captureHeight = cappedCaptureSize.height
                 val captureFrameRate = resolveFrameRate(effectiveVideoConstraints["frameRate"], fallback = 30)
                 val requestedDeviceId = resolveStringConstraint(effectiveVideoConstraints["deviceId"])
                 val requestedFacingMode = resolveFacingMode(effectiveVideoConstraints["facingMode"])
@@ -232,18 +228,20 @@ class IOSWebRtcDevice private constructor() : WebRtcDevice {
                     )
 
                     activeCameraCapture?.stop()
-                    val frameDelegate = IOSCameraFrameDelegate(videoSource) { activeCameraFrameProcessor }
-                    val delegate: RTCVideoCapturerDelegateProtocol = frameDelegate
-                    val capturer = RTCCameraVideoCapturer(delegate)
+                    val captureHandles = IOSCameraCaptureSession.createCapturer(
+                        videoSource = videoSource,
+                        frameProcessorProvider = { activeCameraFrameProcessor }
+                    )
                     cameraSession = IOSCameraCaptureSession(
-                        capturer = capturer,
-                        frameDelegate = frameDelegate,
+                        capturer = captureHandles.capturer,
+                        frameDelegate = captureHandles.frameDelegate,
                         videoSource = videoSource,
                         device = captureDevice,
                         format = captureFormat,
                         targetWidth = captureWidth,
                         targetHeight = captureHeight,
-                        frameRate = captureFrameRate
+                        frameRate = captureFrameRate,
+                        frameProcessorProvider = { activeCameraFrameProcessor }
                     )
                     cameraSession.start()
                     activeCameraCapture = cameraSession
@@ -525,7 +523,13 @@ class IOSWebRtcDevice private constructor() : WebRtcDevice {
     }
 
     internal fun setCameraFrameProcessor(processor: ((RTCVideoFrame) -> RTCVideoFrame)?) {
+        val wasProcessing = activeCameraFrameProcessor != null
+        val willProcess = processor != null
         activeCameraFrameProcessor = processor
+
+        if (wasProcessing != willProcess) {
+            activeCameraCapture?.restartForFrameProcessor()
+        }
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -781,6 +785,33 @@ class IOSWebRtcDevice private constructor() : WebRtcDevice {
         val areaDelta: Long
     )
 
+    private data class CaptureSize(
+        val width: Int,
+        val height: Int
+    )
+
+    private fun capCameraCaptureSize(width: Int, height: Int): CaptureSize {
+        val safeWidth = width.coerceAtLeast(16)
+        val safeHeight = height.coerceAtLeast(16)
+        val isPortrait = safeHeight > safeWidth
+        val maxWidth = if (isPortrait) 480.0 else 640.0
+        val maxHeight = if (isPortrait) 640.0 else 480.0
+        val scale = minOf(
+            1.0,
+            maxWidth / safeWidth.toDouble(),
+            maxHeight / safeHeight.toDouble()
+        )
+        return CaptureSize(
+            width = evenDimension((safeWidth * scale).toInt()),
+            height = evenDimension((safeHeight * scale).toInt())
+        )
+    }
+
+    private fun evenDimension(value: Int): Int {
+        val safe = value.coerceAtLeast(16)
+        return if (safe % 2 == 0) safe else safe - 1
+    }
+
     private fun resolveIntConstraint(value: Any?, fallback: Int): Int {
         return when (value) {
             is Number -> value.toInt()
@@ -950,7 +981,7 @@ class IOSWebRtcDevice private constructor() : WebRtcDevice {
                         if (emittedFrames == 1 || emittedFrames % (safeFrameRate * 5) == 0) {
                             Logger.i(
                                 "IOSWebRtcDevice",
-                                "Simulator fallback frame heartbeat frames=$emittedFrames processorActive=${activeCameraFrameProcessor != null}"
+                                "Simulator fallback frame heartbeat frames=$emittedFrames"
                             )
                         }
                     } else if (frameIndex == 0) {
@@ -980,8 +1011,7 @@ class IOSWebRtcDevice private constructor() : WebRtcDevice {
                         rotation = 0,
                         timeStampNs = currentTimestampNs()
                     )
-                    val processedFrame = activeCameraFrameProcessor?.invoke(fallbackFrame) ?: fallbackFrame
-                    videoSource.capturer(capturer, didCaptureVideoFrame = processedFrame)
+                    videoSource.capturer(capturer, didCaptureVideoFrame = fallbackFrame)
                     true
                 }
             } finally {
@@ -1207,15 +1237,15 @@ class IOSWebRtcDevice private constructor() : WebRtcDevice {
     }
 
     private class IOSCameraCaptureSession(
-        val capturer: RTCCameraVideoCapturer,
-        @Suppress("unused")
-        val frameDelegate: IOSCameraFrameDelegate?,
+        var capturer: RTCCameraVideoCapturer,
+        var frameDelegate: IOSCameraFrameDelegate?,
         val videoSource: RTCVideoSource,
         val device: AVCaptureDevice,
         val format: AVCaptureDeviceFormat,
         val targetWidth: Int,
         val targetHeight: Int,
-        val frameRate: Int
+        val frameRate: Int,
+        val frameProcessorProvider: () -> ((RTCVideoFrame) -> RTCVideoFrame)?
     ) {
         var started = false
 
@@ -1237,30 +1267,20 @@ class IOSWebRtcDevice private constructor() : WebRtcDevice {
                 "IOSWebRtcDevice",
                 "Starting camera capture device=${device.localizedName} requested=${targetWidth}x${targetHeight}@${frameRate}fps selected=${formatSummary(format)}@${selectedFrameRate}fps"
             )
-            capturer.startCaptureWithDevice(device, format, selectedFrameRate.toLong())
-            
-            // Set AVCaptureConnection.videoOrientation to Portrait
-            val session = capturer.captureSession
-            if (session != null) {
-                val outputsList = session.outputs as? List<*>
-                if (outputsList != null) {
-                    for (output in outputsList) {
-                        val dataOutput = output as? platform.AVFoundation.AVCaptureVideoDataOutput
-                        if (dataOutput != null) {
-                            val connectionsList = dataOutput.connections as? List<*>
-                            if (connectionsList != null) {
-                                for (connection in connectionsList) {
-                                    val conn = connection as? platform.AVFoundation.AVCaptureConnection
-                                    if (conn != null && conn.isVideoOrientationSupported()) {
-                                        conn.videoOrientation = platform.AVFoundation.AVCaptureVideoOrientationPortrait
-                                    }
-                                }
-                            }
-                        }
+            capturer.startCaptureWithDevice(
+                device,
+                format,
+                selectedFrameRate.toLong(),
+                completionHandler = { error ->
+                    if (error != null) {
+                        Logger.e(
+                            "IOSWebRtcDevice",
+                            "Camera capture start failed device=${device.localizedName}: ${error.localizedDescription}"
+                        )
                     }
                 }
-            }
-            
+            )
+
             started = true
         }
 
@@ -1271,13 +1291,55 @@ class IOSWebRtcDevice private constructor() : WebRtcDevice {
             started = false
         }
 
+        fun restartForFrameProcessor() {
+            val wasStarted = started
+            if (wasStarted) {
+                capturer.stopCapture()
+                started = false
+            }
+
+            val handles = createCapturer(videoSource, frameProcessorProvider)
+            capturer = handles.capturer
+            frameDelegate = handles.frameDelegate
+
+            if (wasStarted) {
+                start()
+            }
+        }
+
         private fun formatSummary(format: AVCaptureDeviceFormat): String {
             val dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             val width = dimensions.useContents { this.width.toInt() }
             val height = dimensions.useContents { this.height.toInt() }
             return "${width}x${height}"
         }
+
+        companion object {
+            fun createCapturer(
+                videoSource: RTCVideoSource,
+                frameProcessorProvider: () -> ((RTCVideoFrame) -> RTCVideoFrame)?
+            ): CameraCapturerHandles {
+                if (frameProcessorProvider() == null) {
+                    return CameraCapturerHandles(
+                        capturer = RTCCameraVideoCapturer(videoSource),
+                        frameDelegate = null
+                    )
+                }
+
+                val frameDelegate = IOSCameraFrameDelegate(videoSource, frameProcessorProvider)
+                val delegate: RTCVideoCapturerDelegateProtocol = frameDelegate
+                return CameraCapturerHandles(
+                    capturer = RTCCameraVideoCapturer(delegate),
+                    frameDelegate = frameDelegate
+                )
+            }
+        }
     }
+
+    private data class CameraCapturerHandles(
+        val capturer: RTCCameraVideoCapturer,
+        val frameDelegate: IOSCameraFrameDelegate?
+    )
 
     private class IOSCameraFrameDelegate(
         private val videoSource: RTCVideoSource,
@@ -1316,6 +1378,7 @@ class IOSWebRtcDevice private constructor() : WebRtcDevice {
                     timeStampNs = didCaptureVideoFrame.timeStampNs
                 )
             }
+
             framesSinceHeartbeat += 1
             val lastHeartbeat = lastHeartbeatAtMs
             if (lastHeartbeat == null) {

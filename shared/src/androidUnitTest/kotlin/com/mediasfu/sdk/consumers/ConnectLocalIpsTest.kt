@@ -124,6 +124,31 @@ class ConnectLocalIpsTest {
         assertTrue(result.isSuccess)
         assertTrue(customMethodCalled) // This is called immediately
     }
+
+    @Test
+    fun connectLocalIps_whenAlreadyListening_shouldNotReinitializePipedTransports() = runTest {
+        // Given
+        every { mockSocket.hasListener("new-producer") } returns true
+        var receiveCalled = false
+        val customReceiveMethod: suspend (ReceiveAllPipedTransportsOptions) -> Unit = { _ ->
+            receiveCalled = true
+        }
+
+        val options = ConnectLocalIpsOptions(
+            socket = mockSocket,
+            receiveAllPipedTransportsMethod = customReceiveMethod,
+            parameters = mockParameters
+        )
+
+        // When
+        val result = connectLocalIps(options)
+
+        // Then
+        assertTrue(result.isSuccess)
+        assertFalse(receiveCalled)
+        verify(exactly = 0) { mockSocket.on("new-producer", any()) }
+        verify(exactly = 0) { mockSocket.on("producer-closed", any()) }
+    }
     
     @Test
     fun connectLocalIps_shouldInitializePipedTransports() = runTest {

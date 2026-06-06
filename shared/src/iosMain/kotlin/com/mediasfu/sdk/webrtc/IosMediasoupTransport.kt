@@ -55,10 +55,11 @@ internal class IosMediasoupTransport private constructor(
                         "produce kind override native=$kind effective=${effectiveKind.name.lowercase()} transportId=${sendHandle.id}"
                     )
                 }
+                val parsedRtpParameters = parseRtpParametersBridgeJson(rtpParametersJson)
                 handler(
                     ProduceData(
                         kind = effectiveKind,
-                        rtpParameters = parseRtpParametersBridgeJson(rtpParametersJson),
+                        rtpParameters = parsedRtpParameters,
                         appData = parseAppDataBridgeJson(appDataJson),
                         callback = callback,
                         errback = errback
@@ -81,9 +82,10 @@ internal class IosMediasoupTransport private constructor(
     ): WebRtcProducer {
         val sendHandle = handle as? IosNativeSendTransportHandle
             ?: throw IllegalStateException("produce called on non-send iOS transport")
+        val effectiveEncodings = stabilizeIosVideoEncodings(track.kind, encodings)
         Logger.i(
             "IosMediasoupTransport",
-            "produce begin transportId=${sendHandle.id} trackId=${track.id} kind=${track.kind} encodings=${encodings.size} hasAppData=${appData != null}"
+            "produce begin transportId=${sendHandle.id} trackId=${track.id} kind=${track.kind} encodings=${effectiveEncodings.size} originalEncodings=${encodings.size} hasAppData=${appData != null}"
         )
         throwIfBridgeReportedError(
             rawId = sendHandle.id,
@@ -92,7 +94,7 @@ internal class IosMediasoupTransport private constructor(
         val nativeTrack = track.asPlatformNativeTrack() as? RTCMediaStreamTrack
             ?: throw IllegalArgumentException("Unsupported iOS track implementation: ${track::class.simpleName}")
 
-        val encodingsJson = buildIosProduceEncodingsJson(track.kind, encodings)
+        val encodingsJson = buildIosProduceEncodingsJson(track.kind, effectiveEncodings)
         val codecOptionsJson: String? = null
         val codecJson: String? = null
 
@@ -220,6 +222,27 @@ internal fun buildIosProduceEncodingsJson(
         map
     }
     .toIosBridgeJsonString()
+
+private fun stabilizeIosVideoEncodings(
+    kind: String,
+    encodings: List<RtpEncodingParameters>
+): List<RtpEncodingParameters> {
+    if (!kind.equals("video", ignoreCase = true) || encodings.size <= 1) {
+        return encodings
+    }
+
+    val fullQualityEncoding = encodings.firstOrNull { it.scaleResolutionDownBy == null }
+        ?: encodings.maxByOrNull { it.maxBitrate ?: 0 }
+        ?: encodings.last()
+
+    return listOf(
+        fullQualityEncoding.copy(
+            rid = null,
+            scalabilityMode = null,
+            scaleResolutionDownBy = null
+        )
+    )
+}
 
 @OptIn(ExperimentalForeignApi::class)
 internal class IosWebRtcProducer(

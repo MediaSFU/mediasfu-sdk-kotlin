@@ -4,6 +4,7 @@ import com.mediasfu.sdk.socket.TestSocketManager
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 private class ReceiveAllBootstrapSocket(
@@ -51,23 +52,25 @@ class ReceiveAllPipedTransportsTest {
     }
 
     @Test
-    fun receiveAllPipedTransports_fallsBackToLevelFetchWhenCreateReceiveTimesOut() = runTest {
+    fun receiveAllPipedTransports_doesNotLevelFetchWhenCreateReceiveTimesOut() = runTest {
         val socket = ReceiveAllBootstrapSocket(
             createReceiveError = IllegalStateException("Acknowledgment timeout for event 'createReceiveAllTransportsPiped'")
         )
         val fetchedLevels = mutableListOf<String>()
 
-        receiveAllPipedTransportsImpl(
-            nsock = socket,
-            community = false,
-            roomName = "room-1",
-            member = "member-1",
-            getPipedProducersAlt = { fetchedLevels += it.islevel }
-        )
+        assertFailsWith<IllegalStateException> {
+            receiveAllPipedTransportsImpl(
+                nsock = socket,
+                community = false,
+                roomName = "room-1",
+                member = "member-1",
+                getPipedProducersAlt = { fetchedLevels += it.islevel }
+            )
+        }
 
         assertTrue(socket.ackCalls.isNotEmpty())
         assertEquals("createReceiveAllTransportsPiped", socket.ackCalls.first().first)
-        assertEquals(listOf("0", "1", "2"), fetchedLevels)
+        assertTrue(fetchedLevels.isEmpty())
     }
 
     @Test

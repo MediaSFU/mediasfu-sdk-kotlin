@@ -557,17 +557,7 @@ private fun setupSendTransportHandlers(
             addRtcpFeedbackToCodecs(normalizedRtpMap, produceKind)
         )
 
-        // Filter out urn:3gpp:video-orientation to prevent rotated video on iOS endpoints
-        val originalHeaderExtensions = fixedRtpMap["headerExtensions"] as? List<*>
-        val filteredHeaderExtensions = originalHeaderExtensions?.filter { ext ->
-            val extMap = ext as? Map<*, *>
-            extMap?.get("uri")?.toString() != "urn:3gpp:video-orientation"
-        }
-        val cleanRtpMap = fixedRtpMap.toMutableMap().apply {
-            if (filteredHeaderExtensions != null) {
-                put("headerExtensions", filteredHeaderExtensions)
-            }
-        }
+        val cleanRtpMap = fixedRtpMap.applyCurrentPlatformHeaderExtensionPolicy()
 
         findFirstNullTypePath(cleanRtpMap)?.let { nullTypePath ->
             Logger.e(
@@ -591,22 +581,13 @@ private fun setupSendTransportHandlers(
             "CreateSendTransport",
             "transport-produce start transportId=${transport.id} kind=$produceKind codecs=${(cleanRtpMap["codecs"] as? List<*>)?.size ?: 0} encodings=${(cleanRtpMap["encodings"] as? List<*>)?.size ?: 0} hasAppData=${produceData.appData != null}"
         )
-        // === DIAGNOSTIC: Verify urn:3gpp:video-orientation is excluded from produce RTP params ===
-        val produceHeaderExts = (cleanRtpMap["headerExtensions"] as? List<*>)
-            ?.mapNotNull { (it as? Map<*, *>)?.get("uri")?.toString() }
-            ?: emptyList()
-        val hasVideoOrientation = produceHeaderExts.any { it == "urn:3gpp:video-orientation" }
-        Logger.w(
-            "CreateSendTransport",
-            "ORIENTATION-CHECK transport-produce transportId=${transport.id} kind=$produceKind hasVideoOrientation=$hasVideoOrientation headerExtUris=$produceHeaderExts"
-        )
         MediaSFURuntimeProbe.recordProducerSignalStage(
             "produce-request",
             produceKind,
             describeProduceRequest(
                 transportId = transport.id,
                 kind = produceKind,
-                rtpMap = fixedRtpMap,
+                rtpMap = cleanRtpMap,
                 appData = produceData.appData
             )
         )

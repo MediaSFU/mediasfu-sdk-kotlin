@@ -6,7 +6,6 @@ import cocoapods.WebRTC.RTCCVPixelBuffer
 import cocoapods.WebRTC.RTCVideoFrame
 import cocoapods.WebRTC.RTCVideoRendererProtocol
 import cocoapods.WebRTC.RTCVideoTrack
-import cocoapods.WebRTC.RTCVideoRotation_0
 import com.mediasfu.sdk.model.BackgroundType
 import com.mediasfu.sdk.model.VirtualBackground
 import com.mediasfu.sdk.util.Logger
@@ -319,11 +318,7 @@ internal class IOSVirtualBackgroundProcessor : VirtualBackgroundProcessor {
     private fun processFrameSynchronously(frame: RTCVideoFrame): RTCVideoFrame {
         val background = _currentBackground
         if (!_isProcessing || background == null || background.type == BackgroundType.NONE) {
-            return RTCVideoFrame(
-                buffer = frame.buffer,
-                rotation = RTCVideoRotation_0,
-                timeStampNs = frame.timeStampNs
-            )
+            return frame
         }
 
         scheduleMaskRefresh(frame)
@@ -338,14 +333,14 @@ internal class IOSVirtualBackgroundProcessor : VirtualBackgroundProcessor {
             )
             result?.frame ?: RTCVideoFrame(
                 buffer = frame.buffer,
-                rotation = RTCVideoRotation_0,
+                rotation = frame.rotation,
                 timeStampNs = frame.timeStampNs
             )
         } catch (e: Throwable) {
             Logger.d("IOSVirtualBackgr", "$TAG: sync frame error -> ${e.message}")
             RTCVideoFrame(
                 buffer = frame.buffer,
-                rotation = RTCVideoRotation_0,
+                rotation = frame.rotation,
                 timeStampNs = frame.timeStampNs
             )
         }
@@ -410,7 +405,6 @@ internal class IOSVirtualBackgroundProcessor : VirtualBackgroundProcessor {
         }
 
         val outputPixelBuffer = getOrCreateOutputPixelBuffer(width = width, height = height)
-        val isRotated = false
         val displayWidth = width
         val displayHeight = height
 
@@ -423,7 +417,7 @@ internal class IOSVirtualBackgroundProcessor : VirtualBackgroundProcessor {
             return RenderedFrame(
                 frame = RTCVideoFrame(
                     buffer = frame.buffer,
-                    rotation = RTCVideoRotation_0,
+                    rotation = frame.rotation,
                     timeStampNs = frame.timeStampNs
                 ),
                 width = displayWidth,
@@ -436,7 +430,7 @@ internal class IOSVirtualBackgroundProcessor : VirtualBackgroundProcessor {
 
         val outputFrame = RTCVideoFrame(
             buffer = RTCCVPixelBuffer(outputPixelBuffer),
-            rotation = RTCVideoRotation_0,
+            rotation = frame.rotation,
             timeStampNs = frame.timeStampNs
         )
 

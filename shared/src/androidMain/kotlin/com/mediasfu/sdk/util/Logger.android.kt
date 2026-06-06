@@ -17,26 +17,34 @@ actual object Logger {
             tag
         }
     }
+
+    private inline fun safeLog(block: () -> Unit) {
+        try {
+            block()
+        } catch (_: RuntimeException) {
+            // Host-side Android unit tests use stubbed android.util.Log methods that throw.
+        }
+    }
     
     actual fun d(tag: String, message: String) {
         if (isDebugEnabled) {
-            AndroidLog.d(sanitizeTag(tag), message)
+            safeLog { AndroidLog.d(sanitizeTag(tag), message) }
         }
     }
     
     actual fun i(tag: String, message: String) {
-        AndroidLog.i(sanitizeTag(tag), message)
+        safeLog { AndroidLog.i(sanitizeTag(tag), message) }
     }
     
     actual fun w(tag: String, message: String) {
-        AndroidLog.w(sanitizeTag(tag), message)
+        safeLog { AndroidLog.w(sanitizeTag(tag), message) }
     }
     
     actual fun e(tag: String, message: String) {
-        AndroidLog.e(sanitizeTag(tag), message)
+        safeLog { AndroidLog.e(sanitizeTag(tag), message) }
     }
     
     actual fun e(tag: String, message: String, throwable: Throwable) {
-        AndroidLog.e(sanitizeTag(tag), message, throwable)
+        safeLog { AndroidLog.e(sanitizeTag(tag), message, throwable) }
     }
 }

@@ -1,11 +1,9 @@
 package com.mediasfu.sdk.producer_client
-import com.mediasfu.sdk.util.Logger
 
 import com.mediasfu.sdk.webrtc.RtpCapabilities
 import com.mediasfu.sdk.webrtc.WebRtcDevice
 import com.mediasfu.sdk.webrtc.WebRtcFactory
-import com.mediasfu.sdk.webrtc.debugJson
-import com.mediasfu.sdk.webrtc.debugSummary
+import com.mediasfu.sdk.webrtc.applyCurrentPlatformHeaderExtensionPolicy
 
 /**
  * Options for creating a mediasoup client device.
@@ -48,29 +46,10 @@ suspend fun createDeviceClient(options: CreateDeviceClientOptions): WebRtcDevice
         // Initialize the mediasoup client device
         val device = WebRtcFactory.createDevice()
 
-        val originalRouterCaps = options.rtpCapabilities!!
-
-        // Remove orientation capabilities to prevent rotated video on iOS endpoints
-        val filteredHeaderExtensions = originalRouterCaps.headerExtensions.filter { ext ->
-            ext.uri != "urn:3gpp:video-orientation"
-        }
-        val routerCaps = originalRouterCaps.copy(headerExtensions = filteredHeaderExtensions)
+        val routerCaps = options.rtpCapabilities!!
+            .applyCurrentPlatformHeaderExtensionPolicy()
 
         device.load(routerCaps).getOrThrow()
-
-        // === DIAGNOSTIC: Verify urn:3gpp:video-orientation was filtered out ===
-        val removedCount = originalRouterCaps.headerExtensions.size - filteredHeaderExtensions.size
-        Logger.w(
-            "CreateDeviceClient",
-            "ORIENTATION-CHECK device loaded: originalHeaderExts=${originalRouterCaps.headerExtensions.size} filteredHeaderExts=${filteredHeaderExtensions.size} removedOrientationExts=$removedCount"
-        )
-        device.currentRtpCapabilities()?.let { currentCaps ->
-            val deviceHasOrientation = currentCaps.headerExtensions.any { it.uri == "urn:3gpp:video-orientation" }
-            Logger.w(
-                "CreateDeviceClient",
-                "ORIENTATION-CHECK device.currentRtpCapabilities headerExts=${currentCaps.headerExtensions.size} hasVideoOrientation=$deviceHasOrientation uris=${currentCaps.headerExtensions.map { it.uri }}"
-            )
-        }
         
         device
     } catch (error: Exception) {
