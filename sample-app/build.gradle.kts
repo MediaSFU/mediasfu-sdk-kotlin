@@ -53,8 +53,8 @@ android {
 dependencies {
     // For local development: implementation(project(":shared"))
     // For production (Maven Central):
-    implementation("com.mediasfu:mediasfu-sdk-android:1.0.1")
-    implementation("com.mediasfu:mediasoup-client:1.0.1")
+    implementation("com.mediasfu:mediasfu-sdk-android:1.0.3")
+    implementation("com.mediasfu:mediasoup-client:1.0.2")
 
     implementation(platform("androidx.compose:compose-bom:2024.09.01"))
     implementation("androidx.compose.ui:ui")

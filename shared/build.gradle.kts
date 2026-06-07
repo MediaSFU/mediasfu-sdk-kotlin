@@ -11,7 +11,7 @@ plugins {
     signing
 }
 
-val sdkVersion = providers.gradleProperty("pomVersion").orElse("1.0.2").get()
+val sdkVersion = providers.gradleProperty("pomVersion").orElse("1.0.3").get()
 
 repositories {
     google()
@@ -85,7 +85,7 @@ kotlin {
         val androidMain by getting {
             dependencies {
                 // Mediasoup Android bindings from Maven Central
-                compileOnly("com.mediasfu:mediasoup-client:1.0.1")
+                compileOnly("com.mediasfu:mediasoup-client:1.0.2")
                 implementation("io.ktor:ktor-client-okhttp:2.3.11")
 
                 // ML Kit Selfie Segmentation for virtual backgrounds
