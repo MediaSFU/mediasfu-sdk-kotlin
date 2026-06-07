@@ -7,6 +7,11 @@ iOS app without writing any Kotlin or managing the underlying media layer direct
 For the lower-level standalone WebRTC client package, see
 [mediasfu-mediasoup-client-apple](https://github.com/MediaSFU/mediasfu-mediasoup-client-apple).
 
+## Packaging Note
+
+- `MediaSFUIosHostBridge` and the hosted MediaSFU iOS UI come from the generated KMP `MediaSFUSDK` / `shared` framework in this repository.
+- The separate `mediasfu-apple-sdk` and in-repo `ios-native-bridge` packages are companion native bridge layers. They help wire native mediasoup/WebRTC into the KMP runtime, but they do not replace the exported KMP framework itself.
+
 ## What You Get
 
 - **`MediaSFUIosHostBridge`** — the single entry point for presenting the MediaSFU UI from Swift.
