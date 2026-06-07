@@ -11,6 +11,7 @@ For the lower-level standalone WebRTC client package, see
 
 - `MediaSFUIosHostBridge` and the hosted MediaSFU iOS UI come from the generated KMP `MediaSFUSDK` / `shared` framework in this repository.
 - The separate `mediasfu-apple-sdk` and in-repo `ios-native-bridge` packages are companion native bridge layers. They help wire native mediasoup/WebRTC into the KMP runtime, but they do not replace the exported KMP framework itself.
+- During Apple release prep, run `scripts/sync_apple_sdk_workspace.sh` from this repo to generate the Apple-ready KMP artifact into the sibling `mediasfu-apple-sdk` workspace.
 
 ## What You Get
 
