@@ -38,12 +38,12 @@ Set `localLink` only when connecting to a self-hosted MediaSFU CE backend, for e
 
 ## Install
 
-Add the MediaSFU SDK pod to your `Podfile`:
+Today the hosted iOS runtime is consumed from the KMP repo's generated podspec. Add the source-based pod to your `Podfile`:
 
 ```ruby
 target 'YourApp' do
   use_frameworks!
-  pod 'MediaSFUSDK'  # or the path-based variant when consuming from source
+  pod 'shared', :path => '../path/to/mediasfu-sdk-kotlin/shared'
 end
 ```
 
