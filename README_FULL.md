@@ -143,19 +143,21 @@ dependencyResolutionManagement {
 // build.gradle.kts (app level)
 dependencies {
     // For Android-only projects (recommended):
-    implementation("com.mediasfu:mediasfu-sdk-android:1.0.3")
+    implementation("com.mediasfu:mediasfu-sdk-android:1.0.4")
     
     // For Kotlin Multiplatform projects:
-    // implementation("com.mediasfu:mediasfu-sdk:1.0.3")
+    // implementation("com.mediasfu:mediasfu-sdk:1.0.4")
 }
 ```
+
+The Android SDK supplies `com.mediasfu:mediasoup-client:1.0.7` transitively. Do not add or pin an older client version.
 
 **Gradle (Groovy)**
 
 ```groovy
 // build.gradle (app level)
 dependencies {
-    implementation 'com.mediasfu:mediasfu-sdk:1.0.3'
+    implementation 'com.mediasfu:mediasfu-sdk:1.0.4'
 }
 ```
 
@@ -239,10 +241,10 @@ Get your first MediaSFU app running in just a few minutes.
 // build.gradle.kts
 dependencies {
     // For Android-only projects (recommended):
-    implementation("com.mediasfu:mediasfu-sdk-android:1.0.3")
+    implementation("com.mediasfu:mediasfu-sdk-android:1.0.4")
     
     // For Kotlin Multiplatform projects:
-    // implementation("com.mediasfu:mediasfu-sdk:1.0.3")
+    // implementation("com.mediasfu:mediasfu-sdk:1.0.4")
 }
 ```
 

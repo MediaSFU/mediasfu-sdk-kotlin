@@ -4,9 +4,14 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val sdkVersion = rootProject.extra["sdkVersion"] as String
+val usePublishedSdk = providers.gradleProperty("usePublishedSdk")
+    .map(String::toBoolean)
+    .orElse(false)
+
 android {
     namespace = "com.mediasfu.sample"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.mediasfu.sample"
@@ -51,10 +56,13 @@ android {
 }
 
 dependencies {
-    // For local development: implementation(project(":shared"))
-    // For production (Maven Central):
-    implementation("com.mediasfu:mediasfu-sdk-android:1.0.3")
-    implementation("com.mediasfu:mediasoup-client:1.0.2")
+    if (usePublishedSdk.get()) {
+        implementation("com.mediasfu:mediasfu-sdk-android:$sdkVersion")
+    } else {
+        implementation(project(":shared"))
+    }
+
+    // mediasoup-client is supplied transitively by the SDK.
 
     implementation(platform("androidx.compose:compose-bom:2024.09.01"))
     implementation("androidx.compose.ui:ui")

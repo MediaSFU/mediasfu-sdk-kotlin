@@ -7,7 +7,7 @@ android.nonTransitiveRClass=true
 # =================================================================
 # MediaSFU SDK Kotlin - Publishing Configuration
 # =================================================================
-pomVersion=1.0.3
+# Release versions are tracked in version.properties.
 pomGroup=com.mediasfu
 pomArtifactId=mediasfu-sdk
 pomName=MediaSFU Kotlin Multiplatform SDK

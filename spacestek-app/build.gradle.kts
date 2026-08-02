@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.mediasfu.spacestek"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.mediasfu.spacestek"

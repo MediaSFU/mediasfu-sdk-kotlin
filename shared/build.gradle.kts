@@ -11,7 +11,8 @@ plugins {
     signing
 }
 
-val sdkVersion = providers.gradleProperty("pomVersion").orElse("1.0.3").get()
+val sdkVersion = rootProject.extra["sdkVersion"] as String
+val mediasoupClientVersion = rootProject.extra["mediasoupClientVersion"] as String
 
 repositories {
     google()
@@ -85,7 +86,7 @@ kotlin {
         val androidMain by getting {
             dependencies {
                 // Mediasoup Android bindings from Maven Central
-                compileOnly("com.mediasfu:mediasoup-client:1.0.2")
+                api("com.mediasfu:mediasoup-client:$mediasoupClientVersion")
                 implementation("io.ktor:ktor-client-okhttp:2.3.11")
 
                 // ML Kit Selfie Segmentation for virtual backgrounds
@@ -131,7 +132,7 @@ kotlin {
 
 android {
     namespace = "com.mediasfu.sdk"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         minSdk = 24
@@ -182,6 +183,19 @@ mavenPublishing {
             connection.set("scm:git:git://github.com/MediaSFU/mediasfu-sdk-kotlin.git")
             developerConnection.set("scm:git:ssh://git@github.com/MediaSFU/mediasfu-sdk-kotlin.git")
         }
+    }
+}
+
+tasks.configureEach {
+    if (name in listOf(
+            "publishToMavenCentral",
+            "publishAndReleaseToMavenCentral",
+            "publishAllPublicationsToMavenCentralRepository",
+            "publishKotlinMultiplatformPublicationToMavenCentralRepository",
+            "publishAndroidReleasePublicationToMavenCentralRepository"
+        )
+    ) {
+        dependsOn(rootProject.tasks.named("checkDocumentationVersions"))
     }
 }
 
