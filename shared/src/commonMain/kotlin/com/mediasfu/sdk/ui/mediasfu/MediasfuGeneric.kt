@@ -9817,6 +9817,7 @@ class AlertState(private val parameters: MediasfuParameters) {
 data class MediasfuGenericOptions(
     val preJoinPageWidget: (@Composable (MediasfuGenericState) -> Unit)? = null,
     val localLink: String = "",
+    val cloudRoomsEndpoint: String = com.mediasfu.sdk.methods.utils.MEDIA_SFU_CLOUD_ROOMS_ENDPOINT,
     val connectMediaSFU: Boolean = true,
     val credentials: Credentials? = null,
     val useLocalUIMode: Boolean? = null,

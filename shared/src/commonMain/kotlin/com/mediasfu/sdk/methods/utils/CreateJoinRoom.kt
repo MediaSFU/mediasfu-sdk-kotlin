@@ -72,6 +72,9 @@ suspend fun createJoinRoom(
     val localLink = payload.stringValue("localLink")
         ?: payload.stringValue("link")
         ?: ""
+    val cloudRoomsEndpoint = payload.stringValue("cloudRoomsEndpoint")
+        ?: payload.stringValue("roomsEndpoint")
+        ?: MEDIA_SFU_CLOUD_ROOMS_ENDPOINT
 
     return try {
         when (action) {
@@ -114,7 +117,8 @@ suspend fun createJoinRoom(
                         payload = createOptions,
                         apiUserName = trimmedUser,
                         apiKey = trimmedKey,
-                        localLink = localLink
+                        localLink = localLink,
+                        cloudRoomsEndpoint = cloudRoomsEndpoint
                     )
                 )
             }
@@ -143,7 +147,8 @@ suspend fun createJoinRoom(
                         payload = joinOptions,
                         apiUserName = trimmedUser,
                         apiKey = trimmedKey,
-                        localLink = localLink
+                        localLink = localLink,
+                        cloudRoomsEndpoint = cloudRoomsEndpoint
                     )
                 )
             }

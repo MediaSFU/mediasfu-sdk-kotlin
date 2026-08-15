@@ -67,6 +67,10 @@ FAIL_ON_OPTIONAL_PROBE_FAILURE="${MEDIASFU_FAIL_ON_OPTIONAL_PROBE_FAILURE:-0}"
 USE_INSTALLED_APP="${MEDIASFU_USE_INSTALLED_APP:-0}"
 INSTALLED_APP_PROBE_TIMEOUT_SECONDS="${MEDIASFU_INSTALLED_APP_PROBE_TIMEOUT_SECONDS:-90}"
 PRESYNC_SHARED_FRAMEWORK="${MEDIASFU_PRESYNC_SHARED_FRAMEWORK:-1}"
+XCODEBUILD_PROVISIONING_ARGS=()
+if [[ "${MEDIASFU_ALLOW_PROVISIONING_UPDATES:-0}" == "1" ]]; then
+  XCODEBUILD_PROVISIONING_ARGS+=("-allowProvisioningUpdates")
+fi
 
 CHROME_PID=""
 EVIDENCE_PID=""
@@ -383,6 +387,7 @@ ensure_xctrunner_container() {
 
   echo "XCTest runner container is not ready; installing it with a bootstrap UI test."
   xcodebuild \
+    "${XCODEBUILD_PROVISIONING_ARGS[@]}" \
     -workspace MediaSFUSampleApp.xcworkspace \
     -scheme "$SCHEME" \
     -destination "platform=iOS,id=$DEVICE_ID" \
@@ -777,6 +782,7 @@ run_probe_test() {
 
   set -o pipefail
   xcodebuild \
+    "${XCODEBUILD_PROVISIONING_ARGS[@]}" \
     -workspace MediaSFUSampleApp.xcworkspace \
     -scheme "$SCHEME" \
     -destination "platform=iOS,id=$DEVICE_ID" \

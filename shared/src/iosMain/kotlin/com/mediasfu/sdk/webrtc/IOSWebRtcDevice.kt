@@ -120,15 +120,16 @@ class IOSWebRtcDevice private constructor() : WebRtcDevice {
 
     override suspend fun load(rtpCapabilities: RtpCapabilities): Result<Unit> {
         return runCatching {
+            val filteredCapabilities = rtpCapabilities.applyCurrentPlatformHeaderExtensionPolicy()
             val bridge = IosNativeMediasoupBridgeProvider.bridge
             val loadableBridge = bridge as? IosNativeLoadableMediasoupBridge
             if (loadableBridge != null) {
-                val loadError = loadableBridge.loadRtpCapabilitiesJson(rtpCapabilities.toIosBridgeLoadJson())
+                val loadError = loadableBridge.loadRtpCapabilitiesJson(filteredCapabilities.toIosBridgeLoadJson())
                 check(loadError.isNullOrBlank()) {
                     "iOS bridge RTP load failed: $loadError"
                 }
             }
-            lastLoadedCapabilities = fetchNativeDeviceRtpCapabilities() ?: rtpCapabilities
+            lastLoadedCapabilities = fetchNativeDeviceRtpCapabilities() ?: filteredCapabilities
         }.onFailure {
             // Do not advertise loaded RTP capabilities when the native bridge rejected the load.
             // The send-transport path uses currentRtpCapabilities() as part of its readiness gate.
@@ -422,7 +423,8 @@ class IOSWebRtcDevice private constructor() : WebRtcDevice {
     }
 
     override fun currentRtpCapabilities(): RtpCapabilities? =
-        fetchNativeDeviceRtpCapabilities() ?: lastLoadedCapabilities
+        (fetchNativeDeviceRtpCapabilities() ?: lastLoadedCapabilities)
+            ?.applyCurrentPlatformHeaderExtensionPolicy()
 
     private fun fetchNativeDeviceRtpCapabilities(): RtpCapabilities? {
         val loadableBridge = IosNativeMediasoupBridgeProvider.bridge as? IosNativeLoadableMediasoupBridge
@@ -432,7 +434,9 @@ class IOSWebRtcDevice private constructor() : WebRtcDevice {
             return null
         }
 
-        return runCatching { parseRtpCapabilitiesBridgeJson(json) }
+        return runCatching {
+            parseRtpCapabilitiesBridgeJson(json).applyCurrentPlatformHeaderExtensionPolicy()
+        }
             .onFailure { error ->
                 Logger.e(
                     "IOSWebRtcDevice",
@@ -1372,11 +1376,9 @@ class IOSWebRtcDevice private constructor() : WebRtcDevice {
             val processedFrame = if (frameProcessor != null) {
                 frameProcessor.invoke(didCaptureVideoFrame)
             } else {
-                RTCVideoFrame(
-                    buffer = didCaptureVideoFrame.buffer,
-                    rotation = cocoapods.WebRTC.RTCVideoRotation_0,
-                    timeStampNs = didCaptureVideoFrame.timeStampNs
-                )
+                // Preserve RTCCameraVideoCapturer's orientation metadata. This
+                // branch can run briefly while the processor capturer restarts.
+                didCaptureVideoFrame
             }
 
             framesSinceHeartbeat += 1

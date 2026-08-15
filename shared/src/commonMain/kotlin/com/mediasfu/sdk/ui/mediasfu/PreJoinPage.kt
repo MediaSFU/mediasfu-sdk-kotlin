@@ -379,7 +379,8 @@ fun PreJoinPage(state: MediasfuGenericState) {
                             payload = payload,
                             apiUserName = localData?.apiUserName ?: "",
                             apiKey = localData?.apiKey ?: "",
-                            localLink = options.localLink
+                            localLink = options.localLink,
+                            cloudRoomsEndpoint = options.cloudRoomsEndpoint
                         )
                     )
 
@@ -456,7 +457,8 @@ fun PreJoinPage(state: MediasfuGenericState) {
                         payload = payload,
                         apiUserName = options.credentials?.apiUserName ?: "",
                         apiKey = options.credentials?.apiKey ?: "",
-                        localLink = options.localLink
+                        localLink = options.localLink,
+                        cloudRoomsEndpoint = options.cloudRoomsEndpoint
                     )
                 )
 
@@ -594,7 +596,8 @@ fun PreJoinPage(state: MediasfuGenericState) {
                         payload = payload,
                         apiUserName = options.credentials?.apiUserName ?: "",
                         apiKey = options.credentials?.apiKey ?: "",
-                        localLink = options.localLink
+                        localLink = options.localLink,
+                        cloudRoomsEndpoint = options.cloudRoomsEndpoint
                     )
                 )
 

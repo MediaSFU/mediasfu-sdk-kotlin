@@ -260,6 +260,7 @@ ui_test_root.glob('**/*.swift').sort.each do |file|
 end
 
 if ENV['MEDIA_SFU_ENABLE_IOS_NATIVE_BRIDGE_PACKAGE'] == '1'
+  add_local_swift_package(project, target, '../../mediasfu-mediasoup-client-ios', 'MediaSFUMediasoupClient', embed: true)
   add_local_swift_package(project, target, '../ios-native-bridge', 'MediaSFUIosBridge', embed: true)
 end
 

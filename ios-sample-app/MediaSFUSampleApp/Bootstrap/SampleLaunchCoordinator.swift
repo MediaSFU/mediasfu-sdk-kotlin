@@ -13,7 +13,12 @@ final class SampleLaunchCoordinator: ObservableObject {
     private static let sessionConfigDefaultsKey = "com.mediasfu.sample.sessionConfig"
 
     init() {
-        sessionConfig = Self.loadPersistedSessionConfig()
+        if SampleAppEnvironment.resetSavedSessionRequested {
+            UserDefaults.standard.removeObject(forKey: Self.sessionConfigDefaultsKey)
+            sessionConfig = SampleSessionConfig()
+        } else {
+            sessionConfig = Self.loadPersistedSessionConfig()
+        }
     }
 
     func launch(statusMessage: String? = nil) {

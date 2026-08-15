@@ -7,45 +7,47 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		13AA0F8FCD3F7166ABB0FBC3 /* SampleBootstrapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0ACDE29C8E841810AAEDDF4 /* SampleBootstrapView.swift */; };
-		275C0A44AC40EFBE678F5374 /* MediaSFUIosBridge in Frameworks */ = {isa = PBXBuildFile; productRef = EB992C17FFE8710545E59875 /* MediaSFUIosBridge */; };
-		2ACDBAF8A490E8FA9837E65B /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A4AEEA0466C810E67AAC28A /* Foundation.framework */; };
-		40183D561867EB930F077319 /* Pods_MediaSFUSampleApp.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 66697C6CC41C6A1496092C67 /* Pods_MediaSFUSampleApp.framework */; };
-		4C4F5AE7B7156DF4CE97F042 /* MediaSFUHostViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 50C89E23B8A6ED8CA9582957 /* MediaSFUHostViewController.swift */; };
-		560E3E5BB6B7E8A3684D9DDF /* RealMediaSFUSDKHostAdapterTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = CDAFCA13178FAF8005F294D0 /* RealMediaSFUSDKHostAdapterTemplate.swift */; };
-		569A8F7E26D5C829F4CB0277 /* MediaSFUSampleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A9491DAF71FBDD1A39F6177 /* MediaSFUSampleApp.swift */; };
-		767CB1513D56B5385913E2BB /* MediaPermissionsCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F1F45DB9E9C99591906384 /* MediaPermissionsCoordinator.swift */; };
-		7D1880E4A50B01A252976941 /* ReplayKitCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CDA2FF4DACDCF64B19ADEE3 /* ReplayKitCoordinator.swift */; };
-		940DEFF78E4162C060FAA010 /* SampleLaunchCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2949FB44D489F0866034D41 /* SampleLaunchCoordinator.swift */; };
-		99D89DD1755C78DC49C00A09 /* SampleSessionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB5A9CD8A1C78FB705E910F0 /* SampleSessionConfig.swift */; };
-		99DD3DE2E8C1F1E9BD8EEAF5 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A4AEEA0466C810E67AAC28A /* Foundation.framework */; };
-		A2602B5875F58BFC727D29B6 /* MediaSFUHostContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57CFB0315E43F2E5D0212359 /* MediaSFUHostContainer.swift */; };
-		A484883341A73ACA34D54005 /* MediaSFUBridgeInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = D827709E3EC1699D12295513 /* MediaSFUBridgeInstaller.swift */; };
-		AAE2CB2B14F7F6000308DED3 /* PlaceholderMediaSFUSDKHostAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 839943563F6D71292A7AD20A /* PlaceholderMediaSFUSDKHostAdapter.swift */; };
-		CA7B71497E7516D8C435FD47 /* MediaSFUSampleAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A34845734B2E86C47B86FBEA /* MediaSFUSampleAppUITests.swift */; };
-		EA3519AE19AE0612C1ED39A2 /* MediaSFUIosBridge in Embed Frameworks */ = {isa = PBXBuildFile; productRef = EB992C17FFE8710545E59875 /* MediaSFUIosBridge */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		F2077623D7E50A68AB2A1FCB /* MediaSFUSDKHostAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EB17F28379F6B812C43941F /* MediaSFUSDKHostAdapter.swift */; };
-		FC01234500AA000000000001 /* MediaSFUMediasoupClient in Frameworks */ = {isa = PBXBuildFile; productRef = FC01234500AA000000000002 /* MediaSFUMediasoupClient */; };
+		01CE11C401E4EDEF78612C67 /* MediaSFUSampleAppUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 430DFCE063669EF1FBCC8C2D /* MediaSFUSampleAppUITests.swift */; };
+		0EDB922AA7461D24826A53B1 /* RealMediaSFUSDKHostAdapterTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 838CD64696C00016FE8ABC0F /* RealMediaSFUSDKHostAdapterTemplate.swift */; };
+		1F94AD62D3DCEA4ABE88B10A /* SampleBootstrapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13C7F094BE1608F56975D964 /* SampleBootstrapView.swift */; };
+		22ECDA89D7A0B64C82EAA635 /* PlaceholderMediaSFUSDKHostAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7733EA314974982F94F3474C /* PlaceholderMediaSFUSDKHostAdapter.swift */; };
+		2CF97CE70E68551166E05CE2 /* MediaSFUSDKHostAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B0EDBD01B52EB36ADBA6AD7 /* MediaSFUSDKHostAdapter.swift */; };
+		445AE3715B2DFC372EA9B68C /* MediaPermissionsCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88065F3DE547F6416D40881E /* MediaPermissionsCoordinator.swift */; };
+		45D54B1115E88D30AAE1B3A0 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F74B60006DF110D50EF6860D /* Foundation.framework */; };
+		583D6C2C8A0AEA8D8BFDAFC3 /* Pods_MediaSFUSampleApp.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3654AC65F745D7A981E1B438 /* Pods_MediaSFUSampleApp.framework */; };
+		6F28F8214378359A385581B8 /* ReplayKitCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4AB725E0307F5C93C13B7AA /* ReplayKitCoordinator.swift */; };
+		754AC287635C74A6198372F0 /* MediaSFUHostContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D673BD921E1C96DF5FD3E3A4 /* MediaSFUHostContainer.swift */; };
+		76635CA1AD8D3283AB9111BB /* MediaSFUMediasoupClient in Frameworks */ = {isa = PBXBuildFile; productRef = CFC30E92345402F4A7FBEF3A /* MediaSFUMediasoupClient */; };
+		8A23273DA061DFAF5F64A429 /* MediaSFUIosBridge in Frameworks */ = {isa = PBXBuildFile; productRef = BB9BA883EB00A728B02E2303 /* MediaSFUIosBridge */; };
+		A3ED715028A3865D2C332BA1 /* MediaSFUSampleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB2365C6751F91DA50E88D5D /* MediaSFUSampleApp.swift */; };
+		BF21E4921A62C6E9EFD24230 /* MediaSFUMediasoupClient in Embed Frameworks */ = {isa = PBXBuildFile; productRef = CFC30E92345402F4A7FBEF3A /* MediaSFUMediasoupClient */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		C9A685E3E419C934B94EBDC0 /* MediaSFUHostViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79D16E90BFA02C4D862E967F /* MediaSFUHostViewController.swift */; };
+		CC0FDDD0C8830C38FF70CDB0 /* MediaSFUIosBridge in Embed Frameworks */ = {isa = PBXBuildFile; productRef = BB9BA883EB00A728B02E2303 /* MediaSFUIosBridge */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		D49889ADC181BD69139DEA52 /* MediaSFUBridgeInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD6D9E9BB87B25259592AFD7 /* MediaSFUBridgeInstaller.swift */; };
+		DBE856F5DBCD7FD219F7476E /* SampleSessionConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D4B525A9A9F8B6AECD8491 /* SampleSessionConfig.swift */; };
+		DC171D021B75ED6FB846F146 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F74B60006DF110D50EF6860D /* Foundation.framework */; };
+		EF4BE4F054564EB23FCFDF32 /* SampleLaunchCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37AFB461EB5835220077ACAB /* SampleLaunchCoordinator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
-		9C9E5E3013F3A34FDB64FF24 /* PBXContainerItemProxy */ = {
+		752F5754B7478EA36405D29E /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
-			containerPortal = 7292C486309B2BDA9AC4AD8E /* Project object */;
+			containerPortal = FE9EEBBCB00AA62BDD54DCCA /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = 268D11BB7BF973FD55FBDE86;
+			remoteGlobalIDString = ED5067BC1514DDD2B8BF6058;
 			remoteInfo = MediaSFUSampleApp;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		DEDF46D80EBA8653E2DC88C7 /* Embed Frameworks */ = {
+		1A13B3A961557A9AFD227047 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				EA3519AE19AE0612C1ED39A2 /* MediaSFUIosBridge in Embed Frameworks */,
+				BF21E4921A62C6E9EFD24230 /* MediaSFUMediasoupClient in Embed Frameworks */,
+				CC0FDDD0C8830C38FF70CDB0 /* MediaSFUIosBridge in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -53,197 +55,215 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		0ACA9E0A3D17F404685F1398 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		0BAD42CF74A6DED6DFCA93DA /* MediaSFUSampleAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; name = MediaSFUSampleAppUITests.xctest; path = MediaSFUSampleAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		1EB17F28379F6B812C43941F /* MediaSFUSDKHostAdapter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaSFUSDKHostAdapter.swift; sourceTree = "<group>"; };
-		45F4DBD1739BE711A3281DBF /* Pods-MediaSFUSampleApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MediaSFUSampleApp.release.xcconfig"; path = "Target Support Files/Pods-MediaSFUSampleApp/Pods-MediaSFUSampleApp.release.xcconfig"; sourceTree = "<group>"; };
-		50C89E23B8A6ED8CA9582957 /* MediaSFUHostViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaSFUHostViewController.swift; sourceTree = "<group>"; };
-		57CFB0315E43F2E5D0212359 /* MediaSFUHostContainer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaSFUHostContainer.swift; sourceTree = "<group>"; };
-		66697C6CC41C6A1496092C67 /* Pods_MediaSFUSampleApp.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_MediaSFUSampleApp.framework; sourceTree = BUILT_PRODUCTS_DIR; };
-		6A9491DAF71FBDD1A39F6177 /* MediaSFUSampleApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaSFUSampleApp.swift; sourceTree = "<group>"; };
-		6E9358A9178F8E379CC63981 /* Pods-MediaSFUSampleApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MediaSFUSampleApp.debug.xcconfig"; path = "Target Support Files/Pods-MediaSFUSampleApp/Pods-MediaSFUSampleApp.debug.xcconfig"; sourceTree = "<group>"; };
-		73F1F45DB9E9C99591906384 /* MediaPermissionsCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaPermissionsCoordinator.swift; sourceTree = "<group>"; };
-		839943563F6D71292A7AD20A /* PlaceholderMediaSFUSDKHostAdapter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlaceholderMediaSFUSDKHostAdapter.swift; sourceTree = "<group>"; };
-		8A4AEEA0466C810E67AAC28A /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
-		8CDA2FF4DACDCF64B19ADEE3 /* ReplayKitCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ReplayKitCoordinator.swift; sourceTree = "<group>"; };
-		A34845734B2E86C47B86FBEA /* MediaSFUSampleAppUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaSFUSampleAppUITests.swift; sourceTree = "<group>"; };
-		A47AE65127CD0E092C68BCDC /* MediaSFUSampleApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = MediaSFUSampleApp.app; path = MediaSFUSampleApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		C0ACDE29C8E841810AAEDDF4 /* SampleBootstrapView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SampleBootstrapView.swift; sourceTree = "<group>"; };
-		CB5A9CD8A1C78FB705E910F0 /* SampleSessionConfig.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SampleSessionConfig.swift; sourceTree = "<group>"; };
-		CDAFCA13178FAF8005F294D0 /* RealMediaSFUSDKHostAdapterTemplate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RealMediaSFUSDKHostAdapterTemplate.swift; sourceTree = "<group>"; };
-		D2949FB44D489F0866034D41 /* SampleLaunchCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SampleLaunchCoordinator.swift; sourceTree = "<group>"; };
-		D827709E3EC1699D12295513 /* MediaSFUBridgeInstaller.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaSFUBridgeInstaller.swift; sourceTree = "<group>"; };
+		13C7F094BE1608F56975D964 /* SampleBootstrapView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SampleBootstrapView.swift; sourceTree = "<group>"; };
+		3654AC65F745D7A981E1B438 /* Pods_MediaSFUSampleApp.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_MediaSFUSampleApp.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		37AFB461EB5835220077ACAB /* SampleLaunchCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SampleLaunchCoordinator.swift; sourceTree = "<group>"; };
+		3E9547637FE87228AF33A649 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		4158FF2FEDFA9FE7CEB4CFE9 /* Pods-MediaSFUSampleApp.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MediaSFUSampleApp.release.xcconfig"; path = "Target Support Files/Pods-MediaSFUSampleApp/Pods-MediaSFUSampleApp.release.xcconfig"; sourceTree = "<group>"; };
+		430DFCE063669EF1FBCC8C2D /* MediaSFUSampleAppUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaSFUSampleAppUITests.swift; sourceTree = "<group>"; };
+		5B0EDBD01B52EB36ADBA6AD7 /* MediaSFUSDKHostAdapter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaSFUSDKHostAdapter.swift; sourceTree = "<group>"; };
+		7733EA314974982F94F3474C /* PlaceholderMediaSFUSDKHostAdapter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlaceholderMediaSFUSDKHostAdapter.swift; sourceTree = "<group>"; };
+		79D16E90BFA02C4D862E967F /* MediaSFUHostViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaSFUHostViewController.swift; sourceTree = "<group>"; };
+		838CD64696C00016FE8ABC0F /* RealMediaSFUSDKHostAdapterTemplate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RealMediaSFUSDKHostAdapterTemplate.swift; sourceTree = "<group>"; };
+		88065F3DE547F6416D40881E /* MediaPermissionsCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaPermissionsCoordinator.swift; sourceTree = "<group>"; };
+		A4A1D2D956E5C2EB5C8D00A9 /* MediaSFUSampleApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = MediaSFUSampleApp.app; path = MediaSFUSampleApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A4A695FD538A2D58F30A830F /* MediaSFUSampleAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; name = MediaSFUSampleAppUITests.xctest; path = MediaSFUSampleAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A4AB725E0307F5C93C13B7AA /* ReplayKitCoordinator.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ReplayKitCoordinator.swift; sourceTree = "<group>"; };
+		A6463F2B35B8F27FD6D67EF1 /* Pods-MediaSFUSampleApp.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MediaSFUSampleApp.debug.xcconfig"; path = "Target Support Files/Pods-MediaSFUSampleApp/Pods-MediaSFUSampleApp.debug.xcconfig"; sourceTree = "<group>"; };
+		BD6D9E9BB87B25259592AFD7 /* MediaSFUBridgeInstaller.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaSFUBridgeInstaller.swift; sourceTree = "<group>"; };
+		D673BD921E1C96DF5FD3E3A4 /* MediaSFUHostContainer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaSFUHostContainer.swift; sourceTree = "<group>"; };
+		E6D4B525A9A9F8B6AECD8491 /* SampleSessionConfig.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SampleSessionConfig.swift; sourceTree = "<group>"; };
+		F74B60006DF110D50EF6860D /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		FB2365C6751F91DA50E88D5D /* MediaSFUSampleApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MediaSFUSampleApp.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		0D4E4FCDB61DFEC7CF03307D /* Frameworks */ = {
+		3EC78B3BBE004096D3D8A4A3 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				99DD3DE2E8C1F1E9BD8EEAF5 /* Foundation.framework in Frameworks */,
-				275C0A44AC40EFBE678F5374 /* MediaSFUIosBridge in Frameworks */,
-				FC01234500AA000000000001 /* MediaSFUMediasoupClient in Frameworks */,
-				40183D561867EB930F077319 /* Pods_MediaSFUSampleApp.framework in Frameworks */,
+				45D54B1115E88D30AAE1B3A0 /* Foundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		4A17A2E413451FBB12A1751D /* Frameworks */ = {
+		5240B5E00F7BE3BBA4957F7E /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2ACDBAF8A490E8FA9837E65B /* Foundation.framework in Frameworks */,
+				DC171D021B75ED6FB846F146 /* Foundation.framework in Frameworks */,
+				76635CA1AD8D3283AB9111BB /* MediaSFUMediasoupClient in Frameworks */,
+				8A23273DA061DFAF5F64A429 /* MediaSFUIosBridge in Frameworks */,
+				583D6C2C8A0AEA8D8BFDAFC3 /* Pods_MediaSFUSampleApp.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		436E3949D1F78EFF2DD87614 /* MediaSFUSampleAppUITests */ = {
+		2CBEAC4DF6580E8B4A503B26 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				A34845734B2E86C47B86FBEA /* MediaSFUSampleAppUITests.swift */,
-			);
-			name = MediaSFUSampleAppUITests;
-			path = MediaSFUSampleAppUITests;
-			sourceTree = "<group>";
-		};
-		4B7D2EBBD4D81BCFB796E91E = {
-			isa = PBXGroup;
-			children = (
-				E1F0DBB4C185D6E59F72D7F4 /* Products */,
-				DAB3302153372F54D0A51F5E /* Frameworks */,
-				DAD46CEB1F1BE194AD18FD34 /* MediaSFUSampleApp */,
-				436E3949D1F78EFF2DD87614 /* MediaSFUSampleAppUITests */,
-				7CB6D3CF09FF919A7B9EF870 /* Pods */,
-			);
-			sourceTree = "<group>";
-		};
-		54A86B93D61F04FD7EF330D3 /* MediaSFUHost */ = {
-			isa = PBXGroup;
-			children = (
-				D827709E3EC1699D12295513 /* MediaSFUBridgeInstaller.swift */,
-				57CFB0315E43F2E5D0212359 /* MediaSFUHostContainer.swift */,
-				50C89E23B8A6ED8CA9582957 /* MediaSFUHostViewController.swift */,
-				1EB17F28379F6B812C43941F /* MediaSFUSDKHostAdapter.swift */,
-				839943563F6D71292A7AD20A /* PlaceholderMediaSFUSDKHostAdapter.swift */,
-				CDAFCA13178FAF8005F294D0 /* RealMediaSFUSDKHostAdapterTemplate.swift */,
-			);
-			name = MediaSFUHost;
-			path = MediaSFUHost;
-			sourceTree = "<group>";
-		};
-		58AFE06A4DFB438136E43E6F /* ScreenShare */ = {
-			isa = PBXGroup;
-			children = (
-				8CDA2FF4DACDCF64B19ADEE3 /* ReplayKitCoordinator.swift */,
-			);
-			name = ScreenShare;
-			path = ScreenShare;
-			sourceTree = "<group>";
-		};
-		7CB6D3CF09FF919A7B9EF870 /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				45F4DBD1739BE711A3281DBF /* Pods-MediaSFUSampleApp.release.xcconfig */,
-				6E9358A9178F8E379CC63981 /* Pods-MediaSFUSampleApp.debug.xcconfig */,
-			);
-			name = Pods;
-			path = Pods;
-			sourceTree = "<group>";
-		};
-		7E99A3282E30A1CB4EAC44BE /* Permissions */ = {
-			isa = PBXGroup;
-			children = (
-				73F1F45DB9E9C99591906384 /* MediaPermissionsCoordinator.swift */,
-			);
-			name = Permissions;
-			path = Permissions;
-			sourceTree = "<group>";
-		};
-		83B31D2478C2252189BE06A7 /* App */ = {
-			isa = PBXGroup;
-			children = (
-				6A9491DAF71FBDD1A39F6177 /* MediaSFUSampleApp.swift */,
-			);
-			name = App;
-			path = App;
-			sourceTree = "<group>";
-		};
-		86D6698EF77DF934FC4D84BC /* Resources */ = {
-			isa = PBXGroup;
-			children = (
-				0ACA9E0A3D17F404685F1398 /* Info.plist */,
-			);
-			name = Resources;
-			path = Resources;
-			sourceTree = "<group>";
-		};
-		9B824BB17912CC2C0E83A83D /* Bootstrap */ = {
-			isa = PBXGroup;
-			children = (
-				C0ACDE29C8E841810AAEDDF4 /* SampleBootstrapView.swift */,
-				D2949FB44D489F0866034D41 /* SampleLaunchCoordinator.swift */,
-				CB5A9CD8A1C78FB705E910F0 /* SampleSessionConfig.swift */,
-			);
-			name = Bootstrap;
-			path = Bootstrap;
-			sourceTree = "<group>";
-		};
-		9E6C17512BFB3FD0BBBE5DB6 /* iOS */ = {
-			isa = PBXGroup;
-			children = (
-				8A4AEEA0466C810E67AAC28A /* Foundation.framework */,
-			);
-			name = iOS;
-			sourceTree = "<group>";
-		};
-		DAB3302153372F54D0A51F5E /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				9E6C17512BFB3FD0BBBE5DB6 /* iOS */,
-				66697C6CC41C6A1496092C67 /* Pods_MediaSFUSampleApp.framework */,
+				4550E523F26263085B208264 /* iOS */,
+				3654AC65F745D7A981E1B438 /* Pods_MediaSFUSampleApp.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
-		DAD46CEB1F1BE194AD18FD34 /* MediaSFUSampleApp */ = {
+		37EAF9E56D586A628DFC00C3 /* MediaSFUSampleApp */ = {
 			isa = PBXGroup;
 			children = (
-				83B31D2478C2252189BE06A7 /* App */,
-				9B824BB17912CC2C0E83A83D /* Bootstrap */,
-				54A86B93D61F04FD7EF330D3 /* MediaSFUHost */,
-				7E99A3282E30A1CB4EAC44BE /* Permissions */,
-				58AFE06A4DFB438136E43E6F /* ScreenShare */,
-				86D6698EF77DF934FC4D84BC /* Resources */,
+				9B5093F14471A3898497E93F /* App */,
+				D27BDD074B3320A9D7A460C3 /* Bootstrap */,
+				9D76DAB5FC3B60E5D61F0E91 /* MediaSFUHost */,
+				E204B9FC63E5CB6117C2A411 /* Permissions */,
+				91C477E1E3F29B05061621D1 /* ScreenShare */,
+				95088AE1D4C60A691C28E926 /* Resources */,
 			);
 			name = MediaSFUSampleApp;
 			path = MediaSFUSampleApp;
 			sourceTree = "<group>";
 		};
-		E1F0DBB4C185D6E59F72D7F4 /* Products */ = {
+		3B81E471A775501CA4B692F8 = {
 			isa = PBXGroup;
 			children = (
-				A47AE65127CD0E092C68BCDC /* MediaSFUSampleApp.app */,
-				0BAD42CF74A6DED6DFCA93DA /* MediaSFUSampleAppUITests.xctest */,
+				6E8018AED441A3263395DD58 /* Products */,
+				2CBEAC4DF6580E8B4A503B26 /* Frameworks */,
+				37EAF9E56D586A628DFC00C3 /* MediaSFUSampleApp */,
+				80B308E9738C5BD3BF1989AA /* MediaSFUSampleAppUITests */,
+				EF679321A21CA3DC36AFF3FE /* Pods */,
+			);
+			sourceTree = "<group>";
+		};
+		4550E523F26263085B208264 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				F74B60006DF110D50EF6860D /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		6E8018AED441A3263395DD58 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A4A1D2D956E5C2EB5C8D00A9 /* MediaSFUSampleApp.app */,
+				A4A695FD538A2D58F30A830F /* MediaSFUSampleAppUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		80B308E9738C5BD3BF1989AA /* MediaSFUSampleAppUITests */ = {
+			isa = PBXGroup;
+			children = (
+				430DFCE063669EF1FBCC8C2D /* MediaSFUSampleAppUITests.swift */,
+			);
+			name = MediaSFUSampleAppUITests;
+			path = MediaSFUSampleAppUITests;
+			sourceTree = "<group>";
+		};
+		91C477E1E3F29B05061621D1 /* ScreenShare */ = {
+			isa = PBXGroup;
+			children = (
+				A4AB725E0307F5C93C13B7AA /* ReplayKitCoordinator.swift */,
+			);
+			name = ScreenShare;
+			path = ScreenShare;
+			sourceTree = "<group>";
+		};
+		95088AE1D4C60A691C28E926 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				3E9547637FE87228AF33A649 /* Info.plist */,
+			);
+			name = Resources;
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		9B5093F14471A3898497E93F /* App */ = {
+			isa = PBXGroup;
+			children = (
+				FB2365C6751F91DA50E88D5D /* MediaSFUSampleApp.swift */,
+			);
+			name = App;
+			path = App;
+			sourceTree = "<group>";
+		};
+		9D76DAB5FC3B60E5D61F0E91 /* MediaSFUHost */ = {
+			isa = PBXGroup;
+			children = (
+				BD6D9E9BB87B25259592AFD7 /* MediaSFUBridgeInstaller.swift */,
+				D673BD921E1C96DF5FD3E3A4 /* MediaSFUHostContainer.swift */,
+				79D16E90BFA02C4D862E967F /* MediaSFUHostViewController.swift */,
+				5B0EDBD01B52EB36ADBA6AD7 /* MediaSFUSDKHostAdapter.swift */,
+				7733EA314974982F94F3474C /* PlaceholderMediaSFUSDKHostAdapter.swift */,
+				838CD64696C00016FE8ABC0F /* RealMediaSFUSDKHostAdapterTemplate.swift */,
+			);
+			name = MediaSFUHost;
+			path = MediaSFUHost;
+			sourceTree = "<group>";
+		};
+		D27BDD074B3320A9D7A460C3 /* Bootstrap */ = {
+			isa = PBXGroup;
+			children = (
+				13C7F094BE1608F56975D964 /* SampleBootstrapView.swift */,
+				37AFB461EB5835220077ACAB /* SampleLaunchCoordinator.swift */,
+				E6D4B525A9A9F8B6AECD8491 /* SampleSessionConfig.swift */,
+			);
+			name = Bootstrap;
+			path = Bootstrap;
+			sourceTree = "<group>";
+		};
+		E204B9FC63E5CB6117C2A411 /* Permissions */ = {
+			isa = PBXGroup;
+			children = (
+				88065F3DE547F6416D40881E /* MediaPermissionsCoordinator.swift */,
+			);
+			name = Permissions;
+			path = Permissions;
+			sourceTree = "<group>";
+		};
+		EF679321A21CA3DC36AFF3FE /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				4158FF2FEDFA9FE7CEB4CFE9 /* Pods-MediaSFUSampleApp.release.xcconfig */,
+				A6463F2B35B8F27FD6D67EF1 /* Pods-MediaSFUSampleApp.debug.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		268D11BB7BF973FD55FBDE86 /* MediaSFUSampleApp */ = {
+		2D1CD675F6B46CC621184677 /* MediaSFUSampleAppUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 12F2A0E336E7B266108487C7 /* Build configuration list for PBXNativeTarget "MediaSFUSampleApp" */;
+			buildConfigurationList = 3E3A8921748C02F12960C11A /* Build configuration list for PBXNativeTarget "MediaSFUSampleAppUITests" */;
 			buildPhases = (
-				C6BA0E972CE0DA874EEBFF4F /* [CP] Check Pods Manifest.lock */,
-				C92241CC8F3BE8F309339A9C /* Sources */,
-				0D4E4FCDB61DFEC7CF03307D /* Frameworks */,
-				5705CE002E339157F2E57A39 /* Resources */,
-				DEDF46D80EBA8653E2DC88C7 /* Embed Frameworks */,
-				B026066D260531EA69F24F64 /* Sanitize Embedded WebRTC */,
-				D727550E001E681BDD050D42 /* [CP] Embed Pods Frameworks */,
-				FBC5FE1CDA816E9FE511AD2B /* [CP] Copy Pods Resources */,
+				2AF1ABC03CB293EE53A4DA1E /* Sources */,
+				3EC78B3BBE004096D3D8A4A3 /* Frameworks */,
+				F9846568C753B9FDEA71EAD6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				775AEF1EE466D946A32642DE /* PBXTargetDependency */,
+			);
+			name = MediaSFUSampleAppUITests;
+			productName = MediaSFUSampleAppUITests;
+			productReference = A4A695FD538A2D58F30A830F /* MediaSFUSampleAppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		ED5067BC1514DDD2B8BF6058 /* MediaSFUSampleApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BBC53FBDC0E9D051DF95A821 /* Build configuration list for PBXNativeTarget "MediaSFUSampleApp" */;
+			buildPhases = (
+				C2FF5942212A8B9EF2A84829 /* [CP] Check Pods Manifest.lock */,
+				AF15288336B6778B47649481 /* Sources */,
+				5240B5E00F7BE3BBA4957F7E /* Frameworks */,
+				11BA0E5712C588705F447463 /* Resources */,
+				1A13B3A961557A9AFD227047 /* Embed Frameworks */,
+				84A3F2CED107A6CB55AAE8B0 /* Sanitize Embedded WebRTC */,
+				23879D254F5832E9FF9D281F /* [CP] Embed Pods Frameworks */,
+				4B77999E3AEF7A7DC5165FFF /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
@@ -251,41 +271,23 @@
 			);
 			name = MediaSFUSampleApp;
 			packageProductDependencies = (
-				EB992C17FFE8710545E59875 /* MediaSFUIosBridge */,
-				FC01234500AA000000000002 /* MediaSFUMediasoupClient */,
+				CFC30E92345402F4A7FBEF3A /* MediaSFUMediasoupClient */,
+				BB9BA883EB00A728B02E2303 /* MediaSFUIosBridge */,
 			);
 			productName = MediaSFUSampleApp;
-			productReference = A47AE65127CD0E092C68BCDC /* MediaSFUSampleApp.app */;
+			productReference = A4A1D2D956E5C2EB5C8D00A9 /* MediaSFUSampleApp.app */;
 			productType = "com.apple.product-type.application";
-		};
-		C768593C5625DE8894D29028 /* MediaSFUSampleAppUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 6F560176EDBFB76C2B9EFF0D /* Build configuration list for PBXNativeTarget "MediaSFUSampleAppUITests" */;
-			buildPhases = (
-				D5B06D61D9C73C46537E8AF9 /* Sources */,
-				4A17A2E413451FBB12A1751D /* Frameworks */,
-				EA70F0E3AD5E6EEC68BFB159 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				8DDFBD8408BA46BA7F469BE5 /* PBXTargetDependency */,
-			);
-			name = MediaSFUSampleAppUITests;
-			productName = MediaSFUSampleAppUITests;
-			productReference = 0BAD42CF74A6DED6DFCA93DA /* MediaSFUSampleAppUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		7292C486309B2BDA9AC4AD8E /* Project object */ = {
+		FE9EEBBCB00AA62BDD54DCCA /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				LastSwiftUpdateCheck = 1530;
 				LastUpgradeCheck = 1530;
 			};
-			buildConfigurationList = 107E230160EADEF518B1CC64 /* Build configuration list for PBXProject "MediaSFUSampleApp" */;
+			buildConfigurationList = FBF3DFDFBBF1AC77B8D3E1E3 /* Build configuration list for PBXProject "MediaSFUSampleApp" */;
 			compatibilityVersion = "Xcode 15.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -293,32 +295,32 @@
 				en,
 				Base,
 			);
-			mainGroup = 4B7D2EBBD4D81BCFB796E91E;
+			mainGroup = 3B81E471A775501CA4B692F8;
 			minimizedProjectReferenceProxies = 0;
 			packageReferences = (
-				9DF1E71E2026AA97A01C79D5 /* XCLocalSwiftPackageReference "ios-native-bridge" */,
-				FC01234500AA000000000004 /* XCLocalSwiftPackageReference "mediasfu-mediasoup-client-ios" */,
+				0893821960C77D1AB28CC561 /* XCLocalSwiftPackageReference "mediasfu-mediasoup-client-ios" */,
+				0F8D335A5A7ECB73846D94FF /* XCLocalSwiftPackageReference "ios-native-bridge" */,
 			);
 			preferredProjectObjectVersion = 77;
-			productRefGroup = E1F0DBB4C185D6E59F72D7F4 /* Products */;
+			productRefGroup = 6E8018AED441A3263395DD58 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				268D11BB7BF973FD55FBDE86 /* MediaSFUSampleApp */,
-				C768593C5625DE8894D29028 /* MediaSFUSampleAppUITests */,
+				ED5067BC1514DDD2B8BF6058 /* MediaSFUSampleApp */,
+				2D1CD675F6B46CC621184677 /* MediaSFUSampleAppUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		5705CE002E339157F2E57A39 /* Resources */ = {
+		11BA0E5712C588705F447463 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		EA70F0E3AD5E6EEC68BFB159 /* Resources */ = {
+		F9846568C753B9FDEA71EAD6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -328,7 +330,41 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		B026066D260531EA69F24F64 /* Sanitize Embedded WebRTC */ = {
+		23879D254F5832E9FF9D281F /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-MediaSFUSampleApp/Pods-MediaSFUSampleApp-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-MediaSFUSampleApp/Pods-MediaSFUSampleApp-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-MediaSFUSampleApp/Pods-MediaSFUSampleApp-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		4B77999E3AEF7A7DC5165FFF /* [CP] Copy Pods Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-MediaSFUSampleApp/Pods-MediaSFUSampleApp-resources-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Copy Pods Resources";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-MediaSFUSampleApp/Pods-MediaSFUSampleApp-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-MediaSFUSampleApp/Pods-MediaSFUSampleApp-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		84A3F2CED107A6CB55AAE8B0 /* Sanitize Embedded WebRTC */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -346,7 +382,7 @@
 			shellPath = /bin/bash;
 			shellScript = "set -eu\n\nweb_rtc_framework_path=\"\"\nfor candidate in   \"${TARGET_BUILD_DIR}/WebRTC.framework\"   \"${TARGET_BUILD_DIR}/PackageFrameworks/WebRTC.framework\"   \"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/WebRTC.framework\"; do\n  if [[ -d \"$candidate\" ]]; then\n    web_rtc_framework_path=\"$candidate\"\n    break\n  fi\ndone\n\nif [[ -z \"$web_rtc_framework_path\" ]]; then\n  exit 0\nfi\n\nrm -rf \"$web_rtc_framework_path/_CodeSignature\"\nxattr -cr \"$web_rtc_framework_path\" >/dev/null 2>&1 || true\n/usr/bin/codesign --remove-signature \"$web_rtc_framework_path\" >/dev/null 2>&1 || true\n\nif [[ \"${CODE_SIGNING_ALLOWED:-NO}\" != \"YES\" || -z \"${EXPANDED_CODE_SIGN_IDENTITY:-}\" ]]; then\n  exit 0\nfi\n\n/usr/bin/codesign   --force   --sign \"$EXPANDED_CODE_SIGN_IDENTITY\"   --timestamp=none   --preserve-metadata=identifier,entitlements,flags   --generate-entitlement-der   \"$web_rtc_framework_path\"\n";
 		};
-		C6BA0E972CE0DA874EEBFF4F /* [CP] Check Pods Manifest.lock */ = {
+		C2FF5942212A8B9EF2A84829 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -368,163 +404,49 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		D727550E001E681BDD050D42 /* [CP] Embed Pods Frameworks */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-MediaSFUSampleApp/Pods-MediaSFUSampleApp-frameworks-${CONFIGURATION}-input-files.xcfilelist",
-			);
-			name = "[CP] Embed Pods Frameworks";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-MediaSFUSampleApp/Pods-MediaSFUSampleApp-frameworks-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-MediaSFUSampleApp/Pods-MediaSFUSampleApp-frameworks.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		FBC5FE1CDA816E9FE511AD2B /* [CP] Copy Pods Resources */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-MediaSFUSampleApp/Pods-MediaSFUSampleApp-resources-${CONFIGURATION}-input-files.xcfilelist",
-			);
-			name = "[CP] Copy Pods Resources";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-MediaSFUSampleApp/Pods-MediaSFUSampleApp-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-MediaSFUSampleApp/Pods-MediaSFUSampleApp-resources.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		C92241CC8F3BE8F309339A9C /* Sources */ = {
+		2AF1ABC03CB293EE53A4DA1E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				569A8F7E26D5C829F4CB0277 /* MediaSFUSampleApp.swift in Sources */,
-				13AA0F8FCD3F7166ABB0FBC3 /* SampleBootstrapView.swift in Sources */,
-				940DEFF78E4162C060FAA010 /* SampleLaunchCoordinator.swift in Sources */,
-				99D89DD1755C78DC49C00A09 /* SampleSessionConfig.swift in Sources */,
-				A484883341A73ACA34D54005 /* MediaSFUBridgeInstaller.swift in Sources */,
-				A2602B5875F58BFC727D29B6 /* MediaSFUHostContainer.swift in Sources */,
-				4C4F5AE7B7156DF4CE97F042 /* MediaSFUHostViewController.swift in Sources */,
-				F2077623D7E50A68AB2A1FCB /* MediaSFUSDKHostAdapter.swift in Sources */,
-				AAE2CB2B14F7F6000308DED3 /* PlaceholderMediaSFUSDKHostAdapter.swift in Sources */,
-				560E3E5BB6B7E8A3684D9DDF /* RealMediaSFUSDKHostAdapterTemplate.swift in Sources */,
-				767CB1513D56B5385913E2BB /* MediaPermissionsCoordinator.swift in Sources */,
-				7D1880E4A50B01A252976941 /* ReplayKitCoordinator.swift in Sources */,
+				01CE11C401E4EDEF78612C67 /* MediaSFUSampleAppUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D5B06D61D9C73C46537E8AF9 /* Sources */ = {
+		AF15288336B6778B47649481 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				CA7B71497E7516D8C435FD47 /* MediaSFUSampleAppUITests.swift in Sources */,
+				A3ED715028A3865D2C332BA1 /* MediaSFUSampleApp.swift in Sources */,
+				1F94AD62D3DCEA4ABE88B10A /* SampleBootstrapView.swift in Sources */,
+				EF4BE4F054564EB23FCFDF32 /* SampleLaunchCoordinator.swift in Sources */,
+				DBE856F5DBCD7FD219F7476E /* SampleSessionConfig.swift in Sources */,
+				D49889ADC181BD69139DEA52 /* MediaSFUBridgeInstaller.swift in Sources */,
+				754AC287635C74A6198372F0 /* MediaSFUHostContainer.swift in Sources */,
+				C9A685E3E419C934B94EBDC0 /* MediaSFUHostViewController.swift in Sources */,
+				2CF97CE70E68551166E05CE2 /* MediaSFUSDKHostAdapter.swift in Sources */,
+				22ECDA89D7A0B64C82EAA635 /* PlaceholderMediaSFUSDKHostAdapter.swift in Sources */,
+				0EDB922AA7461D24826A53B1 /* RealMediaSFUSDKHostAdapterTemplate.swift in Sources */,
+				445AE3715B2DFC372EA9B68C /* MediaPermissionsCoordinator.swift in Sources */,
+				6F28F8214378359A385581B8 /* ReplayKitCoordinator.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		8DDFBD8408BA46BA7F469BE5 /* PBXTargetDependency */ = {
+		775AEF1EE466D946A32642DE /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = MediaSFUSampleApp;
-			target = 268D11BB7BF973FD55FBDE86 /* MediaSFUSampleApp */;
-			targetProxy = 9C9E5E3013F3A34FDB64FF24 /* PBXContainerItemProxy */;
+			target = ED5067BC1514DDD2B8BF6058 /* MediaSFUSampleApp */;
+			targetProxy = 752F5754B7478EA36405D29E /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
-		08A4B233EBE2EEB181DE3D92 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
-				CLANG_CXX_LIBRARY = "libc++";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				ENABLE_NS_ASSERTIONS = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				SWIFT_VERSION = 5.0;
-			};
-			name = Release;
-		};
-		13A9A104E9795DD07BF3253C /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
-				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/../shared/build/cocoapods/framework",
-				);
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = com.mediasfu.MediaSFUSampleAppUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = MediaSFUSampleApp;
-				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
-		17E95C26288490D93FBD0B90 /* Debug */ = {
+		18881B3F21BDEC3CA746B7D5 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
@@ -549,7 +471,39 @@
 			};
 			name = Debug;
 		};
-		46823892DA186081B903A371 /* Debug */ = {
+		3A0E8F6AC0CDC2BA19337F7E /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 4158FF2FEDFA9FE7CEB4CFE9 /* Pods-MediaSFUSampleApp.release.xcconfig */;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../shared/build/cocoapods/framework",
+				);
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MediaSFUSampleApp/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediasfu.MediaSFUSampleApp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		91EDDE3D224D5504F64CDAB4 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -610,9 +564,89 @@
 			};
 			name = Debug;
 		};
-		5A882286A119AC91F9DE762A /* Debug */ = {
+		BDF19BC12EE4A5B40DD9455E /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 6E9358A9178F8E379CC63981 /* Pods-MediaSFUSampleApp.debug.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		EBB12EB4A101860D71D4E8A8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = "";
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../shared/build/cocoapods/framework",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @loader_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.mediasfu.MediaSFUSampleAppUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = MediaSFUSampleApp;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		FE0CA1E6CC622B7752DBF4CC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = A6463F2B35B8F27FD6D67EF1 /* Pods-MediaSFUSampleApp.debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -641,64 +675,32 @@
 			};
 			name = Debug;
 		};
-		6F140AE8030FB3129721B4EF /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = 45F4DBD1739BE711A3281DBF /* Pods-MediaSFUSampleApp.release.xcconfig */;
-			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_WEAK = NO;
-				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = "";
-				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
-				FRAMEWORK_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/../shared/build/cocoapods/framework",
-				);
-				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = MediaSFUSampleApp/Resources/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				PRODUCT_BUNDLE_IDENTIFIER = com.mediasfu.MediaSFUSampleApp;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = iphoneos;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				VALIDATE_PRODUCT = YES;
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		107E230160EADEF518B1CC64 /* Build configuration list for PBXProject "MediaSFUSampleApp" */ = {
+		3E3A8921748C02F12960C11A /* Build configuration list for PBXNativeTarget "MediaSFUSampleAppUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				46823892DA186081B903A371 /* Debug */,
-				08A4B233EBE2EEB181DE3D92 /* Release */,
+				EBB12EB4A101860D71D4E8A8 /* Release */,
+				18881B3F21BDEC3CA746B7D5 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		12F2A0E336E7B266108487C7 /* Build configuration list for PBXNativeTarget "MediaSFUSampleApp" */ = {
+		BBC53FBDC0E9D051DF95A821 /* Build configuration list for PBXNativeTarget "MediaSFUSampleApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				6F140AE8030FB3129721B4EF /* Release */,
-				5A882286A119AC91F9DE762A /* Debug */,
+				3A0E8F6AC0CDC2BA19337F7E /* Release */,
+				FE0CA1E6CC622B7752DBF4CC /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		6F560176EDBFB76C2B9EFF0D /* Build configuration list for PBXNativeTarget "MediaSFUSampleAppUITests" */ = {
+		FBF3DFDFBBF1AC77B8D3E1E3 /* Build configuration list for PBXProject "MediaSFUSampleApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				13A9A104E9795DD07BF3253C /* Release */,
-				17E95C26288490D93FBD0B90 /* Debug */,
+				91EDDE3D224D5504F64CDAB4 /* Debug */,
+				BDF19BC12EE4A5B40DD9455E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -706,28 +708,28 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		9DF1E71E2026AA97A01C79D5 /* XCLocalSwiftPackageReference "ios-native-bridge" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = "../ios-native-bridge";
-		};
-		FC01234500AA000000000004 /* XCLocalSwiftPackageReference "mediasfu-mediasoup-client-ios" */ = {
+		0893821960C77D1AB28CC561 /* XCLocalSwiftPackageReference "mediasfu-mediasoup-client-ios" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "../../mediasfu-mediasoup-client-ios";
+		};
+		0F8D335A5A7ECB73846D94FF /* XCLocalSwiftPackageReference "ios-native-bridge" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "../ios-native-bridge";
 		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		EB992C17FFE8710545E59875 /* MediaSFUIosBridge */ = {
+		BB9BA883EB00A728B02E2303 /* MediaSFUIosBridge */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 9DF1E71E2026AA97A01C79D5 /* XCLocalSwiftPackageReference "ios-native-bridge" */;
+			package = 0F8D335A5A7ECB73846D94FF /* XCLocalSwiftPackageReference "ios-native-bridge" */;
 			productName = MediaSFUIosBridge;
 		};
-		FC01234500AA000000000002 /* MediaSFUMediasoupClient */ = {
+		CFC30E92345402F4A7FBEF3A /* MediaSFUMediasoupClient */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = FC01234500AA000000000004 /* XCLocalSwiftPackageReference "mediasfu-mediasoup-client-ios" */;
+			package = 0893821960C77D1AB28CC561 /* XCLocalSwiftPackageReference "mediasfu-mediasoup-client-ios" */;
 			productName = MediaSFUMediasoupClient;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
-	rootObject = 7292C486309B2BDA9AC4AD8E /* Project object */;
+	rootObject = FE9EEBBCB00AA62BDD54DCCA /* Project object */;
 }

@@ -1,17 +1,15 @@
 # MediaSFU Swift iOS Client Usage
 
-This guide covers the Swift-facing iOS integration for the MediaSFU SDK. The SDK ships a
-Swift-accessible host bridge so you can embed the full MediaSFU conferencing UI in any
-iOS app without writing any Kotlin or managing the underlying media layer directly.
+This guide covers the Swift-facing iOS integration for MediaSFU. The easiest install path is the published Swift Package:
 
-For the lower-level standalone WebRTC client package, see
+```text
+https://github.com/MediaSFU/mediasfu-apple-sdk.git
+```
+
+That package includes the hosted MediaSFU UI and the native mediasoup/WebRTC bridge. You do not need to write Kotlin or build the Kotlin Multiplatform repository yourself.
+
+For custom low-level mediasoup/WebRTC work, see
 [mediasfu-mediasoup-client-apple](https://github.com/MediaSFU/mediasfu-mediasoup-client-apple).
-
-## Packaging Note
-
-- `MediaSFUIosHostBridge` and the hosted MediaSFU iOS UI come from the generated KMP `MediaSFUSDK` / `shared` framework in this repository.
-- The separate `mediasfu-apple-sdk` and in-repo `ios-native-bridge` packages are companion native bridge layers. They help wire native mediasoup/WebRTC into the KMP runtime, but they do not replace the exported KMP framework itself.
-- During Apple release prep, run `scripts/sync_apple_sdk_workspace.sh` from this repo to generate the Apple-ready KMP artifact into the sibling `mediasfu-apple-sdk` workspace.
 
 ## What You Get
 
@@ -27,7 +25,7 @@ For the lower-level standalone WebRTC client package, see
 - **iOS 14.1+** to run the SDK.
 - **iOS 15+** for Virtual Background (gracefully degrades on iOS 14).
 - An API username and API key from [mediasfu.com](https://mediasfu.com) for cloud rooms.
-- CocoaPods for the framework integration step (see below).
+- Swift Package Manager through Xcode.
 
 ## Endpoint Policy
 
@@ -37,9 +35,24 @@ your `apiUserName` and `apiKey`.
 Set `localLink` only when connecting to a self-hosted MediaSFU CE backend, for example
 `https://your-ce-host.example.com`. Do not point `localLink` at the production cloud URL.
 
-## Install
+## Install with Swift Package Manager
 
-Today the hosted iOS runtime is consumed from the KMP repo's generated podspec. Add the source-based pod to your `Podfile`:
+In Xcode, choose **File → Add Package Dependencies…** and add:
+
+```text
+https://github.com/MediaSFU/mediasfu-apple-sdk.git
+```
+
+Then import the package:
+
+```swift
+import MediaSFUAppleSDK
+import MediaSFUMediasoupClient
+```
+
+## Local Source Checkout for Contributors
+
+If you are developing the SDK itself from this repository, you can still use the generated CocoaPods framework locally:
 
 ```ruby
 target 'YourApp' do
@@ -55,7 +68,7 @@ pod install
 open YourApp.xcworkspace
 ```
 
-Import the module in Swift:
+Import the local module in Swift:
 
 ```swift
 import MediaSFUSDK
@@ -67,7 +80,11 @@ Hosted UI is the default. The SDK presents a pre-join form where users enter the
 display name and room details, then transitions to the full in-room UI.
 
 ```swift
-import MediaSFUSDK
+import MediaSFUAppleSDK
+
+// Store nativeDevice as a property on the presenting view/controller.
+let nativeDevice = MSCDevice()
+MediaSFUKmpBridgeInstaller.installMediaSFUMediasoupClientBridgeIfSupported(device: nativeDevice)
 
 let bridge = MediaSFUIosHostBridge()
 let config = bridge.makeLaunchConfig()
@@ -97,7 +114,11 @@ This mirrors `returnUI=false` in the React SDK and Flutter SDK.
 ### Headless Create
 
 ```swift
-import MediaSFUSDK
+import MediaSFUAppleSDK
+
+// Store nativeDevice as a property on the presenting view/controller.
+let nativeDevice = MSCDevice()
+MediaSFUKmpBridgeInstaller.installMediaSFUMediasoupClientBridgeIfSupported(device: nativeDevice)
 
 let bridge = MediaSFUIosHostBridge()
 let config = bridge.makeLaunchConfig()
@@ -120,7 +141,11 @@ present(controller, animated: true)
 ### Headless Join
 
 ```swift
-import MediaSFUSDK
+import MediaSFUAppleSDK
+
+// Store nativeDevice as a property on the presenting view/controller.
+let nativeDevice = MSCDevice()
+MediaSFUKmpBridgeInstaller.installMediaSFUMediasoupClientBridgeIfSupported(device: nativeDevice)
 
 let bridge = MediaSFUIosHostBridge()
 let config = bridge.makeLaunchConfig()
@@ -145,7 +170,7 @@ Wrap the UIKit view controller in a `UIViewControllerRepresentable` to embed Med
 
 ```swift
 import SwiftUI
-import MediaSFUSDK
+import MediaSFUAppleSDK
 
 struct MediaSFUView: UIViewControllerRepresentable {
     let apiUserName: String
@@ -154,6 +179,7 @@ struct MediaSFUView: UIViewControllerRepresentable {
     var action: String = "create"   // "create" or "join"
     var roomName: String = ""       // leave empty to auto-generate on create
     var autoProceed: Bool = false
+    private let nativeDevice = MSCDevice()
 
     func makeUIViewController(context: Context) -> UIViewController {
         let bridge = MediaSFUIosHostBridge()
@@ -168,6 +194,7 @@ struct MediaSFUView: UIViewControllerRepresentable {
         config.capacity = 100
         config.eventType = "conference"
         config.autoProceed = autoProceed
+        MediaSFUKmpBridgeInstaller.installMediaSFUMediasoupClientBridgeIfSupported(device: nativeDevice)
         return bridge.makeHostViewController(config: config)
     }
 

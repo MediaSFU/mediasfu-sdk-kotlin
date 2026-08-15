@@ -1,9 +1,10 @@
 import Foundation
 
 struct SampleSessionConfig: Equatable, Codable {
-    var apiUserName: String = "placeholderUser"
-    var apiKey: String = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012345678912"
+    var apiUserName: String = ""
+    var apiKey: String = ""
     var localLink: String = ""
+    var cloudRoomsEndpoint: String = ""
     var userName: String = ""
     var roomName: String = ""
     var connectMediaSFU: Bool = true
@@ -32,6 +33,10 @@ struct SampleSessionConfig: Equatable, Codable {
 
     var normalizedLocalLink: String {
         localLink.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var normalizedCloudRoomsEndpoint: String {
+        cloudRoomsEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var normalizedUserName: String {

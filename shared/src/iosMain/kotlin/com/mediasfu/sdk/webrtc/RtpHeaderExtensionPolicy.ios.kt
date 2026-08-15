@@ -1,6 +1,5 @@
 package com.mediasfu.sdk.webrtc
 
-private const val forceIOSFilterVideoOrientationHeaderExtension = true
-
-internal actual fun shouldPreserveVideoOrientationHeaderExtension(): Boolean =
-    !forceIOSFilterVideoOrientationHeaderExtension
+// Match the default MediaSFU React and Flutter behavior. Without the
+// extension, WebRTC applies RTCVideoFrame.rotation before encoding the pixels.
+internal actual fun shouldPreserveVideoOrientationHeaderExtension(): Boolean = false

@@ -30,6 +30,7 @@ class MediaSFUIosLaunchConfig {
     var apiUserName: String = ""
     var apiKey: String = ""
     var localLink: String = ""
+    var cloudRoomsEndpoint: String = ""
     var userName: String = "tester"
     var roomName: String = "mediasfu-demo"
     var connectMediaSFU: Boolean = true
@@ -285,6 +286,7 @@ class MediaSFUIosHostBridge {
         val trimmedApiUserName = config.apiUserName.trim()
         val trimmedApiKey = config.apiKey.trim()
         val trimmedLocalLink = config.localLink.trim()
+        val trimmedCloudRoomsEndpoint = config.cloudRoomsEndpoint.trim()
         val normalizedAction = config.action.trim().lowercase().ifBlank { "create" }
         val trimmedUserName = config.userName.trim().ifBlank { "tester" }
         val trimmedRoomName = config.roomName.trim().ifBlank { "mediasfu-demo" }
@@ -351,6 +353,9 @@ class MediaSFUIosHostBridge {
 
         return MediasfuGenericOptions(
             localLink = trimmedLocalLink,
+            cloudRoomsEndpoint = trimmedCloudRoomsEndpoint.ifBlank {
+                com.mediasfu.sdk.methods.utils.MEDIA_SFU_CLOUD_ROOMS_ENDPOINT
+            },
             connectMediaSFU = config.connectMediaSFU,
             credentials = credentials,
             sourceParameters = parameters,

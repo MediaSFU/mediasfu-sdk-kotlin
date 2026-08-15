@@ -44,7 +44,8 @@ data class JoinMediaSFUOptions(
     val payload: JoinMediaSFURoomOptions,
     val apiUserName: String,
     val apiKey: String,
-    val localLink: String = ""
+    val localLink: String = "",
+    val cloudRoomsEndpoint: String = MEDIA_SFU_CLOUD_ROOMS_ENDPOINT
 )
 
 /**
@@ -129,7 +130,7 @@ suspend fun joinRoomOnMediaSfu(options: JoinMediaSFUOptions): CreateJoinRoomResu
         )
     }
 
-    val endpoint = resolveJoinEndpoint(localLink)
+    val endpoint = resolveJoinEndpoint(localLink, options.cloudRoomsEndpoint)
 
     return runCatching {
         httpClient.post(endpoint) {
@@ -179,12 +180,15 @@ suspend fun joinRoomOnMediaSfu(options: JoinMediaSFUOptions): CreateJoinRoomResu
     )
 }
 
-private fun resolveJoinEndpoint(localLink: String): String {
+internal fun resolveJoinEndpoint(
+    localLink: String,
+    cloudRoomsEndpoint: String = MEDIA_SFU_CLOUD_ROOMS_ENDPOINT
+): String {
     return if (localLink.isNotBlank()) {
         val normalized = localLink.trimEnd('/')
         "$normalized/joinRoom"
     } else {
-        "https://mediasfu.com/v1/rooms" // ENDPOINT_TOGGLE
+        "${normalizeCloudRoomsEndpoint(cloudRoomsEndpoint)}/join"
     }
 }
 

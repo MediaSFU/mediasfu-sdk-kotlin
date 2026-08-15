@@ -579,7 +579,7 @@ private fun setupSendTransportHandlers(
 
         Logger.i(
             "CreateSendTransport",
-            "transport-produce start transportId=${transport.id} kind=$produceKind codecs=${(cleanRtpMap["codecs"] as? List<*>)?.size ?: 0} encodings=${(cleanRtpMap["encodings"] as? List<*>)?.size ?: 0} hasAppData=${produceData.appData != null}"
+            "transport-produce start transportId=${transport.id} kind=$produceKind codecs=${(cleanRtpMap["codecs"] as? List<*>)?.size ?: 0} encodings=${(cleanRtpMap["encodings"] as? List<*>)?.size ?: 0} cvo=${cleanRtpMap.hasVideoOrientationHeaderExtension()} hasAppData=${produceData.appData != null}"
         )
         MediaSFURuntimeProbe.recordProducerSignalStage(
             "produce-request",
@@ -878,6 +878,13 @@ private fun normalizeRtpNumbers(value: Any?, key: String? = null): Any? = when (
         }
     }
     else -> value
+}
+
+private fun Map<String, Any?>.hasVideoOrientationHeaderExtension(): Boolean {
+    val headerExtensions = this["headerExtensions"] as? List<*> ?: return false
+    return headerExtensions.any { ext ->
+        (ext as? Map<*, *>)?.get("uri")?.toString() == VIDEO_ORIENTATION_RTP_HEADER_EXTENSION_URI
+    }
 }
 
 private fun deepStringify(value: Any?): Any? = when (value) {

@@ -2,9 +2,14 @@ package com.mediasfu.sdk.webrtc
 
 import com.mediasfu.sdk.background.IOSVirtualBackgroundProcessor
 import com.mediasfu.sdk.background.VirtualBackgroundProcessorFactory
+import com.mediasfu.sdk.network.mediaSfuJson
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import platform.ReplayKit.RPScreenRecorder
 import platform.UIKit.UIDevice
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -13,6 +18,60 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class IosPlatformParityTest {
+    @AfterTest
+    fun tearDown() {
+        IosNativeMediasoupBridgeProvider.reset()
+    }
+
+    @Test
+    fun rtpHeaderExtensionPolicy_matchesOtherSdkDefault() {
+        assertEquals(false, shouldPreserveVideoOrientationHeaderExtension())
+
+        val capabilities = RtpCapabilities(
+            headerExtensions = listOf(
+                RtpHeaderExtension(
+                    kind = MediaKind.VIDEO,
+                    uri = VIDEO_ORIENTATION_RTP_HEADER_EXTENSION_URI,
+                    preferredId = 11
+                )
+            )
+        )
+
+        assertEquals(
+            emptyList(),
+            capabilities.applyCurrentPlatformHeaderExtensionPolicy().headerExtensions.map { it.uri }
+        )
+
+        val producerRtpParameters = mapOf(
+            "headerExtensions" to listOf(
+                mapOf("uri" to VIDEO_ORIENTATION_RTP_HEADER_EXTENSION_URI, "id" to 11)
+            )
+        ).applyCurrentPlatformHeaderExtensionPolicy()
+
+        val producerExtensionUris = (producerRtpParameters["headerExtensions"] as List<*>)
+            .mapNotNull { (it as? Map<*, *>)?.get("uri")?.toString() }
+        assertEquals(emptyList(), producerExtensionUris)
+    }
+
+    @Test
+    fun iosDeviceLoad_filtersVideoOrientationBeforeNativeBridge() = runTest {
+        val bridge = FakeLoadableBridge(
+            currentCapabilitiesJson = rtpCapabilitiesJsonWithVideoOrientation()
+        )
+        IosNativeMediasoupBridgeProvider.install(bridge)
+
+        IOSWebRtcDevice.getInstance().load(rtpCapabilitiesWithVideoOrientation()).getOrThrow()
+
+        val loadedUris = headerExtensionUris(requireNotNull(bridge.loadedCapabilitiesJson))
+        assertTrue(VIDEO_ORIENTATION_RTP_HEADER_EXTENSION_URI !in loadedUris)
+
+        val currentUris = IOSWebRtcDevice.getInstance()
+            .currentRtpCapabilities()
+            ?.headerExtensions
+            ?.map { it.uri }
+            ?: emptyList()
+        assertTrue(VIDEO_ORIENTATION_RTP_HEADER_EXTENSION_URI !in currentUris)
+    }
 
     @Test
     fun screenCaptureHelper_buildConstraints_usesIosFriendlyDefaults() {
@@ -99,5 +158,52 @@ class IosPlatformParityTest {
         assertTrue(videoInputs.all { !it.groupId.isNullOrBlank() })
         assertTrue(videoInputs.all { !it.label.isNullOrBlank() })
         assertNotEquals(0, videoInputs.size)
+    }
+}
+
+private fun rtpCapabilitiesWithVideoOrientation(): RtpCapabilities =
+    RtpCapabilities(
+        headerExtensions = listOf(
+            RtpHeaderExtension(
+                kind = MediaKind.VIDEO,
+                uri = "http://www.webrtc.org/experiments/rtp-hdrext/abs-send-time",
+                preferredId = 3
+            ),
+            RtpHeaderExtension(
+                kind = MediaKind.VIDEO,
+                uri = VIDEO_ORIENTATION_RTP_HEADER_EXTENSION_URI,
+                preferredId = 11
+            )
+        )
+    )
+
+private fun rtpCapabilitiesJsonWithVideoOrientation(): String =
+    rtpCapabilitiesWithVideoOrientation().toIosBridgeLoadJson()
+
+private fun headerExtensionUris(json: String): List<String> =
+    mediaSfuJson.parseToJsonElement(json)
+        .jsonObject["headerExtensions"]
+        ?.jsonArray
+        ?.mapNotNull { item -> item.jsonObject["uri"]?.jsonPrimitive?.content }
+        ?: emptyList()
+
+private class FakeLoadableBridge(
+    private val currentCapabilitiesJson: String
+) : IosNativeLoadableMediasoupBridge {
+    var loadedCapabilitiesJson: String? = null
+
+    override fun loadRtpCapabilitiesJson(rtpCapabilitiesJson: String): String? {
+        loadedCapabilitiesJson = rtpCapabilitiesJson
+        return null
+    }
+
+    override fun currentRtpCapabilitiesJson(): String? = currentCapabilitiesJson
+
+    override fun createSendTransport(params: Map<String, Any?>): IosNativeSendTransportHandle {
+        throw UnsupportedOperationException("Not needed for RTP capability filtering test")
+    }
+
+    override fun createRecvTransport(params: Map<String, Any?>): IosNativeRecvTransportHandle {
+        throw UnsupportedOperationException("Not needed for RTP capability filtering test")
     }
 }

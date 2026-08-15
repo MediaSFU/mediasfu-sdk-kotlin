@@ -328,6 +328,10 @@ enum SampleAppEnvironment {
             config.localLink = value
         }
 
+        if let value = configuredValue(named: "MEDIASFU_CLOUD_ROOMS_ENDPOINT", fileOverrides: fileOverrides) {
+            config.cloudRoomsEndpoint = value
+        }
+
         if let value = configuredValue(named: "MEDIASFU_USER_NAME", fileOverrides: fileOverrides) {
             config.userName = value
         }
@@ -458,6 +462,11 @@ enum SampleAppEnvironment {
             automationArgument(named: "--mediasfu-auto-launch") ||
             automationFlag(named: "MEDIASFU_AUTO_PROCEED") ||
             automationArgument(named: "--mediasfu-auto-proceed")
+    }
+
+    static var resetSavedSessionRequested: Bool {
+        automationFlag(named: "MEDIASFU_RESET_SAVED_SESSION") ||
+            automationArgument(named: "--mediasfu-reset-saved-session")
     }
 
     static var shouldRequestMediaPermissionsBeforeLaunch: Bool {

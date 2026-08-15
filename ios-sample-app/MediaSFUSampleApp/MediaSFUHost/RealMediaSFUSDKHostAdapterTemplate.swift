@@ -43,9 +43,18 @@ private extension RealMediaSFUSDKHostAdapter {
         NSLog("MediaSFU - host adapter module -> %@", mediaSFUKmpModuleName)
         let hostBridge = MediaSFUIosHostBridge()
         let launchConfig = hostBridge.makeLaunchConfig()
+        NSLog(
+            "MediaSFU - launch endpoints -> cloudRooms=%@; localLink=%@; apiUser=%@; action=%@; roomProvided=%d",
+            context.sessionConfig.normalizedCloudRoomsEndpoint.isEmpty ? "<default-cloud>" : context.sessionConfig.normalizedCloudRoomsEndpoint,
+            context.sessionConfig.normalizedLocalLink.isEmpty ? "<none>" : context.sessionConfig.normalizedLocalLink,
+            context.sessionConfig.normalizedApiUserName,
+            context.sessionConfig.action.rawValue,
+            context.sessionConfig.normalizedRoomName.isEmpty ? 0 : 1
+        )
         launchConfig.apiUserName = context.sessionConfig.normalizedApiUserName
         launchConfig.apiKey = context.sessionConfig.normalizedApiKey
         launchConfig.localLink = context.sessionConfig.normalizedLocalLink
+        launchConfig.cloudRoomsEndpoint = context.sessionConfig.normalizedCloudRoomsEndpoint
         launchConfig.userName = context.sessionConfig.normalizedUserName
         launchConfig.roomName = context.sessionConfig.normalizedRoomName
         launchConfig.connectMediaSFU = context.sessionConfig.connectMediaSFU
