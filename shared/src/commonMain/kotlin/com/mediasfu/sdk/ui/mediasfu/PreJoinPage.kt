@@ -49,10 +49,8 @@ import kotlinx.coroutines.launch
 import com.mediasfu.sdk.util.MediaSFURuntimeProbe
 import com.mediasfu.sdk.EngineParameterAdapters
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.yield
 import kotlinx.datetime.Clock
-import kotlin.coroutines.resume
 import kotlin.random.Random
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -71,6 +69,12 @@ fun PreJoinPage(state: MediasfuGenericState) {
     var capacity by remember { mutableStateOf("") }
     var eventType by remember { mutableStateOf("conference") }
     var error by remember { mutableStateOf("") }
+
+    LaunchedEffect(error, options.returnUI) {
+        if (!options.returnUI && error.isNotBlank()) {
+            options.onPreJoinError?.invoke(error)
+        }
+    }
 
     var pending by remember { mutableStateOf(false) }
     var expanded by remember { mutableStateOf(false) }
@@ -240,39 +244,39 @@ fun PreJoinPage(state: MediasfuGenericState) {
     }
 
     suspend fun connectAndValidateCloudRoom(
-        roomName: String,
-        socketSecret: String,
+        response: CreateJoinRoomResponse,
         memberName: String,
         islevel: String,
-        link: String,
         adminPasscode: String
-    ): Boolean {
+    ): Result<CloudPreJoinRequest> {
         // The shared state observer can prefetch sockets whenever credentials change.
         // Pause that path during the cloud room handoff so the explicit join flow owns
         // the first connection attempt with the resolved room credentials.
         state.suspendCredentialSocketPrefetch()
-        state.room.updateApiUserName(roomName)
-        state.room.updateApiToken(socketSecret)
-        state.room.updateLink(link)
-        state.room.updateRoomName(roomName)
-        state.room.updateMember(memberName)
-        state.room.updateIslevel(islevel)
-        state.room.updateAdminPasscode(adminPasscode)
 
-        return suspendCancellableCoroutine { continuation ->
+        return completeCloudPreJoin(
+            response = response,
+            member = memberName,
+            islevel = islevel,
+            adminPasscodeOverride = adminPasscode
+        ) { request, onComplete ->
+            state.room.updateApiUserName(request.apiUserName)
+            state.room.updateApiToken(request.apiToken)
+            state.room.updateLink(request.link)
+            state.room.updateRoomName(request.roomName)
+            state.room.updateMember(request.member)
+            state.room.updateIslevel(request.islevel)
+            state.room.updateAdminPasscode(request.adminPasscode)
             state.connectAndValidate(
-                roomName = roomName,
-                member = memberName,
-                adminPasscode = adminPasscode,
-                islevel = islevel,
-                apiUserName = roomName,
-                apiToken = socketSecret,
-                showLoadingModal = false
-            ) { success ->
-                if (continuation.isActive) {
-                    continuation.resume(success)
-                }
-            }
+                roomName = request.roomName,
+                member = request.member,
+                adminPasscode = request.adminPasscode,
+                islevel = request.islevel,
+                apiUserName = request.apiUserName,
+                apiToken = request.apiToken,
+                showLoadingModal = false,
+                onComplete = onComplete
+            )
         }
     }
 
@@ -471,19 +475,18 @@ fun PreJoinPage(state: MediasfuGenericState) {
                     )
                     val adminPasscode = data.secureCode?.takeIf { it.isNotBlank() } ?: data.secret
                     MediaSFURuntimeProbe.recordConsumerSignalStage("handoff", "", "create-cloud-generic")
-                    val connected = connectAndValidateCloudRoom(
-                        roomName = data.roomName,
-                        socketSecret = data.secret,
+                    val connection = connectAndValidateCloudRoom(
+                        response = data,
                         memberName = userNameValue,
                         islevel = "2",
-                        link = data.link,
                         adminPasscode = adminPasscode
                     )
-                    if (connected) {
+                    if (connection.isSuccess) {
                         MediaSFURuntimeProbe.recordConsumerSignalStage("join-ok", "", "create")
                     } else {
                         MediaSFURuntimeProbe.recordConsumerSignalStage("join-fail", "", "create-cloud-generic")
-                        error = "Unable to create room. Media connection failed."
+                        error = connection.exceptionOrNull()?.message
+                            ?: "Unable to create room. Media connection failed."
                     }
                 } else if (!response.success && response.data is CreateJoinRoomError) {
                     val err = response.data as CreateJoinRoomError
@@ -607,19 +610,18 @@ fun PreJoinPage(state: MediasfuGenericState) {
                     val joinLevel = (resolvedOverride?.islevel ?: "0").ifBlank { "0" }
                     val adminPasscode = resolvedOverride?.adminPasscode?.takeIf { it.isNotBlank() } ?: data.secureCode?.takeIf { it.isNotBlank() } ?: ""
                     MediaSFURuntimeProbe.recordConsumerSignalStage("handoff", "", "join-cloud-generic")
-                    val connected = connectAndValidateCloudRoom(
-                        roomName = data.roomName,
-                        socketSecret = data.secret,
+                    val connection = connectAndValidateCloudRoom(
+                        response = data,
                         memberName = nameValue,
                         islevel = joinLevel,
-                        link = data.link,
                         adminPasscode = adminPasscode
                     )
-                    if (connected) {
+                    if (connection.isSuccess) {
                         MediaSFURuntimeProbe.recordConsumerSignalStage("join-ok", "", "")
                     } else {
                         MediaSFURuntimeProbe.recordConsumerSignalStage("join-fail", "", "join-cloud-generic")
-                        error = "Unable to join room. Media connection failed."
+                        error = connection.exceptionOrNull()?.message
+                            ?: "Unable to join room. Media connection failed."
                     }
                 } else if (!response.success && response.data is CreateJoinRoomError) {
                     val err = response.data as CreateJoinRoomError

@@ -10,7 +10,9 @@ data class ConfirmExitOptions(
     val localSocket: SocketManager? = null,
     val member: String,
     val roomName: String,
-    val ban: Boolean = false
+    val ban: Boolean = false,
+    /** Hosts can leave without ending the room by setting this to false. */
+    val endRoomOnHostExit: Boolean = true
 )
 
 /**
@@ -43,14 +45,16 @@ suspend fun confirmExit(options: ConfirmExitOptions) {
     options.socket?.emit("disconnectUser", mapOf(
         "member" to options.member,
         "roomName" to options.roomName,
-        "ban" to options.ban
+        "ban" to options.ban,
+        "endRoomOnHostExit" to options.endRoomOnHostExit
     ))
     
     if (options.localSocket != null && options.localSocket?.id != null) {
         options.localSocket?.emit("disconnectUser", mapOf(
             "member" to options.member,
             "roomName" to options.roomName,
-            "ban" to options.ban
+            "ban" to options.ban,
+            "endRoomOnHostExit" to options.endRoomOnHostExit
         ))
     }
 }

@@ -1,5 +1,6 @@
 # Project settings
 org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError
+kotlin.daemon.jvmargs=-Xmx6144m
 kotlin.code.style=official
 android.useAndroidX=true
 android.nonTransitiveRClass=true
@@ -28,8 +29,8 @@ mavenCentralUsername=YOUR_USERNAME
 mavenCentralPassword=YOUR_PASSWORD
 
 # =================================================================
-# GPG Signing (for publishing to Maven Central)
+# GPG signing (for Maven Central)
 # =================================================================
-signing.keyId=YOUR_KEY_ID
+# Save the ASCII-armored private key as private-key-one.asc at the repository
+# root. The file is ignored by Git and loaded in memory by shared/build.gradle.kts.
 signing.password=YOUR_GPG_PASSWORD
-signing.secretKeyRingFile=/path/to/.gnupg/secring.gpg

@@ -37,6 +37,15 @@ data class ContainerStyleOptions(
     val clipBehavior: ContainerClipBehavior = ContainerClipBehavior.None,
 )
 
+/** Resolves first-class embed fractions while preserving explicit legacy style values. */
+fun ContainerStyleOptions.withContainerFractions(
+    widthFraction: Float,
+    heightFraction: Float
+): ContainerStyleOptions = copy(
+    widthFraction = this.widthFraction ?: widthFraction.coerceIn(0f, 1f),
+    heightFraction = this.heightFraction ?: heightFraction.coerceIn(0f, 1f)
+)
+
 /** Describes margin/padding style with directional control. */
 @Immutable
 data class ContainerSpacing(

@@ -43,10 +43,10 @@ internal fun PreJoinOrWelcome(state: MediasfuGenericState) {
         return
     }
 
-    // If noUI options are provided (CE-only mode with auto-create/join), use PreJoinPage
-    // This enables the noUI auto-flow even without cloud credentials
+    // Headless callbacks own the credential boundary for Cloud proxies and
+    // MediaSFU Open/local links; a localLink is not required to start the flow.
     val hasNoUIOptions = options.noUIPreJoinOptionsCreate != null || options.noUIPreJoinOptionsJoin != null
-    if (hasNoUIOptions && options.localLink.isNotBlank()) {
+    if (hasNoUIOptions && !options.returnUI) {
         PreJoinPage(state)
         return
     }

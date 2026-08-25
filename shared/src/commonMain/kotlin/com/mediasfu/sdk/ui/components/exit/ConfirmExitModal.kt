@@ -43,7 +43,8 @@ data class ConfirmExitOptions(
     val member: String,
     val ban: Boolean,
     val socket: Any?,  // Socket connection
-    val roomName: String
+    val roomName: String,
+    val endRoomOnHostExit: Boolean = true
 )
 
 /**
@@ -112,16 +113,16 @@ class DefaultConfirmExitModal(
 ) : ConfirmExitModal {
     
     override fun getConfirmationMessage(): String {
-        return if (options.islevel == "2") {
-            "This will end the event for all. Confirm exit."
+        return if (options.islevel == "2" && !options.ban) {
+            "Leave room keeps the event active for everyone else and lets you rejoin. End for everyone closes it for all participants."
         } else {
             "Are you sure you want to exit?"
         }
     }
     
     override fun getConfirmButtonLabel(): String {
-        return if (options.islevel == "2") {
-            "End Event"
+        return if (options.islevel == "2" && !options.ban) {
+            "End for everyone"
         } else {
             "Exit"
         }
@@ -193,12 +194,30 @@ class DefaultConfirmExitModal(
                             member = options.member,
                             ban = options.ban,
                             socket = options.socket,
-                            roomName = options.roomName
+                            roomName = options.roomName,
+                            endRoomOnHostExit = true
                         )
                         options.exitEventOnConfirm(exitOptions)
                         options.onClose()
                     }
-                )
+                ),
+                "leaveButton" to if (options.islevel == "2" && !options.ban) mapOf(
+                    "label" to "Leave room",
+                    "backgroundColor" to "#475569",
+                    "color" to "#FFFFFF",
+                    "onClick" to {
+                        options.exitEventOnConfirm(
+                            ConfirmExitOptions(
+                                member = options.member,
+                                ban = options.ban,
+                                socket = options.socket,
+                                roomName = options.roomName,
+                                endRoomOnHostExit = false
+                            )
+                        )
+                        options.onClose()
+                    }
+                ) else emptyMap<String, Any>()
             )
         )
     }

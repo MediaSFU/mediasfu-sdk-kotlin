@@ -34,8 +34,8 @@ class DisconnectSendTransportAudioTest {
         val result = disconnectSendTransportAudio(options)
         
         assertTrue(result.isSuccess)
-        assertEquals(null, parameters.audioProducer)
-        assertEquals(null, parameters.localAudioProducer)
+        assertTrue(parameters.audioProducer?.paused == true)
+        assertTrue(parameters.localAudioProducer?.paused == true)
         assertTrue(remoteSocket.emitCalls.any { it.first == "pauseProducerMedia" })
         assertTrue(localSocket.emitCalls.any { it.first == "pauseProducerMedia" })
     }
@@ -93,7 +93,7 @@ class DisconnectSendTransportAudioTest {
         val result = disconnectLocalSendTransportAudio(options)
         
         assertTrue(result.isSuccess)
-        assertEquals(null, parameters.localAudioProducer)
+        assertTrue(parameters.localAudioProducer?.paused == true)
         assertTrue(localSocket.emitCalls.any { it.first == "pauseProducerMedia" })
     }
     

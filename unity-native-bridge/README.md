@@ -108,15 +108,21 @@ To copy built bridge outputs into the Unity package plugin folders, run from the
 
 That script keeps the bridge packaging standalone from the KMP Android library build. On macOS it copies the editor plugin from this repo into `mediasfu-unity/Runtime/Plugins/macOS/`, stages the real iOS `MediaSFUNativeBridge.xcframework` plus companion `WebRTC.xcframework` into `mediasfu-unity/Runtime/Plugins/iOS/`, and when an Android NDK is available it also builds Android `.so` outputs into `mediasfu-unity/Runtime/Plugins/Android/<abi>/`.
 
-## Next Step
+## Implement a platform backend
 
-Replace `src/MediaSfuUnityBridgeStub.c`, or register a real backend behind it, so the native bridge can:
+Replace `src/MediaSfuUnityBridgeStub.c`, or register a real backend behind it,
+when adding a platform that this package does not already support. The backend
+must:
 
-1. creates and owns a real native media engine handle
-2. maps `MediaSfuUnityInvokeWebRtcEngine` operations onto Android or iOS mediasoup and WebRTC calls
-3. returns success envelopes for DTLS connect parameter extraction, produce request creation, producer binding, and consumer binding
-4. package the final binary for Unity Editor and the remaining non-iOS targets behind the same ABI
+1. create and own a real native media-engine handle;
+2. map `MediaSfuUnityInvokeWebRtcEngine` operations onto the platform's
+   mediasoup/WebRTC calls;
+3. return the documented success envelopes for transport connection,
+   production, producer binding, and consumer binding; and
+4. package the final binary for the intended Unity Editor and player targets
+   behind the same ABI.
 
-The Android JNI source now covers the backend registration path, Kotlin registry forwarding, and packaged Android plugin outputs. The remaining backend work in this repo is mainly editor/macOS parity and broader runtime smoke validation behind the stable `MediaSfuUnity*` exports.
+The Android JNI source demonstrates backend registration, Kotlin registry
+forwarding, and Android plugin packaging.
 
 The payload and response envelope expected by the managed Unity runtime are documented in [../mediasfu-unity/Documentation~/NATIVE_PLUGIN_CONTRACT.md](../mediasfu-unity/Documentation~/NATIVE_PLUGIN_CONTRACT.md).

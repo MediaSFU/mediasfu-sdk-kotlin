@@ -53,14 +53,18 @@
 // build.gradle.kts (app level)
 dependencies {
     // For Android-only projects (recommended):
-    implementation("com.mediasfu:mediasfu-sdk-android:1.0.4")
+    implementation("com.mediasfu:mediasfu-sdk-android:1.0.5")
     
     // For Kotlin Multiplatform projects:
-    // implementation("com.mediasfu:mediasfu-sdk:1.0.4")
+    // implementation("com.mediasfu:mediasfu-sdk:1.0.5")
 }
 ```
 
 The Android SDK supplies `com.mediasfu:mediasoup-client:1.0.7` transitively. Do not add or pin an older client version.
+
+> **Protect API credentials:** Android apps cannot keep embedded API keys secret. For production, create/join rooms through your backend proxy and return only the room response the app needs. Direct credentials are for fast local or staging development. See the [MediaSFU Sandbox](https://www.mediasfu.com/sandbox) for API request/response shapes and [MediaSFU](https://www.mediasfu.com/) for API access.
+>
+> **MediaSFU Open** is your own locally/self-hosted MediaSFU media server. It is separate from MediaSFU Cloud; configure the SDK to use the URL of the server you operate.
 
 ### 2. Use It
 
@@ -74,7 +78,7 @@ fun App() {
     // Option 1: No credentials (testing/demo)
     MediasfuGeneric()
     
-    // Option 2: With MediaSFU Cloud credentials
+    // Development only: direct MediaSFU Cloud credentials
     // MediasfuGeneric(
     //     options = MediasfuGenericOptions(
     //         credentials = Credentials(apiUserName = "your_username", apiKey = "your_api_key")
@@ -106,10 +110,10 @@ fun App() {
 ```kotlin
 dependencies {
     // For Android-only projects (recommended):
-    implementation("com.mediasfu:mediasfu-sdk-android:1.0.4")
+    implementation("com.mediasfu:mediasfu-sdk-android:1.0.5")
     
     // For Kotlin Multiplatform projects:
-    // implementation("com.mediasfu:mediasfu-sdk:1.0.4")
+    // implementation("com.mediasfu:mediasfu-sdk:1.0.5")
 }
 ```
 
@@ -143,6 +147,7 @@ import com.mediasfu.sdk.ui.mediasfu.*
 import com.mediasfu.sdk.model.Credentials
 
 val options = MediasfuGenericOptions(
+    // Development only. In production, create/join rooms through your backend.
     credentials = Credentials(apiUserName = "user", apiKey = "key")
 )
 
@@ -246,6 +251,73 @@ MediasfuGeneric(
     customComponent = { CustomMainScreen(it) }
 )
 ```
+
+### Headless controller and live media
+
+Use the UI-independent controller when your app owns every Compose surface:
+
+```kotlin
+import com.mediasfu.sdk.headless.MediaSfuHeadlessController
+
+val headless = MediaSfuHeadlessController(engine)
+val snapshot = headless.snapshot() // immutable copy; call again for current state
+
+if (snapshot.readiness.mediaControlsReady) {
+    val video = headless.participantMedia(
+        participantName = "Ada",
+        kind = "video"
+    )
+    // Render `video` with your platform video renderer when non-null.
+}
+
+// Do not filter audio by the visible video page: every remote audio stream is here.
+val allAudio = snapshot.media.audioStreams
+```
+
+Polling and Compose rendering must call `engine.getCurrentParams()` for a pure read. `getUpdatedAllParams()` is retained for update/publication workflows and should not be used as a getter. `updateSourceParameters` is dispatched from Compose effects, after composition.
+
+For a headless Cloud flow, surface pre-join failures in your own UI:
+
+```kotlin
+val options = MediasfuGenericOptions(
+    returnUI = false,
+    noUIPreJoinOptions = noUiOptions,
+    onPreJoinError = { message ->
+        uiState.update { it.copy(errorMessage = message) }
+    }
+)
+```
+
+Create and join rooms through your backend proxy in production so API credentials never ship in the app. `onPreJoinError` reports validation, connection, and timeout failures without requiring the built-in pre-join screen.
+
+For an embedded room, set first-class fractions on `MediasfuGenericOptions`; values are clamped to the parent bounds and default to filling the parent:
+
+```kotlin
+val embedded = MediasfuGenericOptions(
+    containerWidthFraction = 0.75f,
+    containerHeightFraction = 0.65f
+)
+```
+
+### Let a host leave without ending the room
+
+Host exits preserve existing behavior by default and end the room. Set `endRoomOnHostExit` to `false` when your product offers a separate **Leave room** action:
+
+```kotlin
+import com.mediasfu.sdk.methods.exit_methods.ConfirmExitOptions
+import com.mediasfu.sdk.methods.exit_methods.confirmExit
+
+confirmExit(
+    ConfirmExitOptions(
+        socket = socket,
+        member = member,
+        roomName = roomName,
+        endRoomOnHostExit = false
+    )
+)
+```
+
+The built-in host exit dialog exposes both **Leave room** and **End for everyone**. Participants still receive the normal leave action.
 
 ---
 

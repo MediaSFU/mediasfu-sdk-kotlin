@@ -252,6 +252,9 @@ class MediaSfuEngine(
 	// Expose parameters for advanced usage
 	fun getParameters() = parameters
 
+	/** Pure snapshot-source accessor for polling and headless integrations. */
+	fun getCurrentParams() = parameters.getCurrentParams()
+
 	// Join helpers wrapping emit methods
 	suspend fun joinRoom(
 		roomName: String,
@@ -652,6 +655,12 @@ class MediaSfuEngine(
 		parameters.forceFullDisplay = parameters.prevForceFullDisplay
 		parameters.firstAll = false
 		parameters.firstRound = false
+		// Refresh helpers may complete their own transient layout cycle. Preserve
+		// the semantic screen-share outcome exposed to SDK consumers.
+		parameters.shared = false
+		parameters.shareScreenStarted = false
+		parameters.shareEnded = true
+		parameters.updateMainWindow = true
 		
 		return Result.success(Unit)
 	}
@@ -862,4 +871,3 @@ interface Platform {
 expect fun getPlatform(): Platform
 
 // Parameter adapter implementations moved to EngineParameterAdapters.kt.
-

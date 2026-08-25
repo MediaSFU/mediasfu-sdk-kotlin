@@ -22,6 +22,9 @@ interface GetParticipantMediaParameters {
     val allVideoStreams: List<Stream>
     val allAudioStreams: List<Stream>
     val participants: List<Participant>
+
+    /** Pure read accessor; implementations may return a newly published bag from update APIs. */
+    fun getCurrentParams(): GetParticipantMediaParameters = this
 }
 
 /**
@@ -78,9 +81,10 @@ suspend fun getParticipantMedia(options: GetParticipantMediaOptions): MediaStrea
         var stream: MediaStream? = null
         
         // Get required parameters
-        val allVideoStreams = options.parameters.allVideoStreams
-        val allAudioStreams = options.parameters.allAudioStreams
-        val participants = options.parameters.participants
+        val parameters = options.parameters.getCurrentParams()
+        val allVideoStreams = parameters.allVideoStreams
+        val allAudioStreams = parameters.allAudioStreams
+        val participants = parameters.participants
         
         // Search by ID if provided
         if (options.id.isNotEmpty()) {

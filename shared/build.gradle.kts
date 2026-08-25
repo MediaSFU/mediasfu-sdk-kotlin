@@ -13,6 +13,7 @@ plugins {
 
 val sdkVersion = rootProject.extra["sdkVersion"] as String
 val mediasoupClientVersion = rootProject.extra["mediasoupClientVersion"] as String
+val skipSigning = providers.gradleProperty("mediasfu.skipSigning").orNull.toBoolean()
 
 repositories {
     google()
@@ -151,7 +152,9 @@ android {
 // Maven Central Publishing with Vanniktech plugin
 mavenPublishing {
     publishToMavenCentral(com.vanniktech.maven.publish.SonatypeHost.CENTRAL_PORTAL)
-    signAllPublications()
+    if (!skipSigning) {
+        signAllPublications()
+    }
 
     coordinates("com.mediasfu", "mediasfu-sdk", sdkVersion)
 
@@ -196,6 +199,11 @@ tasks.configureEach {
         )
     ) {
         dependsOn(rootProject.tasks.named("checkDocumentationVersions"))
+        doFirst {
+            require(!skipSigning) {
+                "mediasfu.skipSigning is only for local publication verification; Maven Central requires signed artifacts."
+            }
+        }
     }
 }
 

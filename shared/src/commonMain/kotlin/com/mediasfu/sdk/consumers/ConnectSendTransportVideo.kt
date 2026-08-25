@@ -260,8 +260,11 @@ suspend fun connectSendTransportVideo(
                 )
                 val produceTimeoutMs = 30_000L
                 val remoteProducer = runCatching {
-                    withTimeout(produceTimeoutMs) {
-                        withContext(Dispatchers.Default) {
+                    // Keep the timeout on the real worker dispatcher. A timeout
+                    // inherited from a virtual test scheduler can expire before
+                    // the native producer call gets CPU time.
+                    withContext(Dispatchers.Default) {
+                        withTimeout(produceTimeoutMs) {
                             producerTransport.produce(
                                 track = resolvedTrack,
                                 encodings = resolvedEncodings,

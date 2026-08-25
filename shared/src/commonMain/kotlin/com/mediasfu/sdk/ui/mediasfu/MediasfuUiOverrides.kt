@@ -204,6 +204,8 @@ data class ConfirmExitModalProps(
     val isHost: Boolean,
     val message: String,
     val confirmLabel: String,
+    val leaveLabel: String = "Leave room",
+    val onLeave: (() -> Unit)? = null,
     val onConfirm: () -> Unit,
     val onDismiss: () -> Unit
 )

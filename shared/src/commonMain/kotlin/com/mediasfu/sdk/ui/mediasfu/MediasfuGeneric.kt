@@ -4750,7 +4750,15 @@ class MediasfuGenericState internal constructor(
         } else {
             "You have left the event."
         }
-        exitSession(successMessage = successMessage)
+        exitSession(endRoomOnHostExit = true, successMessage = successMessage)
+    }
+
+    fun leaveHostWithoutEndingFromPrompt() {
+        closeConfirmExit()
+        exitSession(
+            endRoomOnHostExit = false,
+            successMessage = "You left the event. It remains active and you can rejoin."
+        )
     }
 
     fun acknowledgePresence() {
@@ -4762,7 +4770,11 @@ class MediasfuGenericState internal constructor(
         exitSession(successMessage = "You have been disconnected due to inactivity.")
     }
 
-    fun exitSession(ban: Boolean = false, successMessage: String? = null) {
+    fun exitSession(
+        ban: Boolean = false,
+        endRoomOnHostExit: Boolean = true,
+        successMessage: String? = null
+    ) {
         closeAllModals()
         val roomName = room.roomName.ifBlank { parameters.roomName }
         val memberName = room.member.ifBlank { parameters.member }
@@ -4779,7 +4791,8 @@ class MediasfuGenericState internal constructor(
                         localSocket = connectivity.localSocket,
                         member = memberName,
                         roomName = roomName,
-                        ban = ban
+                        ban = ban,
+                        endRoomOnHostExit = endRoomOnHostExit
                     )
                 )
                 closeAndReset()
@@ -5293,11 +5306,11 @@ class MediasfuGenericState internal constructor(
         val memberName = room.member.ifBlank { parameters.member }
         val roomName = room.roomName.ifBlank { parameters.roomName }
         val message = if (isHost) {
-            "This will end the event for everyone. Are you sure you want to continue?"
+            "Leave room keeps the event active for everyone else and lets you rejoin. End for everyone closes it for all participants."
         } else {
             "Are you sure you want to exit the event?"
         }
-        val confirmLabel = if (isHost) "End Event" else "Exit"
+        val confirmLabel = if (isHost) "End for everyone" else "Exit"
 
         return ConfirmExitModalProps(
             state = this,
@@ -5307,6 +5320,8 @@ class MediasfuGenericState internal constructor(
             isHost = isHost,
             message = message,
             confirmLabel = confirmLabel,
+            leaveLabel = "Leave room",
+            onLeave = if (isHost) ::leaveHostWithoutEndingFromPrompt else null,
             onConfirm = ::confirmExitFromPrompt,
             onDismiss = ::closeConfirmExit
         )
@@ -9837,10 +9852,16 @@ data class MediasfuGenericOptions(
     val joinMediaSFURoom: suspend (JoinMediaSFUOptions) -> CreateJoinRoomResult = { joinRoomOnMediaSfu(it) },
     /** REST API callback to create a room on MediaSFU Cloud (used by PreJoinPage) */
     val createMediaSFURoom: suspend (CreateMediaSFUOptions) -> CreateJoinRoomResult = { createRoomOnMediaSfu(it) },
+    /** Receives public-safe prejoin failures when [returnUI] is false. */
+    val onPreJoinError: ((String) -> Unit)? = null,
     val customVideoCard: (@Composable (Stream) -> Unit)? = null,
     val customAudioCard: (@Composable (Stream) -> Unit)? = null,
     val customMiniCard: (@Composable (Stream) -> Unit)? = null,
     var customComponent: (@Composable (MediasfuGenericState) -> Unit)? = null,
+    /** Fraction of the parent container occupied by the room (0..1). */
+    val containerWidthFraction: Float = 1f,
+    /** Fraction of the parent container occupied by the room (0..1). */
+    val containerHeightFraction: Float = 1f,
     val containerStyle: ContainerStyleOptions = ContainerStyleOptions(),
     val uiOverrides: MediasfuUiOverrides = MediasfuUiOverrides(),
     val customWorkspaceBuilder: (@Composable (MediasfuGenericState) -> Unit)? = null,
@@ -10142,7 +10163,10 @@ private fun MediasfuGenericContent(state: MediasfuGenericState, modifier: Modifi
     val isLoading by state.isLoading.collectAsState()
     val sessionKey by state.sessionCounter.collectAsState()  // Track session changes for UI reset
     val hasAlert by remember { derivedStateOf { state.alert.visible } }
-    val containerStyle = state.options.containerStyle
+    val containerStyle = state.options.containerStyle.withContainerFractions(
+        state.options.containerWidthFraction,
+        state.options.containerHeightFraction
+    )
     val backgroundColor = containerStyle.backgroundColor ?: Color(0xFF0B172A)
     val useModernUI = state.options.useModernUI
 
@@ -10369,7 +10393,6 @@ private fun MediasfuGenericContent(state: MediasfuGenericState, modifier: Modifi
                 Box(modifier = Modifier.fillMaxSize()) {
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
                             .applyContainerStyle(containerStyle)
                             .background(if (useModernUI) MaterialTheme.colorScheme.background else backgroundColor)
                     ) {

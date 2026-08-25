@@ -1,80 +1,114 @@
-# Basic Room Flow Sample
+# MediaSFU Unity basic room flow
 
-This sample folder now includes a bootstrap `MonoBehaviour` for the first Unity package cut.
+This sample shows how to create or join a MediaSFU room from a Unity scene,
+connect the realtime session, bind a WebRTC media device, observe participants,
+send chat, control local media, moderate requests, manage recording, and leave
+cleanly.
 
-The package can perform REST create and join calls today, validate a room over Socket.IO, emit leave/chat/socket-level media control signals, and expose a unified `IMediaSfuWebRtcDevice` install path plus reusable local and remote media bridge hooks with typed create/connect/produce/consume helpers. Concrete media runtime owners are supplied by `com.mediasfu.mediasoup-client-unity`; with that package installed, the sample can attach the concrete native-plugin engine and drive a minimal remote video texture path, while richer multi-participant UI and broader playback surfaces remain follow-up work.
+## Credential safety
 
-The checked-in macOS/editor validation path already proves the package backend with real credentialed validation traffic before this sample enters the picture: microphone publish, camera publish, remote consume, post-media chat, approval-driven audio, moderated video, participant screen-share approval, host screen-share start/consume/stop, recording start/pause/resume/stop, co-host assignment, poll create/vote/end, participant removal, and host end-meeting forced exit all pass through the headless validator. The validation environment currently enforces a 15-second wait before pause and another 15-second wait before resume, and the checked-in validator already accounts for both. Use this sample for scene wiring, manual observation, and lightweight UI binding rather than as the first source of runtime proof.
+A Unity player is a client application and cannot keep an embedded MediaSFU API
+key secret. For a distributed application, authenticate the player with your
+backend, create or join the room there, and return only the room-scoped response
+the client needs.
 
-## Current Bootstrap Script
+Direct inspector credentials are an optional local-development shortcut. Use
+restricted, revocable development credentials, keep the scene and local config
+uncommitted, and remove the values before building or sharing a player.
 
-Use `Runtime/MediaSfuBasicRoomFlow.cs` on a GameObject to:
+- [Secure backend proxy](https://mediasfu.com/docs/usage/secure-backend-proxy/)
+- [MediaSFU API Sandbox](https://mediasfu.com/sandbox/)
+- [MediaSFU Open](https://github.com/MediaSFU/MediaSFUOpen) — a media server you
+  deploy and operate yourself
 
-1. configure cloud or community connection settings in the inspector
-2. trigger `CreateRoomAsync` or `JoinRoomAsync`
-3. trigger `ConnectMediaAsync`, `LeaveRoomAsync`, chat send, mic mute/resume, camera start/stop, screen-share start/stop, and recording start/pause/resume/stop
-4. approve or reject either the first or the currently selected pending media request exposed on `CurrentRoom.PendingRequests`
-5. allow or deny either the first or the currently selected waiting-room participant exposed on `CurrentRoom.WaitingRoomParticipants`
-6. acknowledge the local confirm-here prompt and optionally suppress future prompts for the current client instance
-7. surface connection, error, moderation totals, waiting-room notices, active poll state, breakout state, screen-producer receive state, consume-domain updates, whiteboard state, recording, and participant-side request-response state via inspector status text, indexed inspector snapshots, dedicated `UnityEvent<string>` hooks for room, participant, breakout, consume-domain, poll, and whiteboard snapshots, plus bool/int state events for counts, visibility flags, recording paused state, and recording pause/resume availability
-8. attach an `IMediaSfuLocalMediaBackend` from scene code, or hand the sample an `IMediaSfuTransportBackedLocalMediaAdapter` through `AttachTransportBackedLocalMediaAdapter(...)` so it can build and own a `MediaSfuTransportBackedLocalMediaBackend`; `MediaSfuDelegateTransportBackedLocalMediaAdapter` can be used for delegate-based bridge glue instead of a full adapter class, and the wrapper will reapply the resulting backend automatically whenever the sample recreates its underlying `MediaSfuClient`
-9. attach an `IMediaSfuRemoteMediaBridge` from scene code, or hand the sample an `IMediaSfuTransportBackedRemoteMediaAdapter` through `AttachTransportBackedRemoteMediaAdapter(...)` so it can build and own a `MediaSfuTransportBackedRemoteMediaBridge` that follows typed `RemoteProducerAvailable` and `RemoteProducerClosed` events across client recreation
-10. attach an `IMediaSfuWebRtcDevice` from scene code, or hand the sample both transport-backed adapters through `AttachTransportBackedWebRtcDevice(...)` so it can build and own a single `MediaSfuTransportBackedWebRtcDevice` that reattaches both publish and playback flows together across client recreation
-11. hand the sample one `IMediaSfuWebRtcEngine` through `AttachTransportBackedWebRtcEngine(...)` so it can build and own a `MediaSfuWebRtcEngineDevice` and keep publish plus playback attached together across client recreation without separate adapter classes; `MediaSfuDelegateWebRtcEngine` can bootstrap that path without a dedicated engine type
-12. call `AttachNativePluginWebRtcEngine(...)` to let the sample build the client package's concrete native-plugin engine for you; if the binary is missing the sample raises a status error instead of throwing, and `../../scripts/build_unity_native_bridge_package.sh` is the shortest way to refresh the current bridge scaffold for editor, Android, or iOS smoke tests
-13. add `Runtime/MediaSfuNativePluginRemoteVideoView.cs` to a GameObject, point it at the same `MediaSfuBasicRoomFlow`, and optionally a target `Renderer`; when the Apple native-plugin path is attached it will follow remote video or screen-share tracks and upload the latest BGRA frame into a Unity `Texture2D`
+## Add the sample to a scene
 
-Leaving the inspector `baseUrl` empty uses production cloud endpoints. Set it to your server root or a full `/v1/rooms` endpoint only when using a self-hosted backend.
+1. Install `com.mediasfu.unity` and the companion
+   `com.mediasfu.mediasoup-client-unity` package.
+2. Add `Runtime/MediaSfuBasicRoomFlow.cs` to a GameObject.
+3. Configure Cloud or self-hosted connection settings.
+4. Bind UI controls to create or join, connect media, microphone, camera, screen
+   share, chat, recording, moderation, and leave actions.
+5. Bind status and room events to visible UI so users can distinguish connecting,
+   ready, denied, disconnected, and ended states.
 
-It is still intentionally minimal. The current sample is now better suited for live scene wiring, inspector-driven moderation, state inspection, and first-pass Apple native-plugin remote video rendering, and it exposes scene-usable count plus visibility events so simple Unity UI controls can bind without parsing strings while still driving the new recording control methods from inspector or scene bindings. It now preserves either directly attached bridges, sample-owned transport-backed bridges, or a sample-owned engine-backed device across internal client recreation, but a fuller sample scene should still land once concrete multi-participant playback, audio playout validation, capture adapters, and richer moderation plus recording UI are implemented.
+An empty `baseUrl` uses MediaSFU Cloud. Set it only when targeting an existing
+MediaSFU Open or custom backend that the player can reach.
 
-## Intended First Sample Scene
+## Choose a media device
 
-Build a minimal scene with:
-
-1. an input field for API username
-2. an input field for API key
-3. an input field for room name or meeting ID
-4. an input field for display name
-5. a create button
-6. a join button
-7. a status label bound to `ConnectionStateChanged`
-
-## Expected Bootstrap Flow
+The simplest integration attaches one `IMediaSfuWebRtcDevice` that owns both
+publication and playback:
 
 ```csharp
-var client = new MediaSfuClient(
-    new MediaSfuClientOptions
-    {
-        ConnectionMode = MediaSfuConnectionMode.Cloud,
-        // Optional: BaseUrl = "https://your-mediasfu-server.example.com",  // custom or self-hosted backend
-        Credentials = new MediaSfuCredentials
-        {
-            ApiUserName = apiUserName,
-            ApiKey = apiKey
-        }
-    }
-);
-
-client.ConnectionStateChanged += state => { /* update status text */ };
-client.ErrorOccurred += error => { /* show error text */ };
-
-await client.JoinRoomAsync(
-    new MediaSfuJoinRoomRequest
-    {
-        MeetingId = roomName,
-        UserName = displayName,
-        IsLevel = "0"
-    }
-);
+roomFlow.AttachTransportBackedWebRtcDevice(localAdapter, remoteAdapter);
 ```
 
-## When To Add Actual Sample Assets
+If your project keeps capture and playback separate, attach an
+`IMediaSfuLocalMediaBackend` and `IMediaSfuRemoteMediaBridge`. The native-plugin
+path can be attached with `AttachNativePluginWebRtcEngine(...)` when the
+matching platform binary is installed.
 
-Expand this into a real sample scene after the next milestone lands:
+`MediaSfuNativePluginRemoteVideoView` follows a selected remote camera or screen
+track and uploads decoded BGRA frames to a Unity `Texture2D`. Screen content
+should use a contain-style presentation; camera tiles may use cover-style
+cropping. Never mirror remote video or screen share.
 
-- receive-only media implemented
-- rendered participant tiles available in Unity without platform-specific UI glue
-- request, waiting-room, recording, and whiteboard-oriented controls surfaced in an actual Unity UI instead of status text, scene events, and inspector helpers
+## Room actions exposed by the sample
 
-At that point a prefab and bootstrap `MonoBehaviour` become worth checking in.
+- Create or join and connect the media session.
+- Send chat and receive participant/room updates.
+- Enable or disable microphone, camera, and screen share.
+- Approve or reject participant media requests.
+- Admit or deny waiting-room participants.
+- Start, pause, resume, and stop recording.
+- Observe polls, breakout rooms, whiteboard state, moderation counts, and
+  forced-exit events.
+- Leave the room and release app-owned media and listeners.
+
+Use the public events instead of parsing status strings. Keep the scene UI
+responsive while commands are pending and surface SDK errors in user-friendly
+language.
+
+## Minimal client wiring
+
+```csharp
+var client = new MediaSfuClient(optionsFromYourAuthorityBoundary);
+
+client.ConnectionStateChanged += state => UpdateConnectionLabel(state);
+client.ErrorOccurred += error => ShowRecoverableError(error);
+
+var join = await client.JoinRoomAsync(new MediaSfuJoinRoomRequest
+{
+    MeetingId = roomName,
+    UserName = displayName,
+    IsLevel = "0"
+});
+
+if (join.Success)
+{
+    await client.ConnectMediaAsync();
+}
+```
+
+`optionsFromYourAuthorityBoundary` should contain the room authority returned
+by your backend in a released application. Do not log credentials, room tokens,
+or invitation capabilities.
+
+## Observable acceptance
+
+Before distributing a player, verify the intended Unity Editor and player
+targets with two independent participants:
+
+- both participants reach a ready room state;
+- microphone and camera are produced and consumed in both directions;
+- remote audio is audible and survives video-layout changes;
+- screen share becomes primary and camera presentation is restored afterward;
+- chat, moderation, recording, and forced-exit behavior match your product;
+- leave and end release tracks, renderers, listeners, and temporary authority;
+  and
+- logs, screenshots, builds, and source maps contain no reusable credentials.
+
+The bootstrap scene is intentionally small so a product can supply its own UI.
+Use the SDK events and commands to build accessible participant grids,
+moderation tools, whiteboard, recording, and recovery experiences.

@@ -341,6 +341,8 @@ class AndroidWebRtcDevice private constructor(
             
             val data = mediaProjectionData["data"] as? Intent
                 ?: throw IllegalArgumentException("data Intent is required in mediaProjection data")
+            @Suppress("UNCHECKED_CAST")
+            val onProjectionStopped = mediaProjectionData["onProjectionStopped"] as? (() -> Unit)
             
             // Extract video constraints with defaults
             @Suppress("UNCHECKED_CAST")
@@ -357,6 +359,8 @@ class AndroidWebRtcDevice private constructor(
             val screenCapturer = ScreenCapturerAndroid(data, object : MediaProjection.Callback() {
                 override fun onStop() {
                     Log.d(TAG, "MediaProjection stopped")
+                    runCatching { onProjectionStopped?.invoke() }
+                        .onFailure { Log.w(TAG, "Projection stop callback failed", it) }
                 }
             })
             

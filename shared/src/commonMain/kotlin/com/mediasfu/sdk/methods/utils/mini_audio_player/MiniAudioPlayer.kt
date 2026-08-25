@@ -39,6 +39,12 @@ interface MiniAudioPlayerParameters : ReUpdateInterParameters {
      * Method to retrieve updated parameters.
      */
     override fun getUpdatedAllParams(): MiniAudioPlayerParameters
+
+    /**
+     * Pure accessor for timer-driven reads. Unlike publication-style update accessors,
+     * this must never notify UI consumers or replace the shared parameter bag.
+     */
+    fun getCurrentParams(): MiniAudioPlayerParameters = this
 }
 
 /**
@@ -133,7 +139,7 @@ class MiniAudioPlayer(
                     }
                 }
 
-                val parameters = options.parameters.getUpdatedAllParams()
+                val parameters = options.parameters.getCurrentParams()
                 val meetingDisplayType = parameters.meetingDisplayType
                 val shared = parameters.shared
                 val shareScreenStarted = parameters.shareScreenStarted

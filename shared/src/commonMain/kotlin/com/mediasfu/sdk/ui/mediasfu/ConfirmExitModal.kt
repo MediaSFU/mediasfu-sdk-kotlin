@@ -88,7 +88,7 @@ fun ConfirmExitModalContentBody(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "Leave Event?",
+                    text = if (props.isHost) "Leave or end event?" else "Leave Event?",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -113,6 +113,16 @@ fun ConfirmExitModalContentBody(
             )
         ) {
             Text(props.confirmLabel)
+        }
+
+        props.onLeave?.let { onLeave ->
+            OutlinedButton(
+                onClick = onLeave,
+                modifier = Modifier.fillMaxWidth(),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Text(props.leaveLabel)
+            }
         }
 
         OutlinedButton(
@@ -141,7 +151,12 @@ private fun DefaultConfirmExitModalContent(props: ConfirmExitModalProps) {
             }
         },
         dismissButton = {
-            TextButton(onClick = props.onDismiss) { Text("Cancel") }
+            Column {
+                props.onLeave?.let { onLeave ->
+                    TextButton(onClick = onLeave) { Text(props.leaveLabel) }
+                }
+                TextButton(onClick = props.onDismiss) { Text("Cancel") }
+            }
         }
     )
 }

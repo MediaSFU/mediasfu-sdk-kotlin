@@ -1,10 +1,8 @@
-# MediaSFU Unity Delivery Checklist
+# MediaSFU Unity Support Scope
 
-This checklist keeps the Unity package SDK-first.
+Use this page to choose a supported Unity integration path and understand which acceptance checks apply to your target.
 
-Use it to decide what should be considered supported now, what must be proven before broadening claims, and what should stay deferred until the runtime path is stable.
-
-## Current Validation Status
+## Supported Validation Path
 
 The current verified local Unity path is:
 
@@ -20,7 +18,7 @@ The real-media backend gate is still environment-specific, but the checked-in ma
 
 Anything broader than that should be described as planned or partial, not fully supported.
 
-## Priority Order
+## Recommended Integration Order
 
 1. validation gate
 2. one supported media backend gate
@@ -61,7 +59,7 @@ Exit criteria:
 - mute and camera stop-start round trips stay aligned with room state
 - failures are captured with room, status, snapshots, backend path, and console output as documented in `Documentation~/MEDIA_RUNTIME_CHECKLIST.md`
 
-Current local status:
+Supported environment:
 
 - There is no current attach-time blocker on the checked-in macOS/editor path: the backend probe now resolves a real backend and the runtime media validation path is green locally.
 - The remaining caution is scope, not a local parity failure: keep support claims tied to the validated package, bridge, and checklist pairings until other Unity targets are exercised the same way.
@@ -88,26 +86,26 @@ Exit criteria for each added backend:
 - it has an explicit media validation checklist result on at least one practical pairing
 - packaging and install steps are documented beside the native-plugin contract
 
-Do not treat multiple half-complete backends as higher priority than one proven backend.
+Complete acceptance for one target backend before adding another target.
 
-## 5. Rich UI Surfaces Last
+## 5. Optional Product UI Surfaces
 
 Goal: keep Unity aligned with the SDK signature of the other stacks without prematurely shipping a full meeting UI.
 
-Do later:
+Add these when your product needs them:
 
 - moderation dashboards
 - whiteboard-oriented in-scene controls
 - breakout-room-focused scene UI
 - app-like prefabs intended to mirror Kotlin, Flutter, or React layouts directly
 
-Do now:
+Keep these in every integration:
 
 - transport, state, and validation proof
 - thin integration-oriented sample surfaces
 - stable contracts and predictable attach paths
 
-## Deferred Until The Above Gates Pass
+## Features Requiring Target-Specific Validation
 
 - broad claims of feature parity with Kotlin, Flutter, or React UI layers
 - multiple equal-status Unity media backends

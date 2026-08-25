@@ -455,8 +455,11 @@ class AllMembersTest {
 
     @Test
     fun allMembersHandlesLocalConnections() = runTest {
+        val localSocket = TestSocketManager()
+        localSocket.connect("wss://test.mediasfu.example", com.mediasfu.sdk.model.SocketConfig()).getOrThrow()
         val params = FakeAllMembersParameters().apply {
             roomRecvIpsState = listOf("none")
+            socketState = localSocket
             connectLocalIpsLambda = { _ ->
                 connectLocalIpsCount += 1
             }

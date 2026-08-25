@@ -112,7 +112,7 @@ class ConnectSendTransportVideoTest {
 
         val result = connectSendTransportVideo(options)
 
-        assertTrue(result.isSuccess)
+        assertTrue(result.isSuccess, result.exceptionOrNull()?.stackTraceToString())
         val transport = parameters.producerTransport as TestWebRtcTransport
         assertEquals(1, transport.produceCalls.size)
         assertNull(transport.produceCalls.single().appData)

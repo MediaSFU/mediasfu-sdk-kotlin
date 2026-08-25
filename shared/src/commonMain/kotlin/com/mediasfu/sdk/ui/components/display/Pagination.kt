@@ -53,6 +53,9 @@ interface PaginationParameters : GeneratePageContentParameters {
     override val islevel: String
     val showAlert: ((message: String, type: String, duration: Int) -> Unit)?
     val socket: SocketManager?
+
+    /** Pure read accessor used by Compose rendering and click-time queries. */
+    fun getCurrentParams(): PaginationParameters = this
 }
 
 /**
@@ -97,7 +100,7 @@ interface Pagination : MediaSfuUIComponent {
     suspend fun handleClick(page: Int) {
         if (page == options.currentUserPage) return
         
-        val params = options.parameters
+        val params = options.parameters.getCurrentParams()
         val mainRoomsLength = params.mainRoomsLength
         val breakOutRoomStarted = params.breakOutRoomStarted
         val breakOutRoomEnded = params.breakOutRoomEnded
@@ -195,7 +198,7 @@ interface Pagination : MediaSfuUIComponent {
      * Returns the icon to use, label text, and whether locked.
      */
     fun getPageLabel(page: Int): Triple<ImageVector?, String, Boolean> {
-        val params = options.parameters
+        val params = options.parameters.getCurrentParams()
         val mainRoomsLength = params.mainRoomsLength
         val memberRoom = params.memberRoom
         val breakOutRoomStarted = params.breakOutRoomStarted

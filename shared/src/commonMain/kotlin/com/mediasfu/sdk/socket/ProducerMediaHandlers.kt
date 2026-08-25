@@ -1175,7 +1175,8 @@ suspend fun recordingNotice(options: RecordingNoticeOptions) {
                 if (timeDone != 0) {
                     recordElapsedTime = timeDone / 1_000
                     val currentMillis = params.currentTimeProvider()
-                    recordStartTime = currentMillis - timeDone
+                    // recordStartTime is epoch seconds across the SDKs; timeDone arrives in ms.
+                    recordStartTime = (currentMillis / 1_000) - recordElapsedTime
                     params.updateRecordElapsedTime(recordElapsedTime)
                     params.updateRecordStartTime(recordStartTime)
                 }

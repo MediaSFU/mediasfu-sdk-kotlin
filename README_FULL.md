@@ -143,21 +143,23 @@ dependencyResolutionManagement {
 // build.gradle.kts (app level)
 dependencies {
     // For Android-only projects (recommended):
-    implementation("com.mediasfu:mediasfu-sdk-android:1.0.4")
+    implementation("com.mediasfu:mediasfu-sdk-android:1.0.5")
     
     // For Kotlin Multiplatform projects:
-    // implementation("com.mediasfu:mediasfu-sdk:1.0.4")
+    // implementation("com.mediasfu:mediasfu-sdk:1.0.5")
 }
 ```
 
 The Android SDK supplies `com.mediasfu:mediasoup-client:1.0.7` transitively. Do not add or pin an older client version.
+
+> **Protect API credentials:** Android apps cannot keep embedded API keys secret. For production, create/join rooms through your backend proxy and return only the room response the app needs. Direct credentials are for local or staging development only. See the [MediaSFU Sandbox](https://www.mediasfu.com/sandbox) for API request/response shapes.
 
 **Gradle (Groovy)**
 
 ```groovy
 // build.gradle (app level)
 dependencies {
-    implementation 'com.mediasfu:mediasfu-sdk:1.0.4'
+    implementation 'com.mediasfu:mediasfu-sdk:1.0.5'
 }
 ```
 
@@ -241,10 +243,10 @@ Get your first MediaSFU app running in just a few minutes.
 // build.gradle.kts
 dependencies {
     // For Android-only projects (recommended):
-    implementation("com.mediasfu:mediasfu-sdk-android:1.0.4")
+    implementation("com.mediasfu:mediasfu-sdk-android:1.0.5")
     
     // For Kotlin Multiplatform projects:
-    // implementation("com.mediasfu:mediasfu-sdk:1.0.4")
+    // implementation("com.mediasfu:mediasfu-sdk:1.0.5")
 }
 ```
 
@@ -266,7 +268,7 @@ class MainActivity : ComponentActivity() {
             // Option 1: Use without credentials (for testing)
             MediasfuGeneric()
 
-            // Option 2: Use with MediaSFU Cloud credentials
+            // Development only: direct MediaSFU Cloud credentials
             // val credentials = Credentials(
             //     apiUserName = "your_username",
             //     apiKey = "your_api_key"
@@ -348,6 +350,7 @@ import com.mediasfu.sdk.ui.mediasfu.*
 import com.mediasfu.sdk.model.Credentials
 
 val options = MediasfuGenericOptions(
+    // Development only. In production, create/join rooms through your backend.
     credentials = Credentials("your_username", "your_api_key")
 )
 
@@ -945,6 +948,9 @@ AudioGrid(AudioGridOptions(
 | `connectMediaSFU` | `Boolean` | `true` | Connect to MediaSFU Cloud |
 | `localLink` | `String?` | `null` | Self-hosted server URL |
 | `noUIPreJoinOptions` | `NoUIPreJoinOptions?` | `null` | Auto-join options for headless mode |
+| `onPreJoinError` | `((String) -> Unit)?` | `null` | Receives headless pre-join validation, connection, and timeout errors |
+| `containerWidthFraction` | `Float` | `1f` | Fraction of the measured parent width used by the room UI |
+| `containerHeightFraction` | `Float` | `1f` | Fraction of the measured parent height used by the room UI |
 | `colors` | `MediasfuColors?` | `null` | Custom color scheme |
 | `typography` | `MediasfuTypography?` | `null` | Custom typography |
 
@@ -965,6 +971,10 @@ AudioGrid(AudioGridOptions(
 | `duration` | `Int` | Duration in minutes (create only) |
 | `eventType` | `String` | "conference", "webinar", "broadcast", "chat" |
 | `roomName` | `String?` | Room to join (join only) |
+
+## Host leave behavior
+
+`ConfirmExitOptions.endRoomOnHostExit` defaults to `true`, preserving the established host-exit behavior. Set it to `false` for a host-only **Leave room** action that disconnects the host while the room and other participants remain active. The standard host dialog provides both **Leave room** and **End for everyone**.
 
 ---
 

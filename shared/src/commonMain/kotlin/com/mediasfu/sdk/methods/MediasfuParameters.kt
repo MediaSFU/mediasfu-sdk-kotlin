@@ -1529,6 +1529,12 @@ class MediasfuParameters :
     // ========================================================================
     // Get Updated Parameters (Simplified)
     // ========================================================================
+
+    /**
+     * Returns the currently published parameter bag without causing publication or callbacks.
+     * Read-only consumers (polling, layout and headless queries) must prefer this method.
+     */
+    fun getCurrentParams(): MediasfuParameters = this
     
     override fun getUpdatedAllParams(): MediasfuParameters = this
     

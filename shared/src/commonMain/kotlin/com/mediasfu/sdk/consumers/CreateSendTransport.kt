@@ -49,9 +49,16 @@ interface SendTransportSessionParameters {
  * Contract describing the mutable parameters required to create WebRTC send transports.
  */
 interface CreateSendTransportParameters : SendTransportSessionParameters {
+    /** Pure accessor used after asynchronous acknowledgements to observe teardown. */
+    fun getCurrentParams(): CreateSendTransportParameters = this
+
     val createSendTransport: suspend (CreateSendTransportOptions) -> Unit
         get() = { options -> com.mediasfu.sdk.consumers.createSendTransport(options) }
 }
+
+/** Re-reads the current bag after an asynchronous socket acknowledgement. */
+internal fun currentSendTransportDevice(parameters: CreateSendTransportParameters): WebRtcDevice? =
+    parameters.getCurrentParams().device
 
 /**
  * Options for creating WebRTC send transports.
@@ -164,7 +171,7 @@ suspend fun createSendTransport(options: CreateSendTransportOptions): Result<Uni
         }
         
         // Create remote send transport (always executed - this is the main transport)
-        createRemoteSendTransport(options, socket, device)
+        createRemoteSendTransport(options, socket)
         
         Result.success(Unit)
     } catch (error: Exception) {
@@ -202,8 +209,6 @@ private suspend fun createLocalSendTransport(options: CreateSendTransportOptions
     // Skip if same socket (both pointing to same server)
     if (localSocketId == mainSocketId) return
     
-    val device = parameters.device ?: return
-    
     try {
         val response = withTimeout(30000) {
             localSocket.emitWithAck<Map<String, Any?>>(
@@ -218,7 +223,10 @@ private suspend fun createLocalSendTransport(options: CreateSendTransportOptions
         val params = response["params"].toStringAnyMap()
             .ifEmpty { throw CreateSendTransportException("Missing params in local transport response") }
 
-        val localTransport = device.createSendTransport(params)
+        // The acknowledgement may arrive after the room has been torn down. Re-read the
+        // current bag at callback time and leave quietly when the device was cleared.
+        val currentDevice = currentSendTransportDevice(parameters) ?: return
+        val localTransport = currentDevice.createSendTransport(params)
 
         setupSendTransportHandlers(
             transport = localTransport,
@@ -249,7 +257,7 @@ private suspend fun createLocalSendTransport(options: CreateSendTransportOptions
             }
             "video" -> {
                 val videoParams = parameters as? ConnectSendTransportVideoParameters
-                val refreshedParams = videoParams?.getUpdatedAllParams()
+                val refreshedParams = videoParams?.getCurrentParams() as? ConnectSendTransportVideoParameters
                 if (refreshedParams != null) {
                     MediaSFURuntimeProbe.recordProducerSignalStage(
                         "create-video-connect",
@@ -317,8 +325,7 @@ private suspend fun createLocalSendTransport(options: CreateSendTransportOptions
  */
 private suspend fun createRemoteSendTransport(
     options: CreateSendTransportOptions,
-    socket: SocketManager,
-    device: WebRtcDevice
+    socket: SocketManager
 ) {
     val parameters = options.parameters
     
@@ -336,7 +343,9 @@ private suspend fun createRemoteSendTransport(
         val params = response["params"].toStringAnyMap()
             .ifEmpty { throw CreateSendTransportException("Missing params in remote transport response") }
 
-        val remoteTransport = device.createSendTransport(params)
+        // Socket acks can race teardown. Never use the device captured before the await.
+        val currentDevice = currentSendTransportDevice(parameters) ?: return
+        val remoteTransport = currentDevice.createSendTransport(params)
 
         setupSendTransportHandlers(
             transport = remoteTransport,
@@ -370,7 +379,7 @@ private suspend fun createRemoteSendTransport(
             }
             "video" -> {
                 val videoParams = parameters as? ConnectSendTransportVideoParameters
-                val refreshedParams = videoParams?.getUpdatedAllParams()
+                val refreshedParams = videoParams?.getCurrentParams() as? ConnectSendTransportVideoParameters
                 if (refreshedParams != null) {
                     MediaSFURuntimeProbe.recordProducerSignalStage(
                         "create-video-connect",

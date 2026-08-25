@@ -63,13 +63,15 @@ private fun FlutterParityMediasfuGenericContent(
 ) {
     val isValidated by state.validated.collectAsState()
     val isLoading by state.isLoading.collectAsState()
-    val containerStyle = options.containerStyle
+    val containerStyle = options.containerStyle.withContainerFractions(
+        options.containerWidthFraction,
+        options.containerHeightFraction
+    )
     val backgroundColor = containerStyle.backgroundColor ?: Color(0xFF0B172A)
 
     Box(modifier = modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
-                .fillMaxSize()
                 .applyContainerStyle(containerStyle)
                 .background(backgroundColor)
         ) {
