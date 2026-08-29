@@ -454,19 +454,26 @@ fun PreJoinPage(state: MediasfuGenericState) {
                         "",
                         "create-cloud-room-session"
                     )
-                    val connected = connectAndValidateCloudRoom(
-                        roomName = sessionRoomName,
-                        socketSecret = sessionSecret,
+                    val connection = connectAndValidateCloudRoom(
+                        response = CreateJoinRoomResponse(
+                            message = "",
+                            roomName = sessionRoomName,
+                            secureCode = handedOffSession.adminPasscode.trim().ifBlank { sessionSecret },
+                            publicURL = sessionLink,
+                            link = sessionLink,
+                            secret = sessionSecret,
+                            success = true
+                        ),
                         memberName = sessionMember,
                         islevel = "2",
-                        link = sessionLink,
                         adminPasscode = handedOffSession.adminPasscode.trim().ifBlank { sessionSecret }
                     )
-                    if (connected) {
+                    if (connection.isSuccess) {
                         MediaSFURuntimeProbe.recordConsumerSignalStage("join-ok", "", "create-room-session")
                     } else {
                         MediaSFURuntimeProbe.recordConsumerSignalStage("join-fail", "", "create-room-session")
-                        error = "Unable to create room. Media connection failed."
+                        error = connection.exceptionOrNull()?.message
+                            ?: "Unable to create room. Media connection failed."
                     }
                     return
                 }
@@ -643,19 +650,26 @@ fun PreJoinPage(state: MediasfuGenericState) {
                         "",
                         "join-cloud-room-session"
                     )
-                    val connected = connectAndValidateCloudRoom(
-                        roomName = sessionRoomName,
-                        socketSecret = sessionSecret,
+                    val connection = connectAndValidateCloudRoom(
+                        response = CreateJoinRoomResponse(
+                            message = "",
+                            roomName = sessionRoomName,
+                            secureCode = handedOffSession.adminPasscode.trim().takeIf { it.isNotBlank() },
+                            publicURL = sessionLink,
+                            link = sessionLink,
+                            secret = sessionSecret,
+                            success = true
+                        ),
                         memberName = sessionMember,
                         islevel = handedOffSession.islevel.ifBlank { "0" },
-                        link = sessionLink,
                         adminPasscode = handedOffSession.adminPasscode.trim()
                     )
-                    if (connected) {
+                    if (connection.isSuccess) {
                         MediaSFURuntimeProbe.recordConsumerSignalStage("join-ok", "", "room-session")
                     } else {
                         MediaSFURuntimeProbe.recordConsumerSignalStage("join-fail", "", "room-session")
-                        error = "Unable to join room. Media connection failed."
+                        error = connection.exceptionOrNull()?.message
+                            ?: "Unable to join room. Media connection failed."
                     }
                     return
                 }

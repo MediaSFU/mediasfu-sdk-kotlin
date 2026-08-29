@@ -143,23 +143,23 @@ dependencyResolutionManagement {
 // build.gradle.kts (app level)
 dependencies {
     // For Android-only projects (recommended):
-    implementation("com.mediasfu:mediasfu-sdk-android:1.0.5")
+    implementation("com.mediasfu:mediasfu-sdk-android:1.0.6")
     
     // For Kotlin Multiplatform projects:
-    // implementation("com.mediasfu:mediasfu-sdk:1.0.5")
+    // implementation("com.mediasfu:mediasfu-sdk:1.0.6")
 }
 ```
 
 The Android SDK supplies `com.mediasfu:mediasoup-client:1.0.7` transitively. Do not add or pin an older client version.
 
-> **Protect API credentials:** Android apps cannot keep embedded API keys secret. For production, create/join rooms through your backend proxy and return only the room response the app needs. Direct credentials are for local or staging development only. See the [MediaSFU Sandbox](https://www.mediasfu.com/sandbox) for API request/response shapes.
+> **Protect API credentials:** Android apps cannot keep embedded API keys secret. For production, create/join rooms through your backend and return only the room response the app needs. Use direct credentials only for local evaluation. See the [MediaSFU Sandbox](https://www.mediasfu.com/sandbox) for API request/response shapes.
 
 **Gradle (Groovy)**
 
 ```groovy
 // build.gradle (app level)
 dependencies {
-    implementation 'com.mediasfu:mediasfu-sdk:1.0.5'
+    implementation 'com.mediasfu:mediasfu-sdk:1.0.6'
 }
 ```
 
@@ -243,10 +243,10 @@ Get your first MediaSFU app running in just a few minutes.
 // build.gradle.kts
 dependencies {
     // For Android-only projects (recommended):
-    implementation("com.mediasfu:mediasfu-sdk-android:1.0.5")
+    implementation("com.mediasfu:mediasfu-sdk-android:1.0.6")
     
     // For Kotlin Multiplatform projects:
-    // implementation("com.mediasfu:mediasfu-sdk:1.0.5")
+    // implementation("com.mediasfu:mediasfu-sdk:1.0.6")
 }
 ```
 
