@@ -586,6 +586,44 @@ fun PreJoinPage(state: MediasfuGenericState) {
                 }
             } else {
                 val nameValue = resolvedOverride?.userName ?: name
+
+                // A native/custom host may already have performed the account-authenticated
+                // REST create/join call. Reuse its room-scoped response exactly like the
+                // React/Flutter headless integrations: roomName -> apiUserName and secret
+                // -> apiToken. Do not issue a second REST request with the account API key.
+                val handedOffSession = options.cloudRoomSession
+                if (handedOffSession != null) {
+                    val sessionRoomName = handedOffSession.roomName.trim()
+                    val sessionSecret = handedOffSession.secret.trim()
+                    val sessionLink = handedOffSession.link.trim()
+                    val sessionMember = handedOffSession.memberName.trim().ifBlank { nameValue }
+                    if (sessionRoomName.isBlank() || sessionSecret.isBlank() || sessionLink.isBlank()) {
+                        error = "The room service returned an incomplete MediaSFU session."
+                        return
+                    }
+
+                    MediaSFURuntimeProbe.recordConsumerSignalStage(
+                        "handoff",
+                        "",
+                        "join-cloud-room-session"
+                    )
+                    val connected = connectAndValidateCloudRoom(
+                        roomName = sessionRoomName,
+                        socketSecret = sessionSecret,
+                        memberName = sessionMember,
+                        islevel = handedOffSession.islevel.ifBlank { "0" },
+                        link = sessionLink,
+                        adminPasscode = handedOffSession.adminPasscode.trim()
+                    )
+                    if (connected) {
+                        MediaSFURuntimeProbe.recordConsumerSignalStage("join-ok", "", "room-session")
+                    } else {
+                        MediaSFURuntimeProbe.recordConsumerSignalStage("join-fail", "", "room-session")
+                        error = "Unable to join room. Media connection failed."
+                    }
+                    return
+                }
+
                 val payload = (resolvedOverride ?: JoinMediaSFURoomOptions(
                     action = "join",
                     meetingID = eventID,

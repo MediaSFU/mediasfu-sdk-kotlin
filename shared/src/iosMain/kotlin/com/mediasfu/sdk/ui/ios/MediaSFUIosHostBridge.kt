@@ -12,6 +12,7 @@ import com.mediasfu.sdk.model.Credentials
 import com.mediasfu.sdk.model.EventType
 import com.mediasfu.sdk.ui.mediasfu.MediasfuGeneric
 import com.mediasfu.sdk.ui.mediasfu.MediasfuGenericOptions
+import com.mediasfu.sdk.ui.mediasfu.MediaSFUCloudRoomSession
 import com.mediasfu.sdk.util.MediaSFURuntimeProbe
 import com.mediasfu.sdk.webrtc.WebRtcFactory
 import kotlinx.coroutines.CoroutineStart
@@ -33,6 +34,10 @@ class MediaSFUIosLaunchConfig {
     var cloudRoomsEndpoint: String = ""
     var userName: String = "tester"
     var roomName: String = "mediasfu-demo"
+    /** Room-scoped secret returned by an app backend's create/join request. */
+    var roomApiToken: String = ""
+    /** Media node link returned alongside [roomApiToken]. */
+    var roomLink: String = ""
     var connectMediaSFU: Boolean = true
     var action: String = "create"
     var durationMinutes: Int = 60
@@ -289,7 +294,10 @@ class MediaSFUIosHostBridge {
         val trimmedCloudRoomsEndpoint = config.cloudRoomsEndpoint.trim()
         val normalizedAction = config.action.trim().lowercase().ifBlank { "create" }
         val trimmedUserName = config.userName.trim().ifBlank { "tester" }
-        val trimmedRoomName = config.roomName.trim().ifBlank { "mediasfu-demo" }
+        val rawRoomName = config.roomName.trim()
+        val trimmedRoomName = rawRoomName.ifBlank { "mediasfu-demo" }
+        val trimmedRoomApiToken = config.roomApiToken.trim()
+        val trimmedRoomLink = config.roomLink.trim()
         val trimmedEventType = config.eventType.trim().lowercase().ifBlank { "conference" }
         val scheduledDate = config.scheduledDate.takeIf { it > 0L }
         val trimmedSecureCode = config.secureCode.trim().ifBlank { null }
@@ -302,6 +310,29 @@ class MediaSFUIosHostBridge {
             Credentials(
                 apiUserName = trimmedApiUserName,
                 apiKey = trimmedApiKey,
+            )
+        } else {
+            null
+        }
+
+        // When an app backend has already created/joined the room, carry its
+        // room-scoped credentials into the generic engine. The engine will use
+        // roomName as apiUserName and roomApiToken as apiToken, without a second
+        // account-authenticated REST call.
+        val cloudRoomSession = if (
+            config.connectMediaSFU &&
+            normalizedAction == "join" &&
+            trimmedRoomApiToken.isNotBlank() &&
+            trimmedRoomLink.isNotBlank() &&
+            rawRoomName.isNotBlank()
+        ) {
+            MediaSFUCloudRoomSession(
+                roomName = trimmedRoomName,
+                secret = trimmedRoomApiToken,
+                link = trimmedRoomLink,
+                memberName = trimmedUserName,
+                islevel = config.islevel.trim().ifBlank { "0" },
+                adminPasscode = trimmedAdminPasscode.orEmpty()
             )
         } else {
             null
@@ -362,6 +393,7 @@ class MediaSFUIosHostBridge {
             returnUI = noUiCreateOptions == null && noUiJoinOptions == null,
             noUIPreJoinOptionsCreate = noUiCreateOptions,
             noUIPreJoinOptionsJoin = noUiJoinOptions,
+            cloudRoomSession = cloudRoomSession,
             defaultEventType = when (trimmedEventType) {
                 "chat" -> EventType.CHAT
                 "broadcast" -> EventType.BROADCAST

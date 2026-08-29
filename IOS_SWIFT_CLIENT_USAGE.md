@@ -111,6 +111,26 @@ using the parameters you supply. The UI goes straight to the in-room experience.
 
 This mirrors `returnUI=false` in the React SDK and Flutter SDK.
 
+### Reusing a backend create/join response
+
+When your backend already performed the account-authenticated MediaSFU create/join
+request, pass its room-scoped response through the launch config:
+
+```swift
+config.action = "join"
+config.roomName = response.roomName
+config.roomApiToken = response.secret
+config.roomLink = response.link
+config.userName = displayName
+config.autoProceed = true
+```
+
+`roomName` becomes the socket `apiUserName`, and `roomApiToken` (the response
+`secret`) becomes the socket `apiToken`. `roomLink` selects the returned media node.
+This avoids repeating the account-level REST request from the client. Keep account
+API credentials on your backend and leave these two fields empty when the SDK should
+run the normal cloud create/join flow.
+
 ### Headless Create
 
 ```swift
