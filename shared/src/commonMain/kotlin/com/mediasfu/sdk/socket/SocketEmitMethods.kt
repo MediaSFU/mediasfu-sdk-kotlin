@@ -711,7 +711,7 @@ suspend fun joinEventRoom(options: JoinEventRoomOptions): Result<CreateJoinLocal
 
         val ackResult = runCatching {
             withTimeout(30000) {
-                options.socket.emitWithAck<Map<String, Any?>>("joinEventRoom", data)
+                options.socket.emitWithAck<Map<String, Any?>>("joinEventRoom", data, timeout = 30000)
             }
         }
 
@@ -791,7 +791,7 @@ suspend fun createLocalRoom(options: CreateLocalRoomOptions): Result<CreateJoinL
 
         val ackResult = runCatching {
             withTimeout(30000) {
-                options.socket.emitWithAck<Map<String, Any?>>("createRoom", data)
+                options.socket.emitWithAck<Map<String, Any?>>("createRoom", data, timeout = 30000)
             }
         }
 
@@ -906,7 +906,7 @@ suspend fun joinRoom(options: JoinRoomOptions): Result<ResponseJoinRoom> {
 
         val ackResult = runCatching {
             withTimeout(30000) {
-                options.socket.emitWithAck<Map<String, Any?>>("joinRoom", data)
+                options.socket.emitWithAck<Map<String, Any?>>("joinRoom", data, timeout = 30000)
             }
         }
 
@@ -1013,7 +1013,7 @@ suspend fun joinConRoom(options: JoinConRoomOptions): Result<ResponseJoinRoom> {
 
         val ackResult = runCatching {
             withTimeout(30000) {
-                options.socket.emitWithAck<Map<String, Any?>>("joinConRoom", data)
+                options.socket.emitWithAck<Map<String, Any?>>("joinConRoom", data, timeout = 30000)
             }
         }
 
@@ -1124,7 +1124,7 @@ suspend fun joinLocalRoom(options: JoinLocalRoomOptions): Result<ResponseJoinLoc
 
         val ackResult = runCatching {
             withTimeout(30000) {
-                options.socket.emitWithAck<Map<String, Any?>>("joinRoom", data)
+                options.socket.emitWithAck<Map<String, Any?>>("joinRoom", data, timeout = 30000)
             }
         }
 

@@ -435,6 +435,42 @@ fun PreJoinPage(state: MediasfuGenericState) {
                 val userNameValue = resolvedOverride?.userName ?: name
                 val eventValue = normalizeEventType(resolvedOverride?.eventType ?: eventType)
 
+                // A native/custom host may already have completed the room-service
+                // create request. Treat that response exactly like createMediaSFURoom's
+                // successful result: the creator joins the allocated media room as host.
+                val handedOffSession = options.cloudRoomSession
+                if (handedOffSession != null) {
+                    val sessionRoomName = handedOffSession.roomName.trim()
+                    val sessionSecret = handedOffSession.secret.trim()
+                    val sessionLink = handedOffSession.link.trim()
+                    val sessionMember = handedOffSession.memberName.trim().ifBlank { userNameValue }
+                    if (sessionRoomName.isBlank() || sessionSecret.isBlank() || sessionLink.isBlank()) {
+                        error = "The room service returned an incomplete MediaSFU session."
+                        return
+                    }
+
+                    MediaSFURuntimeProbe.recordConsumerSignalStage(
+                        "handoff",
+                        "",
+                        "create-cloud-room-session"
+                    )
+                    val connected = connectAndValidateCloudRoom(
+                        roomName = sessionRoomName,
+                        socketSecret = sessionSecret,
+                        memberName = sessionMember,
+                        islevel = "2",
+                        link = sessionLink,
+                        adminPasscode = handedOffSession.adminPasscode.trim().ifBlank { sessionSecret }
+                    )
+                    if (connected) {
+                        MediaSFURuntimeProbe.recordConsumerSignalStage("join-ok", "", "create-room-session")
+                    } else {
+                        MediaSFURuntimeProbe.recordConsumerSignalStage("join-fail", "", "create-room-session")
+                        error = "Unable to create room. Media connection failed."
+                    }
+                    return
+                }
+
                 val payload = (resolvedOverride ?: CreateMediaSFURoomOptions(
                     action = "create",
                     duration = durationInt ?: 0,

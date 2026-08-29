@@ -26,11 +26,14 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
 import platform.Foundation.NSError
+import platform.Foundation.NSMutableURLRequest
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLSession
+import platform.Foundation.NSURLSessionConfiguration
 import platform.Foundation.NSURLSessionWebSocketCloseCodeNormalClosure
 import platform.Foundation.NSURLSessionWebSocketMessage
 import platform.Foundation.NSURLSessionWebSocketTask
+import platform.Foundation.setValue
 
 /**
  * iOS implementation of SocketManager using a lightweight Socket.IO-over-WebSocket client.
@@ -56,6 +59,7 @@ class IOSSocketManager : SocketManager {
     private var reconnectFailedHandler: (suspend () -> Unit)? = null
 
     private var session: NSURLSessionWebSocketTask? = null
+    private var urlSession: NSURLSession? = null
     private var receiveJob: kotlinx.coroutines.Job? = null
     private var lastConnectUrl: String? = null
     private var lastConfig: SocketConfig = SocketConfig()
@@ -131,6 +135,8 @@ class IOSSocketManager : SocketManager {
 
                 session?.cancelWithCloseCode(NSURLSessionWebSocketCloseCodeNormalClosure, reason = null)
                 session = null
+                urlSession?.invalidateAndCancel()
+                urlSession = null
 
                 currentState = ConnectionState.DISCONNECTED
                 socketId = null
@@ -269,12 +275,21 @@ class IOSSocketManager : SocketManager {
         engineSid = null
         currentState = if (reconnectAttemptCount > 0) ConnectionState.RECONNECTING else ConnectionState.CONNECTING
 
-        Logger.i("MediaSFU-Socket", "Connecting to WebSocket URL: ${target.webSocketUrl}")
+        Logger.i("MediaSFU-Socket", "Connecting native Socket.IO namespace=${target.namespace}")
         try {
             val nsUrl = NSURL.URLWithString(target.webSocketUrl)
-                ?: throw SocketException("Invalid WebSocket URL: ${target.webSocketUrl}")
+                ?: throw SocketException("Invalid WebSocket URL")
+            // Socket.IO browser and mobile clients include an Origin during the
+            // WebSocket upgrade. Media nodes use that header as part of accepting
+            // the namespace, so mirror the conventional native-client behavior
+            // with the origin derived from the configured media URL.
+            val request = NSMutableURLRequest.requestWithURL(nsUrl) as NSMutableURLRequest
+            request.setValue(target.origin, forHTTPHeaderField = "Origin")
+            val configuration = NSURLSessionConfiguration.defaultSessionConfiguration()
             session?.cancelWithCloseCode(NSURLSessionWebSocketCloseCodeNormalClosure, reason = null)
-            session = NSURLSession.sharedSession.webSocketTaskWithURL(nsUrl)
+            urlSession?.invalidateAndCancel()
+            urlSession = NSURLSession.sessionWithConfiguration(configuration)
+            session = urlSession?.webSocketTaskWithRequest(request)
             session?.resume()
             Logger.i("MediaSFU-Socket", "Native WebSocket task started")
         } catch (e: Throwable) {
@@ -341,7 +356,9 @@ class IOSSocketManager : SocketManager {
     }
 
     private suspend fun handleEnginePacket(packet: String) {
-        Logger.d("MediaSFU-Socket", "RX: $packet")
+        // Packets can contain credentials, SDP, and other user data. Keep logs
+        // metadata-only so production diagnostics never disclose payloads.
+        Logger.d("MediaSFU-Socket", "RX packet type=${packet.firstOrNull() ?: '-'} bytes=${packet.length}")
         when {
             packet.startsWith("0") -> handleEngineOpen(packet.removePrefix("0"))
             packet == "2" -> sendEnginePong()
@@ -352,7 +369,7 @@ class IOSSocketManager : SocketManager {
     private suspend fun handleEngineOpen(payload: String) {
         val openData = payload.toJsonElementOrNull() as? JsonObject
         engineSid = openData?.get("sid")?.jsonPrimitiveContentOrNull()
-        Logger.i("MediaSFU-Socket", "Engine.IO open received, sid=$engineSid; sending Socket.IO connect")
+        Logger.i("MediaSFU-Socket", "Engine.IO open received; sending Socket.IO connect")
         sendSocketIoConnect()
     }
 
@@ -400,7 +417,7 @@ class IOSSocketManager : SocketManager {
                 if (deferred.isActive) deferred.complete(Unit)
                 connectDeferred = null
             }
-            Logger.i("MediaSFU-Socket", "Socket.IO namespace connected, socketId=$socketId")
+            Logger.i("MediaSFU-Socket", "Socket.IO namespace connected")
             connectHandler?.let { handler -> scope.launch { handler() } }
             if (wasReconnecting) {
                 reconnectHandler?.let { handler -> scope.launch { handler(reconnectAttemptCount) } }
@@ -409,7 +426,7 @@ class IOSSocketManager : SocketManager {
             return
         }
 
-        Logger.i("MediaSFU-Socket", "Socket.IO namespace connected, socketId=$socketId; waiting for connection-success")
+        Logger.i("MediaSFU-Socket", "Socket.IO namespace connected; waiting for connection-success")
     }
 
     private suspend fun handleSocketIoEvent(rawMeta: String) {
@@ -431,7 +448,7 @@ class IOSSocketManager : SocketManager {
                 if (deferred.isActive) deferred.complete(Unit)
                 connectDeferred = null
             }
-            Logger.i("MediaSFU-Socket", "connection-success received, socketId=$socketId")
+            Logger.i("MediaSFU-Socket", "connection-success received")
             connectHandler?.let { handler -> scope.launch { handler() } }
             if (wasReconnecting) {
                 reconnectHandler?.let { handler -> scope.launch { handler(reconnectAttemptCount) } }
@@ -553,6 +570,10 @@ class IOSSocketManager : SocketManager {
             "https", "wss" -> "wss"
             else -> "ws"
         }
+        val originScheme = when (rawScheme) {
+            "https", "wss" -> "https"
+            else -> "http"
+        }
 
         val afterScheme = withScheme.substringAfter("://")
 
@@ -587,7 +608,11 @@ class IOSSocketManager : SocketManager {
             }
         }
 
-        return ConnectionTarget(webSocketUrl = wsUrl, namespace = namespace)
+        return ConnectionTarget(
+            webSocketUrl = wsUrl,
+            namespace = namespace,
+            origin = "$originScheme://$authority"
+        )
     }
 
     private fun buildEventPacket(event: String, data: Map<String, Any?>, ackId: Int?): String {
@@ -687,7 +712,8 @@ class SocketException(
 
 private data class ConnectionTarget(
     val webSocketUrl: String,
-    val namespace: String
+    val namespace: String,
+    val origin: String
 )
 
 private data class ParsedSocketIoPacket(

@@ -6595,17 +6595,20 @@ class MediasfuGenericState internal constructor(
         apiKey: String?
     ): SocketManager? {
         val baseUrl = resolveSocketBaseUrl(link)
-        println("[MediaSFU-openSocket] link=$link baseUrl=$baseUrl")
         if (baseUrl.isBlank()) return null
 
         val socketUrl = appendCredentialQuery(baseUrl, apiUserName, apiToken, apiKey)
-        println("[MediaSFU-openSocket] socketUrl=$socketUrl")
         val socket = createSocketManager()
-        val config = SocketConfig(transports = listOf("websocket"))
-        // connect() suspends until the Socket.IO handshake succeeds or fails (or times out at 20s).
-        // No additional polling needed; connect() completes only when the socket is ready.
+        // Match the React and Flutter clients: the media socket is ready only
+        // after the node emits its connection-success event.
+        val config = SocketConfig(
+            transports = listOf("websocket"),
+            waitForConnectionSuccess = true
+        )
         val result = socket.connect(socketUrl, config)
-        println("[MediaSFU-openSocket] connect() result.isSuccess=${result.isSuccess} error=${result.exceptionOrNull()?.message}")
+        if (result.isFailure) {
+            Logger.w("MediaSFU-openSocket", "Native media socket connection failed")
+        }
         return if (result.isSuccess) socket else null
     }
 

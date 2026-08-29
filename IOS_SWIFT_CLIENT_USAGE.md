@@ -22,18 +22,17 @@ For custom low-level mediasoup/WebRTC work, see
 
 ## Requirements
 
-- **iOS 14.1+** to run the SDK.
-- **iOS 15+** for Virtual Background (gracefully degrades on iOS 14).
+- **iOS 15+**.
 - An API username and API key from [mediasfu.com](https://mediasfu.com) for cloud rooms.
 - Swift Package Manager through Xcode.
 
-## Endpoint Policy
+## Endpoint Selection
 
-Production cloud is the default. Leave `localLink` empty for MediaSFU Cloud and supply
-your `apiUserName` and `apiKey`.
+MediaSFU Cloud is the default. Leave `localLink` empty and provide your
+`apiUserName` and `apiKey` for cloud rooms.
 
-Set `localLink` only when connecting to a self-hosted MediaSFU CE backend, for example
-`https://your-ce-host.example.com`. Do not point `localLink` at the production cloud URL.
+Use `localLink` only for a self-hosted MediaSFU deployment you control. Do not
+point `localLink` at `mediasfu.com` or any cloud room endpoint.
 
 ## Install with Swift Package Manager
 
@@ -117,6 +116,11 @@ When your backend already performed the account-authenticated MediaSFU create/jo
 request, pass its room-scoped response through the launch config:
 
 ```swift
+// Non-secret bootstrap values used only until the room handoff is applied.
+config.apiUserName = "roomUser"
+config.apiKey = String(repeating: "0", count: 64)
+config.connectMediaSFU = true
+
 config.action = "join"
 config.roomName = response.roomName
 config.roomApiToken = response.secret
@@ -125,11 +129,13 @@ config.userName = displayName
 config.autoProceed = true
 ```
 
-`roomName` becomes the socket `apiUserName`, and `roomApiToken` (the response
-`secret`) becomes the socket `apiToken`. `roomLink` selects the returned media node.
-This avoids repeating the account-level REST request from the client. Keep account
-API credentials on your backend and leave these two fields empty when the SDK should
-run the normal cloud create/join flow.
+The bootstrap values satisfy launch validation but are not used to authenticate
+the room. Before the socket connection, the SDK uses `roomName` as the socket
+`apiUserName`, `roomApiToken` (the response `secret`) as the socket `apiToken`, and
+`roomLink` as the media node. This avoids repeating the account-level REST request
+from the client. Keep account API credentials on your backend. Leave
+`roomApiToken` and `roomLink` empty when the SDK should run the normal cloud
+create/join flow.
 
 ### Headless Create
 
@@ -176,7 +182,7 @@ config.connectMediaSFU = true
 config.action = "join"
 config.roomName = "s1234567"
 config.userName = "guest1"
-config.islevel = "0"        // "0" = participant, "2" = admin
+config.islevel = "0"        // use the role level assigned to this participant
 config.autoProceed = true   // skip the pre-join form
 
 let controller = bridge.makeHostViewController(config: config)
@@ -253,8 +259,8 @@ bridge.triggerToggleVideo()
 bridge.triggerToggleScreenShare()
 ```
 
-These calls are ignored if the room UI has not finished mounting. Call them only after the
-host view controller has appeared on screen.
+Each call returns `true` when the room accepted the action and `false` when its
+handler is not ready. Call them after the host view controller has appeared.
 
 ## Virtual Background (iOS 15+)
 
@@ -262,10 +268,8 @@ Virtual background uses Apple's Vision framework for on-device person segmentati
 No extra configuration is required — the SDK checks the OS version at runtime and
 enables the feature automatically.
 
-- **iOS 15+**: Background replacement is active. Users see a Presets / Blur / Colors / Custom
-  tab panel in the Virtual Background modal.
-- **iOS 14**: The modal opens with a graceful "not available on this platform" notice.
-  No code change is needed.
+Users can choose preset images, blur, solid colors, or a custom image from the
+Virtual Background modal.
 
 ### Background options available to users
 
@@ -293,7 +297,8 @@ Set `config.islevel` when joining a room:
 
 | Value | Role |
 |-------|------|
-| `"0"` | Participant — can view and receive streams |
+| `"0"` | Listener / viewer |
+| `"1"` | Speaker / participant |
 | `"2"` | Admin / host — can manage participants, start media, and control the room |
 
 Use `"2"` when creating a room as the host.
@@ -325,14 +330,14 @@ Set `config.eventType` to match the type of room you are creating:
 
 ## Supported Features
 
-| Feature | iOS 14 | iOS 15+ |
-|---------|--------|---------|
-| Full hosted UI (create / join) | ✅ | ✅ |
-| Headless mode (`autoProceed`) | ✅ | ✅ |
-| Chat, polls, participants list | ✅ | ✅ |
-| Screen sharing (ReplayKit) | ✅ | ✅ |
-| Recording controls | ✅ | ✅ |
-| Virtual Background | — | ✅ |
+| Feature | iOS 15+ |
+|---------|---------|
+| Full hosted UI (create / join) | ✅ |
+| Headless mode (`autoProceed`) | ✅ |
+| Chat, polls, participants list | ✅ |
+| Screen sharing (ReplayKit) | ✅ |
+| Recording controls | ✅ |
+| Virtual Background | ✅ |
 
 ## Validated Capabilities
 
@@ -345,5 +350,4 @@ The following capabilities have been validated on physical iPhone hardware and i
 - Screen share produces a stream visible to remote participants.
 - Virtual Background (iOS 15+): person segmentation runs on-device; the background-replaced
   stream is transmitted to remote participants.
-- Virtual Background degrades gracefully on iOS 14 — no errors or crashes.
 - In-room controls (mute, camera, hang-up, chat, participants) are accessible and functional.

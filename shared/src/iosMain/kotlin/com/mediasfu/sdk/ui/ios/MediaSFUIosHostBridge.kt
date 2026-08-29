@@ -76,6 +76,43 @@ class MediaSFUIosHostBridge {
 
     fun latestRuntimeProbeSummary(): String = MediaSFUIosRuntimeProbeStore.latestSummary()
 
+    /**
+     * Return the native WebRTC video track currently published by this client.
+     *
+     * Swift custom UIs can poll this alongside [latestRemoteVideoTracks] and bind the returned
+     * `RTCVideoTrack` to an `RTCMTLVideoView`. Returning `Any` keeps the shared API independent of
+     * WebRTC's Objective-C types while preserving the native object at the Swift boundary.
+     */
+    fun latestLocalVideoTrack(): Any? = latestParameters
+        ?.localStreamVideo
+        ?.getVideoTracks()
+        ?.firstOrNull()
+        ?.asPlatformNativeTrack()
+
+    /**
+     * Return the active remote native WebRTC video tracks in presentation order.
+     * Screen share is placed first, followed by participant camera streams.
+     */
+    fun latestRemoteVideoTracks(): List<Any> {
+        val parameters = latestParameters ?: return emptyList()
+        val orderedStreams = parameters.remoteScreenStream + parameters.lStreams
+        val localTrackId = parameters.localStreamVideo
+            ?.getVideoTracks()
+            ?.firstOrNull()
+            ?.id
+        val seenTrackIds = mutableSetOf<String>()
+
+        return orderedStreams.mapNotNull { entry ->
+            entry.stream
+                ?.getVideoTracks()
+                ?.firstOrNull()
+                ?.takeIf { track ->
+                    track.enabled && track.id != localTrackId && seenTrackIds.add(track.id)
+                }
+                ?.asPlatformNativeTrack()
+        }
+    }
+
     fun triggerToggleAudio(): Boolean {
         val handler = latestOptions?.onToggleAudio
         if (handler == null) {
@@ -321,7 +358,7 @@ class MediaSFUIosHostBridge {
         // account-authenticated REST call.
         val cloudRoomSession = if (
             config.connectMediaSFU &&
-            normalizedAction == "join" &&
+            (normalizedAction == "create" || normalizedAction == "join") &&
             trimmedRoomApiToken.isNotBlank() &&
             trimmedRoomLink.isNotBlank() &&
             rawRoomName.isNotBlank()
