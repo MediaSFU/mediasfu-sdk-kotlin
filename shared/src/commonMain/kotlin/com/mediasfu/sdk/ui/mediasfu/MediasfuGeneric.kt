@@ -10013,14 +10013,11 @@ fun MediasfuGeneric(
     modifier: Modifier = Modifier,
     state: MediasfuGenericState = rememberMediasfuGenericState(options),
 ) {
-    // Wrap with ModernTheme when useModernTheme is enabled
-    if (options.useModernTheme) {
-        ModernTheme {
-            MediasfuGenericContent(state = state, modifier = modifier)
-        }
-    } else {
-        MediasfuGenericContent(state = state, modifier = modifier)
-    }
+    ModernMediasfuGenericHead(
+        state = state,
+        modifier = modifier,
+        useModernTheme = options.useModernTheme,
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -10158,7 +10155,7 @@ private fun ControlButtonItem(button: ControlButtonModel) {
 }
 
 @Composable
-private fun MediasfuGenericContent(state: MediasfuGenericState, modifier: Modifier = Modifier) {
+internal fun MediasfuGenericContent(state: MediasfuGenericState, modifier: Modifier = Modifier) {
     val isValidated by state.validated.collectAsState()
     val isLoading by state.isLoading.collectAsState()
     val sessionKey by state.sessionCounter.collectAsState()  // Track session changes for UI reset

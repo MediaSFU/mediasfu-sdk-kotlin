@@ -235,7 +235,31 @@ fun App() {
 }
 ```
 
-### Mode 3: Replace Specific Components
+### Mode 3: Render the standard UI from an engine-owned state
+
+`ModernMediasfuGenericHead` renders the exact same maintained room tree as
+`MediasfuGeneric`; it does not create another socket, media controller, or copy of
+room state. This is useful when your Compose application owns the state and decides
+where the standard MediaSFU interface belongs.
+
+```kotlin
+@Composable
+fun RoomScreen(options: MediasfuGenericOptions) {
+    val roomState = rememberMediasfuGenericState(options)
+
+    ModernMediasfuGenericHead(
+        state = roomState,
+        modifier = Modifier.fillMaxSize(),
+    )
+}
+```
+
+Create the state once and render either `MediasfuGeneric` or
+`ModernMediasfuGenericHead`, not both. Modals, sidebar navigation, media controls,
+reconnection, and teardown remain owned by that single state. For a fully custom
+interface, continue to use headless parameters and component overrides.
+
+### Mode 4: Replace Specific Components
 
 ```kotlin
 @Composable
@@ -318,6 +342,20 @@ confirmExit(
 ```
 
 The built-in host exit dialog exposes both **Leave room** and **End for everyone**. Participants still receive the normal leave action.
+
+### Virtual backgrounds and breakout rooms in custom Compose UI
+
+Keep the SDK background component tied to the room engine's current state and
+render the processed local track when one is active; do not maintain a separate
+preview-only camera pipeline. Android virtual backgrounds use the SDK's native
+processor. Check platform support before offering the control on another
+target.
+
+Use the SDK breakout planner or its typed room operations for assignment,
+**Save**, and **Start**. Moving a participant requires a room-membership
+transition; filtering Compose tiles is presentation only and cannot update
+media consumers. Render validation failures in your own surface when running
+headless.
 
 ---
 
