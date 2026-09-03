@@ -1,6 +1,6 @@
 Pod::Spec.new do |spec|
     spec.name                     = 'shared'
-    spec.version                  = '1.0.4'
+    spec.version                  = '1.0.6'
     spec.homepage                 = 'https://github.com/MediaSFU/mediasfu-sdk-kotlin'
     spec.source                   = { :http=> ''}
     spec.authors                  = ''

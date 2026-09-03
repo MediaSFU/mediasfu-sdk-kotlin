@@ -1,6 +1,15 @@
 import Foundation
 
-#if canImport(shared)
+#if canImport(MediaSFUSDK)
+import MediaSFUSDK
+typealias SharedIosNativeConnectListener = IosNativeConnectListener
+typealias SharedIosNativeConsumerHandle = IosNativeConsumerHandle
+typealias SharedIosNativeLoadableMediasoupBridge = IosNativeLoadableMediasoupBridge
+typealias SharedIosNativeProduceListener = IosNativeProduceListener
+typealias SharedIosNativeProducerHandle = IosNativeProducerHandle
+typealias SharedIosNativeRecvTransportHandle = IosNativeRecvTransportHandle
+typealias SharedIosNativeSendTransportHandle = IosNativeSendTransportHandle
+#elseif canImport(shared)
 import shared
 #endif
 
@@ -10,7 +19,7 @@ import MediaSFUMediasoupClient
 
 public enum MediaSFUKmpBridgeInstaller {
     public static func isKmpModuleAvailable() -> Bool {
-        #if canImport(shared)
+        #if canImport(MediaSFUSDK) || canImport(shared)
         return true
         #else
         return false
@@ -19,7 +28,10 @@ public enum MediaSFUKmpBridgeInstaller {
 
     @discardableResult
     public static func installBridgeIfSupported(_ bridge: MediaSFUNativeMediasoupBridge) -> Bool {
-        #if canImport(shared)
+        #if canImport(MediaSFUSDK)
+        IosMediasoupBridgeKt.installIosNativeMediasoupBridge(bridge: SharedBridgeAdapter(bridge: bridge))
+        return true
+        #elseif canImport(shared)
         SharedKt.installIosNativeMediasoupBridge(bridge: SharedBridgeAdapter(bridge: bridge))
         return true
         #else
@@ -47,15 +59,15 @@ public enum MediaSFUKmpBridgeInstaller {
     #endif
 
     public static func bridgeInstallModeDescription() -> String {
-        #if canImport(shared)
-        return "KMP bridge available: install a placeholder bridge for scaffolding or a device-backed bridge for real mediasoup integration."
+        #if canImport(MediaSFUSDK) || canImport(shared)
+        return "Native media support is available. Install the MediaSFU mediasoup client bridge before presenting a room."
         #else
-        return "KMP bridge unavailable: the Swift package can build, but bridge installation requires the generated shared framework."
+        return "Native media support requires the MediaSFU SDK framework. Add the Apple SDK package before installing the mediasoup client bridge."
         #endif
     }
 }
 
-#if canImport(shared) && canImport(WebRTC)
+#if canImport(MediaSFUSDK) || canImport(shared)
 import WebRTC
 
 final class SharedBridgeAdapter: SharedIosNativeLoadableMediasoupBridge {
@@ -65,6 +77,17 @@ final class SharedBridgeAdapter: SharedIosNativeLoadableMediasoupBridge {
         self.bridge = bridge
     }
 
+    #if canImport(MediaSFUSDK)
+    func createSendTransport(params: [String : Any]) -> SharedIosNativeSendTransportHandle {
+        let mapped = params.mapValues { Optional($0) }
+        return SharedSendTransportAdapter(handle: bridge.createSendTransport(params: mapped))
+    }
+
+    func createRecvTransport(params: [String : Any]) -> SharedIosNativeRecvTransportHandle {
+        let mapped = params.mapValues { Optional($0) }
+        return SharedRecvTransportAdapter(handle: bridge.createRecvTransport(params: mapped))
+    }
+    #else
     func createSendTransport(params: [AnyHashable : Any?]) -> SharedIosNativeSendTransportHandle {
         let mapped = params.reduce(into: [String: Any?]()) { partial, item in
             partial[String(describing: item.key)] = item.value
@@ -78,6 +101,7 @@ final class SharedBridgeAdapter: SharedIosNativeLoadableMediasoupBridge {
         }
         return SharedRecvTransportAdapter(handle: bridge.createRecvTransport(params: mapped))
     }
+    #endif
 
     func loadRtpCapabilitiesJson(rtpCapabilitiesJson: String) -> String? {
         guard let loadableBridge = bridge as? MediaSFUNativeLoadableMediasoupBridge else {
@@ -115,7 +139,13 @@ final class SharedSendTransportAdapter: SharedIosNativeSendTransportHandle {
     func setOnConnect(listener: SharedIosNativeConnectListener?) {
         handle.setOnConnect(listener.map { listener in
             { dtlsJson, callback, errback in
-                listener.onConnect(dtlsParametersJson: dtlsJson, callback: callback, errback: { error in errback(error) })
+                listener.onConnect(dtlsParametersJson: dtlsJson, callback: callback, errback: { error in
+                    #if canImport(MediaSFUSDK)
+                    errback(error.asError())
+                    #else
+                    errback(error)
+                    #endif
+                })
             }
         })
     }
@@ -132,7 +162,13 @@ final class SharedSendTransportAdapter: SharedIosNativeSendTransportHandle {
                 if let hintedKind, hintedKind != kind {
                     NSLog("[MediaSFUIosBridge] produce kind override native=%@ effective=%@ transportId=%@", kind, hintedKind, self?.id ?? "unknown")
                 }
-                listener.onProduce(kind: effectiveKind, rtpParametersJson: rtpJson, appDataJson: appDataJson, callback: callback, errback: { error in errback(error) })
+                listener.onProduce(kind: effectiveKind, rtpParametersJson: rtpJson, appDataJson: appDataJson, callback: callback, errback: { error in
+                    #if canImport(MediaSFUSDK)
+                    errback(error.asError())
+                    #else
+                    errback(error)
+                    #endif
+                })
             }
         })
     }
@@ -145,7 +181,7 @@ final class SharedSendTransportAdapter: SharedIosNativeSendTransportHandle {
         appDataJson: String?
     ) -> SharedIosNativeProducerHandle {
         enqueuePendingProduceKind(kind(for: track))
-        SharedProducerAdapter(
+        return SharedProducerAdapter(
             handle: handle.produce(
                 track: track,
                 encodingsJson: encodingsJson,
@@ -192,7 +228,13 @@ final class SharedRecvTransportAdapter: SharedIosNativeRecvTransportHandle {
     func setOnConnect(listener: SharedIosNativeConnectListener?) {
         handle.setOnConnect(listener.map { listener in
             { dtlsJson, callback, errback in
-                listener.onConnect(dtlsParametersJson: dtlsJson, callback: callback, errback: { error in errback(error) })
+                listener.onConnect(dtlsParametersJson: dtlsJson, callback: callback, errback: { error in
+                    #if canImport(MediaSFUSDK)
+                    errback(error.asError())
+                    #else
+                    errback(error)
+                    #endif
+                })
             }
         })
     }

@@ -1,100 +1,62 @@
-# iOS Sample App Scaffold
+# MediaSFU iOS sample app
 
-This folder contains a minimal scaffold for an iOS sample app that is intended to host the shared MediaSFU UI from `mediasfu-sdk-kotlin`.
+This SwiftUI sample demonstrates both supported Apple SDK entry paths:
 
-## What this scaffold includes
+- hosted UI, where MediaSFU presents the create/join form and meeting UI;
+- headless launch, where an app supplies validated create/join details and
+  embeds the meeting experience in its own flow.
 
-- SwiftUI app entry placeholder
-- bootstrap/configuration screen placeholders with the full currently-supported no-UI create/join payload surface mirrored into Swift form state
-- bridge installation wrapper
-- host container scaffolding plus a real adapter path that uses the exported KMP iOS host bridge when the generated module is linked
-- permission coordinator placeholder
-- ReplayKit coordinator placeholder
-- `Info.plist` template
-- generated `MediaSFUSampleApp.xcodeproj` and CocoaPods workspace
-- starter `Podfile` that consumes the shared KMP pod
+For most applications, install the published
+[MediaSFU Apple SDK](https://github.com/MediaSFU/mediasfu-apple-sdk) with Swift
+Package Manager and follow [Swift iOS client usage](../IOS_SWIFT_CLIENT_USAGE.md).
+This sample workspace is useful when developing the Kotlin Multiplatform SDK
+from source.
 
-Note: direct linking of `ios-native-bridge` into this sample target is currently optional in the scaffold because it can introduce duplicate `WebRTC.framework` embedding when CocoaPods `shared` integration is also active.
+## Run the sample from this repository
 
-## Deployment target note
+Requirements:
 
-- The checked-in local Swift package `MediaSFUIosBridge` currently declares iOS `15.0+` support.
-- The sample app target and Podfile should therefore use an iOS deployment target of at least `15.0`.
+- Xcode with an iOS 15 or newer simulator or device
+- CocoaPods
 
-## Current build target note
+From this directory, install the local SDK dependencies and open the workspace:
 
-- The current CocoaPods WebRTC dependency chain resolves to a device-only binary in this environment, so iOS Simulator builds do not link successfully.
-- Generic iOS device builds do succeed with the generated workspace and CocoaPods setup.
-- Device builds are currently the reliable validation path for this scaffold.
-
-## What this scaffold does not include yet
-
-- device-backed native mediasoup bridge installation as the default real-session path
-- completed runtime validation of create/join, produce/consume, and media controls on device
-- simulator-capable WebRTC packaging in this environment
-- a ReplayKit Broadcast Upload Extension
-
-## Current Xcode project state
-
-This folder now has a generated app project and workspace. Treat `MediaSFUSampleApp.xcworkspace` as the main entry point after running CocoaPods.
-
-If the project is regenerated, keep the existing checked-in Swift files attached to the app target and keep `MediaSFUSampleApp/Resources/Info.plist` as the app plist source.
-
-For the exact Xcode/CocoaPods/package wiring steps, see `XCODE_SETUP.md`.
-The folder now also includes a starter `Podfile`, plus a shared-module-backed iOS host bridge used by `RealMediaSFUSDKHostAdapterTemplate.swift`.
-Once the generated KMP module is importable in Xcode, the sample host adapter should switch from scaffold fallback to the real shared host automatically.
-Use `API_DISCOVERY_CHECKLIST.md` only to confirm the final Xcode-visible module and symbol names if they differ from the expected defaults.
-
-For app-facing Swift integration, endpoint policy, and no-UI usage parity with React/Flutter, see `../IOS_SWIFT_CLIENT_USAGE.md`.
-
-## Suggested next manual Xcode steps
-
-1. Run `pod install` from `ios-sample-app/` if the workspace needs to be refreshed.
-2. Open `MediaSFUSampleApp.xcworkspace`, not the `.xcodeproj`.
-3. Confirm the app target imports the generated KMP module as either `MediaSFUSDK` or `shared`.
-4. Resolve the `ios-native-bridge` WebRTC duplication strategy before linking the real device-backed bridge package.
-5. Validate camera, microphone, transports, ReplayKit in-app capture, whiteboard, and virtual background flows on a physical device.
-
-## Expected first milestone
-
-The first useful milestone is a runnable app that:
-
-- opens the shared `MediaSFUHostContainer` directly when the session config is already valid, and falls back to `SampleBootstrapView` only for invalid or explicitly bootstrap-driven launches
-- installs the iOS bridge during startup
-- presents `MediaSFUHostContainer`
-- switches to the exported shared host automatically once the KMP module is linked in Xcode
-- lets the tester populate the supported create/join fields that map into the shared no-UI prejoin options
-- confirms camera/microphone permission flow works
-- is ready for device/runtime validation of the real MediaSFU host flow
-
-## Manual launch defaults
-
-The sample app now remembers the last session configuration entered on that device, including API username, API key, local link, display name, and the rest of the bootstrap form state. That means a normal app launch can return to a usable prejoin form instead of depending on Xcode test-only environment injection.
-
-The bootstrap screen also checks for optional env-style override files with `MEDIASFU_*` entries. The lookup order is:
-
-1. `MEDIASFU_BOOTSTRAP_ENV_FILE` when the process environment defines it.
-2. `MEDIASFU_CREDS_FILE` when the process environment defines it.
-3. `Documents/mediasfu_sample_env.txt` inside the app container.
-4. `Documents/mediasfu_ui_test_env.txt` inside the app container.
-5. Simulator/macOS fallback files `/tmp/mediasfu_sample_env.txt`, `/tmp/mediasfu_ui_test_env.txt`, and `/tmp/mediasfu_creds.txt`.
-
-Process environment values still take precedence over file-backed defaults.
-
-## Real native bridge reminder
-
-When building the physical iPhone app for real mediasoup validation, you must enable the native libmediasoup binding at build time:
-
-```bash
-MEDIA_SFU_ENABLE_REAL_LIBMEDIASOUPCLIENT_BINDING=1 xcodebuild ...
+```sh
+pod install
+open MediaSFUSampleApp.xcworkspace
 ```
 
-Without that build-time flag, the app can still launch into the shared prejoin UI but the bridge will fall back to placeholder / pending-binding mode instead of `fullyBundledNative`.
+Select the `MediaSFUSampleApp` scheme, choose an iOS simulator or connected
+iPhone, and run the app. Use the MediaSFU form to create or join a room.
 
-For manual app launches from `Documents/mediasfu_sample_env.txt`, you can also set:
+For MediaSFU Cloud, enter your API username and API key and leave `localLink`
+empty. Use `localLink` only for a self-hosted MediaSFU deployment. Never commit
+credentials to the project, source-control configuration, or screenshots.
 
-```text
-MEDIASFU_REQUIRE_REAL_NATIVE_BRIDGE=1
+The app's Info.plist already includes camera and microphone permission text.
+When testing on a device, accept those permissions before enabling media.
+
+## Headless app integration
+
+An application backend may create or join a room and return the room-scoped
+`roomName`, `secret`, and `link`. Supply those values as `roomName`,
+`roomApiToken`, and `roomLink`, then set `autoProceed` to `true`. Keep account
+credentials on the backend.
+
+The sample also accepts launch configuration through its form and scheme
+environment, which is useful for repeatable local testing. Do not include
+environment files containing credentials in source control.
+
+## Native media bridge
+
+The published Apple SDK includes the native mediasoup/WebRTC integration. When
+building this repository's local packages instead, ensure the real native
+client is linked and keep its device object alive for the lifetime of the
+meeting:
+
+```swift
+let nativeDevice = MSCDevice()
+MediaSFUKmpBridgeInstaller.installMediaSFUMediasoupClientBridgeIfSupported(
+    device: nativeDevice
+)
 ```
-
-The sample app now reads that override from the same bootstrap env file path as the rest of the `MEDIASFU_*` settings, so placeholder fallback is surfaced immediately instead of being easy to miss.

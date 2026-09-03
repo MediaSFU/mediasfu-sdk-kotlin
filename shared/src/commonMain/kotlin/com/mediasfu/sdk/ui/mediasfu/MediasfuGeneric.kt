@@ -6595,17 +6595,20 @@ class MediasfuGenericState internal constructor(
         apiKey: String?
     ): SocketManager? {
         val baseUrl = resolveSocketBaseUrl(link)
-        println("[MediaSFU-openSocket] link=$link baseUrl=$baseUrl")
         if (baseUrl.isBlank()) return null
 
         val socketUrl = appendCredentialQuery(baseUrl, apiUserName, apiToken, apiKey)
-        println("[MediaSFU-openSocket] socketUrl=$socketUrl")
         val socket = createSocketManager()
-        val config = SocketConfig(transports = listOf("websocket"))
-        // connect() suspends until the Socket.IO handshake succeeds or fails (or times out at 20s).
-        // No additional polling needed; connect() completes only when the socket is ready.
+        // Match the React and Flutter clients: the media socket is ready only
+        // after the node emits its connection-success event.
+        val config = SocketConfig(
+            transports = listOf("websocket"),
+            waitForConnectionSuccess = true
+        )
         val result = socket.connect(socketUrl, config)
-        println("[MediaSFU-openSocket] connect() result.isSuccess=${result.isSuccess} error=${result.exceptionOrNull()?.message}")
+        if (result.isFailure) {
+            Logger.w("MediaSFU-openSocket", "Native media socket connection failed")
+        }
         return if (result.isSuccess) socket else null
     }
 
@@ -9829,6 +9832,23 @@ class AlertState(private val parameters: MediasfuParameters) {
     }
 }
 
+/**
+ * Credentials returned by the MediaSFU create/join REST call.
+ *
+ * Cloud clients must use the allocated room name as the socket `apiUserName`
+ * and the returned secret as `apiToken`.  Keeping this handoff explicit lets
+ * native headless hosts (including Swift) reuse their backend response without
+ * issuing a second room request with the account API key.
+ */
+data class MediaSFUCloudRoomSession(
+    val roomName: String,
+    val secret: String,
+    val link: String,
+    val memberName: String,
+    val islevel: String = "0",
+    val adminPasscode: String = ""
+)
+
 data class MediasfuGenericOptions(
     val preJoinPageWidget: (@Composable (MediasfuGenericState) -> Unit)? = null,
     val localLink: String = "",
@@ -9844,6 +9864,8 @@ data class MediasfuGenericOptions(
     val returnUI: Boolean = true,
     val noUIPreJoinOptionsCreate: Map<String, Any>? = null,
     val noUIPreJoinOptionsJoin: Map<String, Any>? = null,
+    /** Optional room-scoped handoff from an app's create/join backend response. */
+    val cloudRoomSession: MediaSFUCloudRoomSession? = null,
     /** Default event type for PreJoinPage dropdown - used by specialized components like MediasfuBroadcast */
     val defaultEventType: EventType = EventType.CONFERENCE,
     /** Callback for socket-level room joining (internal use) */
