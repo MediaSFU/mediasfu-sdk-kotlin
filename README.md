@@ -53,10 +53,10 @@
 // build.gradle.kts (app level)
 dependencies {
     // For Android-only projects (recommended):
-    implementation("com.mediasfu:mediasfu-sdk-android:1.0.7")
+    implementation("com.mediasfu:mediasfu-sdk-android:1.0.8")
     
     // For Kotlin Multiplatform projects:
-    // implementation("com.mediasfu:mediasfu-sdk:1.0.7")
+    // implementation("com.mediasfu:mediasfu-sdk:1.0.8")
 }
 ```
 
@@ -110,10 +110,10 @@ fun App() {
 ```kotlin
 dependencies {
     // For Android-only projects (recommended):
-    implementation("com.mediasfu:mediasfu-sdk-android:1.0.7")
+    implementation("com.mediasfu:mediasfu-sdk-android:1.0.8")
     
     // For Kotlin Multiplatform projects:
-    // implementation("com.mediasfu:mediasfu-sdk:1.0.7")
+    // implementation("com.mediasfu:mediasfu-sdk:1.0.8")
 }
 ```
 
