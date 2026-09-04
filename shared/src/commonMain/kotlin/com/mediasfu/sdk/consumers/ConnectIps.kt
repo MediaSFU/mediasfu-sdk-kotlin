@@ -8,10 +8,16 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import com.mediasfu.sdk.consumers.socket_receive_methods.NewPipeProducerOptions as SocketNewPipeProducerOptions
 import com.mediasfu.sdk.consumers.socket_receive_methods.ProducerClosedOptions as SocketProducerClosedOptions
 import com.mediasfu.sdk.consumers.socket_receive_methods.newPipeProducer
 import com.mediasfu.sdk.consumers.socket_receive_methods.producerClosed
+
+// connectIps can be triggered by room updates and by an explicit retry at the
+// same time. Serialize the endpoint check/connect/join/update sequence so two
+// callers cannot both observe a missing endpoint and create duplicate sockets.
+private val connectIpsMutex = Mutex()
 
 /**
  * Connects to multiple remote IPs to manage socket connections for media consumption.
@@ -70,7 +76,9 @@ import com.mediasfu.sdk.consumers.socket_receive_methods.producerClosed
  * @see ConnectIpsParameters
  */
 suspend fun connectIps(options: ConnectIpsOptions): Result<ConnectIpsResult> {
-    return try {
+    connectIpsMutex.lock()
+    try {
+      return try {
         // Get latest parameters
         val parameters = options.parameters.getUpdatedAllParams()
         
@@ -162,13 +170,16 @@ suspend fun connectIps(options: ConnectIpsOptions): Result<ConnectIpsResult> {
                 roomRecvIPs = roomRecvIPs.toList()
             )
         )
-    } catch (error: Exception) {
+      } catch (error: Exception) {
         Result.failure(
             ConnectIpsException(
                 "connectIps error: ${error.message}",
                 error
             )
         )
+      }
+    } finally {
+        connectIpsMutex.unlock()
     }
 }
 
