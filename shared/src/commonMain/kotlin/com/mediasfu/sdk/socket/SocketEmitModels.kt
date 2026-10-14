@@ -26,7 +26,8 @@ data class ResponseJoinRoom(
     val reason: String? = null,
     val banned: Boolean? = null,
     val suspended: Boolean? = null,
-    val noAdmin: Boolean? = null
+    val noAdmin: Boolean? = null,
+    val capacity: Int? = null,
 )
 
 /**
@@ -47,7 +48,8 @@ data class ResponseJoinLocalRoom(
     val mediasfuURL: String? = null,
     val apiKey: String? = null,
     val apiUserName: String? = null,
-    val allowRecord: Boolean? = null
+    val allowRecord: Boolean? = null,
+    val capacity: Int? = null,
 )
 
 /**

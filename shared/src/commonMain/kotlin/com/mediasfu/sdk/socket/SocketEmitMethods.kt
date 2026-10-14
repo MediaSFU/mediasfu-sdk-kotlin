@@ -66,7 +66,9 @@ private fun parseResponseJoinRoom(data: Map<String, Any?>): ResponseJoinRoom {
         reason = data["reason"].asString(),
         banned = data["banned"].asBoolean(),
         suspended = data["suspended"].asBoolean(),
-        noAdmin = data["noAdmin"].asBoolean()
+        noAdmin = data["noAdmin"].asBoolean(),
+        capacity = data["capacity"].asInt(),
+
     )
 }
 
@@ -108,7 +110,8 @@ private fun parseResponseJoinLocalRoom(data: Map<String, Any?>): ResponseJoinLoc
         apiKey = data["apiKey"].asString(),
         apiUserName = data["apiUserName"].asString(),
         allowRecord = data["allowRecord"].asBoolean()
-            ?: recordingParams?.let { it.recordingAudioSupport || it.recordingVideoSupport }
+            ?: recordingParams?.let { it.recordingAudioSupport || it.recordingVideoSupport },
+        capacity = data["capacity"].asInt(),
     )
 }
 

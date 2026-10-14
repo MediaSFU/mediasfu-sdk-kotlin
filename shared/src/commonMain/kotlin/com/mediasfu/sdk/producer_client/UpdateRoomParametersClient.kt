@@ -163,7 +163,9 @@ interface UpdateRoomParametersClientParameters {
  * Options class for updating room parameters.
  */
 data class UpdateRoomParametersClientOptions(
-    val parameters: UpdateRoomParametersClientParameters
+    val parameters: UpdateRoomParametersClientParameters,
+    val simulcastOff: Boolean = false,
+    val roomCapacity: Int? = null,
 )
 
 /**
@@ -284,8 +286,11 @@ fun updateRoomParametersClient(options: UpdateRoomParametersClientOptions) {
         val hParams = HParams.getH264Params()
         val vParams = VParams.getVideoParams()
         
-        val updatedHParams = updateEncodingBitrates(hParams, targetResolution)
-        val updatedVParams = updateEncodingBitrates(vParams, targetResolution)
+        val singleCameraEncoding = cameraSimulcastOff(
+            meetingParams?.type, params.roomData.capacity ?: options.roomCapacity, options.simulcastOff
+        )
+        val updatedHParams = applyCameraEncodingPolicy(updateEncodingBitrates(hParams, targetResolution), singleCameraEncoding)
+        val updatedVParams = applyCameraEncodingPolicy(updateEncodingBitrates(vParams, targetResolution), singleCameraEncoding)
         
         params.updateVidCons(vdCons)
         params.updateFrameRate(frameRate)
@@ -441,30 +446,3 @@ private fun com.mediasfu.sdk.model.MediaKind.toWebRtc(): WebRtcMediaKind = when 
     com.mediasfu.sdk.model.MediaKind.VIDEO -> WebRtcMediaKind.VIDEO
 }
 
-/**
- * Helper function to adjust bitrate for encoding configurations.
- */
-private fun updateEncodingBitrates(producerOptions: ProducerOptionsType, targetResolution: String): ProducerOptionsType {
-    val factor = when (targetResolution) {
-        "hd" -> 4.0
-        "fhd" -> 8.0
-        "qhd" -> 16.0
-        "QnHD" -> 0.25
-        else -> 1.0
-    }
-    
-    val updatedEncodings = producerOptions.encodings.map { encoding ->
-        RtpEncodingParameters(
-            rid = encoding.rid,
-            maxBitrate = encoding.maxBitrate?.let { (it * factor).toInt() },
-            minBitrate = encoding.minBitrate?.let { (it * factor).toInt() },
-            maxFramerate = encoding.maxFramerate,
-            scalabilityMode = encoding.scalabilityMode,
-            scaleResolutionDownBy = encoding.scaleResolutionDownBy,
-            dtx = encoding.dtx
-            // NOTE: networkPriority deliberately excluded - not needed
-        )
-    }
-    
-    return ProducerOptionsType(encodings = updatedEncodings)
-}

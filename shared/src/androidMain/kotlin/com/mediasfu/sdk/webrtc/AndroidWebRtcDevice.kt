@@ -1930,8 +1930,8 @@ class AndroidWebRtcDevice private constructor(
             val encodingList: List<NativeRtpParameters.Encoding>? = if (nativeKind == NativeMediaStreamTrack.VIDEO_TRACK_KIND && encodings.isNotEmpty()) {
                 // Ensure rid values are properly assigned (r0, r1, r2 for simulcast)
                 encodings.mapIndexed { index, encoding ->
-                    val rid = encoding.rid ?: "r$index"
-                    NativeRtpParameters.Encoding(rid, true, encoding.scaleResolutionDownBy ?: 1.0).also { nativeEncoding ->
+                    val rid = encoding.rid ?: if (encodings.size > 1) "r$index" else ""
+                    NativeRtpParameters.Encoding(rid, encoding.active, encoding.scaleResolutionDownBy ?: 1.0).also { nativeEncoding ->
                         encoding.maxBitrate?.let { nativeEncoding.maxBitrateBps = it }
                         encoding.minBitrate?.let { nativeEncoding.minBitrateBps = it }
                         encoding.maxFramerate?.let { framerate ->
@@ -1942,7 +1942,7 @@ class AndroidWebRtcDevice private constructor(
                         }
                     }
                 }.also { nativeEncodings ->
-                    Logger.d("AndroidWebRtcDevice", "MediaSFU - produce: using ${nativeEncodings.size} simulcast encodings with rids: ${nativeEncodings.map { it.rid }}")
+                    Logger.d("AndroidWebRtcDevice", "MediaSFU - produce: using ${nativeEncodings.size} video encodings with rids: ${nativeEncodings.map { it.rid }}")
                 }
             } else {
                 Logger.d("AndroidWebRtcDevice", "MediaSFU - produce: using NULL encodings for kind=$nativeKind")

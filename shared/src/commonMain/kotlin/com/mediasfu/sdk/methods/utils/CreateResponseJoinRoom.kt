@@ -72,6 +72,7 @@ suspend fun createResponseJoinRoom(options: CreateResponseJoinRoomOptions): Resp
         reason = if (isBanned) "User is banned from the room." else null,
         banned = localRoom.isBanned,
         suspended = false,
-        noAdmin = localRoom.hostNotJoined
+        noAdmin = localRoom.hostNotJoined,
+        capacity = localRoom.capacity
     )
 }

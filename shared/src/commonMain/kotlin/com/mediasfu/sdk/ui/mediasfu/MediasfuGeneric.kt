@@ -3718,7 +3718,9 @@ class MediasfuGenericState internal constructor(
             
             updateRoomParametersClient(
                 UpdateRoomParametersClientOptions(
-                    parameters = createUpdateRoomParametersBridge()
+                    parameters = createUpdateRoomParametersBridge(),
+                    simulcastOff = this.options.simulcastOff,
+                    roomCapacity = this.options.roomCapacity ?: (this.options.noUIPreJoinOptionsCreate?.get("capacity") as? Number)?.toInt()
                 )
             )
             ensureDeviceClientForRoomCapabilities()
@@ -6192,7 +6194,9 @@ class MediasfuGenericState internal constructor(
                 try {
                     updateRoomParametersClient(
                         UpdateRoomParametersClientOptions(
-                            parameters = UpdateRoomParametersBridge()
+                            parameters = UpdateRoomParametersBridge(),
+                            simulcastOff = this.options.simulcastOff,
+                            roomCapacity = this.options.roomCapacity ?: (this.options.noUIPreJoinOptionsCreate?.get("capacity") as? Number)?.toInt()
                         )
                     )
                     ensureDeviceClientForRoomCapabilities()
@@ -6385,7 +6389,9 @@ class MediasfuGenericState internal constructor(
                 connectivity.updateRoomResponse(response)
                 updateRoomParametersClient(
                     UpdateRoomParametersClientOptions(
-                        parameters = UpdateRoomParametersBridge()
+                        parameters = UpdateRoomParametersBridge(),
+                        simulcastOff = this.options.simulcastOff,
+                        roomCapacity = this.options.roomCapacity ?: (this.options.noUIPreJoinOptionsCreate?.get("capacity") as? Number)?.toInt()
                     )
                 )
                 ensureDeviceClientForRoomCapabilities()
@@ -9902,6 +9908,10 @@ data class MediasfuGenericOptions(
     /** Test/automation hook to show a named modal - set by MediasfuGeneric when state is created.
      *  Supported names: media_settings, display_settings, recording, cohost, requests, waiting, confirm_exit */
     var onShowModal: ((String) -> Unit)? = null,
+    /** Disable camera simulcast regardless of room size. */
+    val simulcastOff: Boolean = false,
+    /** Capacity hint used only when the server does not supply capacity. */
+    val roomCapacity: Int? = null,
 ) {
     init {
         if (customComponent == null && customWorkspaceBuilder != null) {
