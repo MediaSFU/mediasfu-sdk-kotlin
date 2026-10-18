@@ -3,6 +3,14 @@ package com.mediasfu.sdk.socket
 import com.mediasfu.sdk.model.SocketConfig
 import com.mediasfu.sdk.model.parseTranslationVoiceCatalogue
 import com.mediasfu.sdk.ui.mediasfu.TranslationVoicePickerState
+import com.mediasfu.sdk.ui.mediasfu.rememberTranslationVoicePicker
+import androidx.compose.runtime.AbstractApplier
+import androidx.compose.runtime.BroadcastFrameClock
+import androidx.compose.runtime.Composition
+import androidx.compose.runtime.Recomposer
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshots.Snapshot
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
@@ -80,7 +88,6 @@ class TranslationVoiceCatalogueTest {
         val data = reply() + ("voices" to mapOf("neutral" to listOf(
             "same", mapOf("id" to "same"), mapOf("id" to ""), 42,
             mapOf("id" to "wrong-provider", "provider" to "deepgram"),
-            mapOf("id" to "wrong-language", "language" to "en"),
             mapOf("id" to "other", "gender" to "unknown")
         )))
         val catalogue = parseTranslationVoiceCatalogue(data, "fr")
@@ -88,11 +95,23 @@ class TranslationVoiceCatalogueTest {
         assertTrue(catalogue.voices.all { it.gender == "neutral" })
     }
 
+    @Test fun serverAuthoritativeVoiceLocaleIsNotMistakenForCatalogueOutputLanguage() {
+        val data = reply("playht", "en") + ("voices" to mapOf("neutral" to listOf(
+            mapOf("id" to "provider-voice", "language" to "en-US", "provider" to "playht")
+        )))
+        val catalogue = parseTranslationVoiceCatalogue(data, "en")
+        assertEquals("en", catalogue.voices.single().language)
+        assertEquals("provider-voice", catalogue.selectionConfig("provider-voice")?.get("voiceId"))
+    }
+
     @Test fun requestIncludesJoinedRoomAndOutputLanguage() = runTest {
         val socket = FakeVoiceSocket { reply() }
         val result = fetchTranslationVoices(socket, "Room123", "fr", 500)
         assertEquals("available", result.status)
-        assertEquals(listOf("translation:getVoices" to mapOf("roomName" to "Room123", "language" to "fr")), socket.requests)
+        val expected: List<Pair<String, Map<String, Any?>>> = listOf(
+            "translation:getVoices" to mapOf("roomName" to "Room123", "language" to "fr")
+        )
+        assertEquals(expected, socket.requests)
         assertEquals(500L, socket.timeout)
     }
 
@@ -154,6 +173,73 @@ class TranslationVoiceCatalogueTest {
         next.select("stock-n")
         assertNull(next.selectionConfig())
     }
+
+    @Test fun actualComposeBindingInvalidatesContextAndIgnoresLateResponses() = runTest {
+        val replies = List(4) { CompletableDeferred<Any?>() }
+        var requestIndex = 0
+        val socket = FakeVoiceSocket { replies[requestIndex++].await() }
+        val room = mutableStateOf("RoomA")
+        val language = mutableStateOf("fr")
+        val configuration = mutableStateOf("model-one")
+        val frameClock = BroadcastFrameClock()
+        val recomposer = Recomposer(coroutineContext + frameClock)
+        val composition = Composition(EmptyVoiceApplier(), recomposer)
+        var picker: TranslationVoicePickerState? = null
+        backgroundScope.launch(frameClock) { recomposer.runRecomposeAndApplyChanges() }
+        fun recompose() {
+            Snapshot.sendApplyNotifications()
+            runCurrent()
+            frameClock.sendFrame(testScheduler.currentTime * 1_000_000)
+            runCurrent()
+        }
+        try {
+            composition.setContent {
+                picker = rememberTranslationVoicePicker(socket, room.value, language.value, configuration.value, true)
+            }
+            recompose()
+            replies[0].complete(reply())
+            recompose()
+            picker!!.select("stock-n")
+            assertNotNull(picker!!.selectionConfig())
+
+            configuration.value = "model-two"
+            recompose()
+            assertNull(picker!!.selectionConfig())
+            assertTrue(picker!!.loading)
+
+            language.value = "en"
+            recompose()
+            replies[1].complete(reply("old-provider"))
+            recompose()
+            assertNull(picker!!.selectionConfig())
+            assertTrue(picker!!.loading)
+            replies[2].complete(reply("xai", "en"))
+            recompose()
+            picker!!.select("stock-n")
+            assertEquals("xai", picker!!.selectionConfig()?.get("ttsProvider"))
+
+            room.value = "RoomB"
+            recompose()
+            assertNull(picker!!.selectionConfig())
+            assertEquals("RoomB", socket.requests.last().second["roomName"])
+            replies[3].complete(reply("fish", "en"))
+            recompose()
+            assertEquals("fish", picker!!.catalogue.provider)
+            assertNull(picker!!.selectedId)
+            assertEquals(4, requestIndex)
+        } finally {
+            composition.dispose()
+            recomposer.cancel()
+        }
+    }
+}
+
+private class EmptyVoiceApplier : AbstractApplier<Unit>(Unit) {
+    override fun insertBottomUp(index: Int, instance: Unit) {}
+    override fun insertTopDown(index: Int, instance: Unit) {}
+    override fun move(from: Int, to: Int, count: Int) {}
+    override fun remove(index: Int, count: Int) {}
+    override fun onClear() {}
 }
 
 private class FakeVoiceSocket(private val reply: suspend () -> Any?) : SocketManager {

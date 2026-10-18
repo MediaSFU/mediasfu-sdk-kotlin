@@ -48,9 +48,7 @@ fun parseTranslationVoiceCatalogue(response: Any?, language: String): Translatio
             val id = ((entry as? String) ?: (fields?.get("id") as? String))
                 ?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
             val declaredProvider = fields?.get("provider") as? String
-            val declaredLanguage = fields?.get("language") as? String
             if (declaredProvider != null && !declaredProvider.equals(provider, true)) return@mapNotNull null
-            if (declaredLanguage != null && !declaredLanguage.equals(resultLanguage, true)) return@mapNotNull null
             if (!seen.add(id)) return@mapNotNull null
             val suppliedGender = fields?.get("gender") as? String
             val gender = if (suppliedGender == null) group else suppliedGender.takeIf { it in genders } ?: "neutral"

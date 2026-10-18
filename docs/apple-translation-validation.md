@@ -12,6 +12,7 @@ From the Apple SDK checkout, point the build helper at the pinned Kotlin checkou
 
 ```sh
 MEDIA_SFU_KOTLIN_REPO=/path/to/mediasfu-sdk-kotlin \
+  MEDIA_SFU_JAVA_HOME="$(/usr/libexec/java_home -v 17)" \
   bash scripts/prepare_kmp_binary_dist.sh
 ```
 
@@ -25,7 +26,7 @@ The Apple SDK's `Exports.swift` conditionally imports `MediaSFUSDK` or `shared`.
 
 Validate the exported catalogue result, voice fields and suspend-function completion/error path from Swift. If Swift cannot consume the exported socket or collection types directly, add and test a small Swift-friendly adapter. It must preserve cancellation, bounded requests, neutral voices, provider/model metadata, and safe empty/error results.
 
-Wire the new XCFramework into the Apple package's actual target dependencies. For binary distribution, use the repository's manifest-rendering helper with the reviewed release URL and the checksum of that exact archive. Keep source, SDK version, framework, asset and SwiftPM manifest consistent. Publishing artifacts or changing release tags is a separate release step.
+Wire the new XCFramework into the Apple package's actual target dependencies. For binary distribution, use the repository's manifest-rendering helper with the reviewed release URL and the checksum of that exact archive. Keep source, SDK version, framework, asset and SwiftPM manifest consistent. Use a new version and immutable asset URL for a public release; preserve existing versioned archives and checksums. Publishing artifacts or changing release tags is a separate release step.
 
 Run the Apple package tests and build the iOS sample against this actual framework. Retain simulator and device destinations, exact commands, exit codes, compiler results and source revision. Do not mark native compilation accepted from a header inspection alone.
 

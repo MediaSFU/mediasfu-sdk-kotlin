@@ -6391,8 +6391,8 @@ class MediasfuGenericState internal constructor(
                 updateRoomParametersClient(
                     UpdateRoomParametersClientOptions(
                         parameters = UpdateRoomParametersBridge(),
-                        simulcastOff = this.options.simulcastOff,
-                        roomCapacity = this.options.roomCapacity ?: (this.options.noUIPreJoinOptionsCreate?.get("capacity") as? Number)?.toInt()
+                        simulcastOff = this@MediasfuGenericState.options.simulcastOff,
+                        roomCapacity = this@MediasfuGenericState.options.roomCapacity ?: (this@MediasfuGenericState.options.noUIPreJoinOptionsCreate?.get("capacity") as? Number)?.toInt()
                     )
                 )
                 ensureDeviceClientForRoomCapabilities()
