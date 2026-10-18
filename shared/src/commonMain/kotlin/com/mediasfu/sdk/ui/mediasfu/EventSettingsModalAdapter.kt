@@ -34,6 +34,9 @@ internal fun MediasfuGenericState.createEventSettingsModalOptions(): EventSettin
                 showSubtitles = showSubtitles
             )
         },
+        onApplyTranslationVoiceSettings = { spoken, enabled, output, listen, preferences, subtitles, voice ->
+            applyTranslationSettings(spoken, enabled, output, listen, preferences, subtitles, voice)
+        },
         position = "topRight",
         backgroundColor = 0xFF83C0E9.toInt(),
         audioSetting = media.audioSetting,

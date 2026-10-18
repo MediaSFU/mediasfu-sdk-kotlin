@@ -60,6 +60,7 @@ data class EventSettingsModalOptions(
     val updateScreenshareSetting: (String) -> Unit,
     val updateChatSetting: (String) -> Unit,
     val updateIsSettingsModalVisible: (Boolean) -> Unit,
+    val onApplyTranslationVoiceSettings: ((String, Boolean, String?, String?, Map<String, String>, Boolean, Map<String, Any?>) -> Unit)? = null,
 )
 
 interface EventSettingsModal : MediaSfuUIComponent {

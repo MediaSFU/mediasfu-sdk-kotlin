@@ -2924,7 +2924,7 @@ class MediasfuGenericState internal constructor(
             ?.mapNotNull { entry ->
                 val map = (entry as? Map<*, *>)?.toStringAnyMap() ?: return@mapNotNull null
                 val code = map["code"] as? String ?: return@mapNotNull null
-                LanguageEntry(code = code, nickname = map["nickname"] as? String)
+                LanguageEntry(code = code, nickname = map["nickname"] as? String, voiceConfig = (map["voiceConfig"] as? Map<*, *>)?.toStringAnyMap())
             }
 
         @Suppress("UNCHECKED_CAST")
@@ -2932,7 +2932,7 @@ class MediasfuGenericState internal constructor(
             ?.mapNotNull { entry ->
                 val map = (entry as? Map<*, *>)?.toStringAnyMap() ?: return@mapNotNull null
                 val code = map["code"] as? String ?: return@mapNotNull null
-                LanguageEntry(code = code, nickname = map["nickname"] as? String)
+                LanguageEntry(code = code, nickname = map["nickname"] as? String, voiceConfig = (map["voiceConfig"] as? Map<*, *>)?.toStringAnyMap())
             }
 
         val blockedSpoken = (this["blockedSpokenLanguages"] as? List<*>)?.mapNotNull { it as? String }
@@ -2953,7 +2953,8 @@ class MediasfuGenericState internal constructor(
             maxActiveChannelsPerSpeaker = maxChannels,
             autoDetectSpokenLanguage = autoDetect,
             allowSpokenLanguageChange = allowSpokenChange,
-            allowListenLanguageChange = allowListenChange
+            allowListenLanguageChange = allowListenChange,
+            translationVoiceConfig = (this["translationVoiceConfig"] as? Map<*, *>)?.toStringAnyMap()
         )
     }
 
@@ -11558,7 +11559,10 @@ private fun TranslationSettingsModalContentEmbedded(
     var localOutputLang by remember(myDefaultOutputLanguage) { mutableStateOf(myDefaultOutputLanguage) }
     var voiceMode by remember { mutableStateOf("basic") }   // "basic" | "advanced" | "clone"
     var voiceGender by remember { mutableStateOf("female") }
-    var selectedVoiceId by remember { mutableStateOf<String?>(null) }
+    val voicePicker = rememberTranslationVoicePicker(
+        state.connectivity.socket, state.room.roomName.ifBlank { state.parameters.roomName },
+        localOutputLang.orEmpty(), translationConfig, localSpokenEnabled && voiceMode == "advanced"
+    )
 
     // ── Listening state ─────────────────────────────────────────────────────
     var localDefaultListen by remember { mutableStateOf<String?>(null) }
@@ -11593,22 +11597,25 @@ private fun TranslationSettingsModalContentEmbedded(
 
     // ── Save handler ────────────────────────────────────────────────────────
     val onSave: () -> Unit = {
-        val vc: Map<String, Any?> = when (voiceMode) {
-            "advanced" -> if (selectedVoiceId != null)
-                mapOf("voiceId" to selectedVoiceId!!)
-            else mapOf("voiceGender" to voiceGender)
+        val vc: Map<String, Any?>? = when (voiceMode) {
+            "advanced" -> voicePicker.selectionConfig()
+            "clone" -> null
             else -> mapOf("voiceGender" to voiceGender)
         }
-        state.applyTranslationSettings(
-            spokenLanguage = localSpokenLang,
-            spokenEnabled = localSpokenEnabled,
-            defaultOutputLanguage = localOutputLang,
-            defaultListenLanguage = if (!perSpeakerMode) localDefaultListen else null,
-            perSpeakerListenPreferences = if (perSpeakerMode) localListenPrefs else emptyMap(),
-            showSubtitles = localShowSubtitles,
-            voiceConfig = if (localSpokenEnabled && localOutputLang != null) vc else emptyMap()
-        )
-        if (localSpokenEnabled) spokenCooldown = 30
+        if (localSpokenEnabled && localOutputLang != null && vc == null) {
+            state.showAlert("Select an available stock voice before saving.", "danger")
+        } else {
+            state.applyTranslationSettings(
+                spokenLanguage = localSpokenLang,
+                spokenEnabled = localSpokenEnabled,
+                defaultOutputLanguage = localOutputLang,
+                defaultListenLanguage = if (!perSpeakerMode) localDefaultListen else null,
+                perSpeakerListenPreferences = if (perSpeakerMode) localListenPrefs else emptyMap(),
+                showSubtitles = localShowSubtitles,
+                voiceConfig = if (localSpokenEnabled && localOutputLang != null) vc.orEmpty() else emptyMap()
+            )
+            if (localSpokenEnabled) spokenCooldown = 30
+        }
     }
 
     // ── Layout ──────────────────────────────────────────────────────────────
@@ -11684,9 +11691,8 @@ private fun TranslationSettingsModalContentEmbedded(
                             voiceMode = voiceMode,
                             onVoiceModeChange = { voiceMode = it },
                             voiceGender = voiceGender,
-                            onVoiceGenderChange = { voiceGender = it; selectedVoiceId = null },
-                            selectedVoiceId = selectedVoiceId,
-                            onVoiceIdChange = { selectedVoiceId = it }
+                            onVoiceGenderChange = { voiceGender = it; voicePicker.select(null) },
+                            picker = voicePicker
                         )
                     }
                 }
@@ -11694,7 +11700,7 @@ private fun TranslationSettingsModalContentEmbedded(
                 // Subtitles toggle
                 TranslationSubtitlesToggle(checked = localShowSubtitles, onCheckedChange = { localShowSubtitles = it })
 
-                Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) { Text("Save Settings") }
+                Button(onClick = onSave, enabled = spokenCooldown == 0 && (!localSpokenEnabled || localOutputLang == null || voiceMode == "basic" || (voiceMode == "advanced" && voicePicker.selectionConfig() != null)), modifier = Modifier.fillMaxWidth()) { Text("Save Settings") }
 
             } else {
                 // ── Listening tab ────────────────────────────────────────────
@@ -11837,8 +11843,7 @@ private fun TranslationVoiceSettingsCard(
     onVoiceModeChange: (String) -> Unit,
     voiceGender: String,
     onVoiceGenderChange: (String) -> Unit,
-    selectedVoiceId: String?,
-    onVoiceIdChange: (String?) -> Unit
+    picker: TranslationVoicePickerState
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -11866,7 +11871,7 @@ private fun TranslationVoiceSettingsCard(
                         listOf("female" to "👩 Female", "male" to "👨 Male", "neutral" to "🧑 Neutral").forEach { (gender, label) ->
                             FilterChip(
                                 selected = voiceGender == gender,
-                                onClick = { onVoiceGenderChange(gender); onVoiceIdChange(null) },
+                                onClick = { onVoiceGenderChange(gender); picker.select(null) },
                                 label = { Text(label, style = MaterialTheme.typography.labelSmall) },
                                 modifier = Modifier.weight(1f)
                             )
@@ -11874,12 +11879,7 @@ private fun TranslationVoiceSettingsCard(
                     }
                 }
                 "advanced" -> {
-                    // Voices are fetched from server on demand — show empty state
-                    Text(
-                        "No voices available. Select an output language and voices will load when the server responds.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    TranslationStockVoicePicker(picker)
                 }
                 "clone" -> {
                     // Clones are managed on the MediaSFU website and passed from the app level.

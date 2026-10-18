@@ -41,7 +41,7 @@
 
 **Real-time video conferencing for Android & Kotlin Multiplatform** — drop-in solution with pre-built UI or full customization.
 
-📖 **[Full Documentation →](README_FULL.md)** | 🌐 **[mediasfu.com](https://www.mediasfu.com/)**
+📖 **[Full Documentation →](README_FULL.md)** | [Translation voice selection](docs/translation-voices.md) | [Apple translation validation](docs/apple-translation-validation.md) | 🌐 **[mediasfu.com](https://www.mediasfu.com/)**
 
 ---
 

@@ -130,6 +130,8 @@ fun SettingsModalContentBody(
     var spokenLanguage by remember { mutableStateOf(options.mySpokenLanguage.ifBlank { "en" }) }
     var outputLanguage by remember { mutableStateOf(options.myDefaultOutputLanguage ?: options.mySpokenLanguage.ifBlank { "en" }) }
     var listenLanguage by remember { mutableStateOf(options.myDefaultListenLanguage ?: "") }
+    var stockVoiceMode by remember(options.roomName) { mutableStateOf(false) }
+    val voicePicker = rememberTranslationVoicePicker(options.socket, options.roomName, outputLanguage, options.translationConfig, options.translationSupported && translationEnabled && stockVoiceMode)
     var showTranslationSubtitles by remember { mutableStateOf(options.showTranslationSubtitles) }
     var perSpeakerMode by remember { mutableStateOf(options.listenPreferences.isNotEmpty() && options.myDefaultListenLanguage == null) }
     var perSpeakerListenPrefs by remember { mutableStateOf(options.listenPreferences) }
@@ -349,6 +351,12 @@ fun SettingsModalContentBody(
                         enabled = translationEnabled,
                         onSelected = { outputLanguage = it }
                     )
+                    if (translationEnabled && options.onApplyTranslationVoiceSettings != null) {
+                        TextButton(onClick = { stockVoiceMode = !stockVoiceMode }) {
+                            Text(if (stockVoiceMode) "Use the configured voice" else "Choose a stock voice")
+                        }
+                        if (stockVoiceMode) TranslationStockVoicePicker(voicePicker)
+                    }
                     TranslationLanguageSelector(
                         label = "Default listen language",
                         selectedCode = listenLanguage,
@@ -417,6 +425,8 @@ fun SettingsModalContentBody(
         // Save Button
         Button(
             onClick = {
+                val stockConfig = if (translationEnabled && stockVoiceMode) voicePicker.selectionConfig() else emptyMap()
+                if (stockConfig == null) return@Button
                 val config = PermissionConfig(
                     values = mapOf(
                         "level0" to mapOf(
@@ -454,17 +464,20 @@ fun SettingsModalContentBody(
                         )
                     )
                 }
-                options.onApplyTranslationSettings?.invoke(
-                    spokenLanguage,
-                    translationEnabled,
-                    outputLanguage.takeIf { it.isNotBlank() },
-                    if (perSpeakerMode) null else listenLanguage.takeIf { it.isNotBlank() },
-                    if (perSpeakerMode) perSpeakerListenPrefs else emptyMap(),
-                    showTranslationSubtitles
-                )
+                val applyVoice = options.onApplyTranslationVoiceSettings
+                if (applyVoice != null) {
+                    applyVoice(spokenLanguage, translationEnabled, outputLanguage.takeIf { it.isNotBlank() },
+                        if (perSpeakerMode) null else listenLanguage.takeIf { it.isNotBlank() },
+                        if (perSpeakerMode) perSpeakerListenPrefs else emptyMap(), showTranslationSubtitles,
+                        stockConfig)
+                } else {
+                    options.onApplyTranslationSettings?.invoke(spokenLanguage, translationEnabled,
+                        outputLanguage.takeIf { it.isNotBlank() }, if (perSpeakerMode) null else listenLanguage.takeIf { it.isNotBlank() },
+                        if (perSpeakerMode) perSpeakerListenPrefs else emptyMap(), showTranslationSubtitles)
+                }
                 onSave?.invoke()
             },
-            enabled = options.isHost || options.translationSupported,
+            enabled = (options.isHost || options.translationSupported) && (!translationEnabled || !stockVoiceMode || voicePicker.selectionConfig() != null),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("Save")

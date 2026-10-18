@@ -6,7 +6,8 @@ enum class LanguageMode { ALLOWLIST, BLOCKLIST, ANY }
 /** Per-language entry, optionally with display nickname. */
 data class LanguageEntry(
     val code: String,
-    val nickname: String? = null
+    val nickname: String? = null,
+    val voiceConfig: Map<String, Any?>? = null
 )
 
 /** Room-level translation configuration shared through socket events. */
@@ -21,7 +22,8 @@ data class TranslationRoomConfig(
     val maxActiveChannelsPerSpeaker: Int = 5,
     val autoDetectSpokenLanguage: Boolean = false,
     val allowSpokenLanguageChange: Boolean? = null,
-    val allowListenLanguageChange: Boolean? = null
+    val allowListenLanguageChange: Boolean? = null,
+    val translationVoiceConfig: Map<String, Any?>? = null
 )
 
 data class TranslationRoomConfigData(val config: TranslationRoomConfig)
