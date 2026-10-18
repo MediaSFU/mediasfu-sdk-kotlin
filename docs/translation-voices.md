@@ -84,6 +84,6 @@ playback; the server still validates the request.
 
 Call these APIs on the main thread and cancel the request when its native UI
 closes. The Apple package provides a SwiftUI picker and selection model around
-this API; see its [native integration guide](https://github.com/MediaSFU/mediasfu-apple-sdk/blob/feature/apple-translation-voices/USAGE.md#native-translation-voice-picker).
+this API; see its [native integration guide](https://github.com/MediaSFU/mediasfu-apple-sdk/blob/main/USAGE.md#native-translation-voice-picker).
 A framework rebuilt from this source is required. Older published frameworks do
 not export this session.
