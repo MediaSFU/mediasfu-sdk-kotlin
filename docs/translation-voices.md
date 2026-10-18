@@ -58,10 +58,11 @@ Android validation commands, using JDK 17 and an installed Android SDK:
 ```sh
 ./gradlew :shared:compileDebugKotlinAndroid :shared:compileReleaseKotlinAndroid \
   :shared:testDebugUnitTest \
-  --tests com.mediasfu.sdk.socket.TranslationVoiceCatalogueTest \
+  --tests 'com.mediasfu.sdk.socket.TranslationVoiceCatalogue*' \
   -Pandroid.useAndroidX=true \
-  '-Dorg.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m' \
-  -Pkotlin.compiler.execution.strategy=in-process --max-workers=2
+  '-Dorg.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=1024m' \
+  -Pkotlin.compiler.execution.strategy=in-process -Pkotlin.incremental=false \
+  --max-workers=1 --no-parallel --no-daemon
 ```
 
 These checks cover catalogue parsing, socket requests, bounded waits, cancellation and selection state. They do not establish physical-device audio playback or Apple framework acceptance. See [Apple translation validation](apple-translation-validation.md) for the Mac build and runtime checks.

@@ -3,14 +3,6 @@ package com.mediasfu.sdk.socket
 import com.mediasfu.sdk.model.SocketConfig
 import com.mediasfu.sdk.model.parseTranslationVoiceCatalogue
 import com.mediasfu.sdk.ui.mediasfu.TranslationVoicePickerState
-import com.mediasfu.sdk.ui.mediasfu.rememberTranslationVoicePicker
-import androidx.compose.runtime.AbstractApplier
-import androidx.compose.runtime.BroadcastFrameClock
-import androidx.compose.runtime.Composition
-import androidx.compose.runtime.Recomposer
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.snapshots.Snapshot
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
@@ -174,75 +166,9 @@ class TranslationVoiceCatalogueTest {
         assertNull(next.selectionConfig())
     }
 
-    @Test fun actualComposeBindingInvalidatesContextAndIgnoresLateResponses() = runTest {
-        val replies = List(4) { CompletableDeferred<Any?>() }
-        var requestIndex = 0
-        val socket = FakeVoiceSocket { replies[requestIndex++].await() }
-        val room = mutableStateOf("RoomA")
-        val language = mutableStateOf("fr")
-        val configuration = mutableStateOf("model-one")
-        val frameClock = BroadcastFrameClock()
-        val recomposer = Recomposer(coroutineContext + frameClock)
-        val composition = Composition(EmptyVoiceApplier(), recomposer)
-        var picker: TranslationVoicePickerState? = null
-        backgroundScope.launch(frameClock) { recomposer.runRecomposeAndApplyChanges() }
-        fun recompose() {
-            Snapshot.sendApplyNotifications()
-            runCurrent()
-            frameClock.sendFrame(testScheduler.currentTime * 1_000_000)
-            runCurrent()
-        }
-        try {
-            composition.setContent {
-                picker = rememberTranslationVoicePicker(socket, room.value, language.value, configuration.value, true)
-            }
-            recompose()
-            replies[0].complete(reply())
-            recompose()
-            picker!!.select("stock-n")
-            assertNotNull(picker!!.selectionConfig())
-
-            configuration.value = "model-two"
-            recompose()
-            assertNull(picker!!.selectionConfig())
-            assertTrue(picker!!.loading)
-
-            language.value = "en"
-            recompose()
-            replies[1].complete(reply("old-provider"))
-            recompose()
-            assertNull(picker!!.selectionConfig())
-            assertTrue(picker!!.loading)
-            replies[2].complete(reply("xai", "en"))
-            recompose()
-            picker!!.select("stock-n")
-            assertEquals("xai", picker!!.selectionConfig()?.get("ttsProvider"))
-
-            room.value = "RoomB"
-            recompose()
-            assertNull(picker!!.selectionConfig())
-            assertEquals("RoomB", socket.requests.last().second["roomName"])
-            replies[3].complete(reply("fish", "en"))
-            recompose()
-            assertEquals("fish", picker!!.catalogue.provider)
-            assertNull(picker!!.selectedId)
-            assertEquals(4, requestIndex)
-        } finally {
-            composition.dispose()
-            recomposer.cancel()
-        }
-    }
 }
 
-private class EmptyVoiceApplier : AbstractApplier<Unit>(Unit) {
-    override fun insertBottomUp(index: Int, instance: Unit) {}
-    override fun insertTopDown(index: Int, instance: Unit) {}
-    override fun move(from: Int, to: Int, count: Int) {}
-    override fun remove(index: Int, count: Int) {}
-    override fun onClear() {}
-}
-
-private class FakeVoiceSocket(private val reply: suspend () -> Any?) : SocketManager {
+internal class FakeVoiceSocket(private val reply: suspend () -> Any?) : SocketManager {
     override val id = "test-connection"
     var connected = true
     var timeout: Long? = null
