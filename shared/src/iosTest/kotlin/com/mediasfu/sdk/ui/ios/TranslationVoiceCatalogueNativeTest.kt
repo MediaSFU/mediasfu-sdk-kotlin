@@ -16,7 +16,7 @@ class TranslationVoiceCatalogueNativeTest {
     @Test fun nativeContextChangesWithRoomSocketLanguageModeAndSettings() = runTest {
         val parameters = MediasfuParameters().apply { roomName = "owned-test-room" }
         val options = MediasfuGenericOptions(sourceParameters = parameters, connectMediaSFU = false, returnUI = false)
-        val state = MediasfuGenericState(this, parameters, options)
+        val state = MediasfuGenericState(backgroundScope, parameters, options)
         val bridge = MediaSFUIosTranslationVoices(this) { state }
         var token = bridge.contextToken("fr", "stock")
         assertEquals(token, bridge.contextToken("fr", "stock"))
