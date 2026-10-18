@@ -536,6 +536,10 @@ class MediasfuGenericState internal constructor(
     private val _orientation = MutableStateFlow("landscape")
     val orientation: StateFlow<String> = _orientation.asStateFlow()
 
+    // Also invalidates native stock selections when basic/clone settings or room configuration change.
+    internal var translationVoiceRevision: Long = 0
+        private set
+
     private val _translationSupported = MutableStateFlow(false)
     val translationSupported: StateFlow<Boolean> = _translationSupported.asStateFlow()
 
@@ -2325,7 +2329,7 @@ class MediasfuGenericState internal constructor(
         translationRoomConfig(
             TranslationRoomConfigOptions(
                 data = TranslationRoomConfigData(config),
-                updateTranslationConfig = { _translationConfig.value = it },
+                updateTranslationConfig = { _translationConfig.value = it; translationVoiceRevision++ },
                 updateTranslationSupported = { _translationSupported.value = it }
             )
         )
@@ -2339,7 +2343,7 @@ class MediasfuGenericState internal constructor(
         translationConfigUpdated(
             TranslationConfigUpdatedOptions(
                 data = TranslationConfigUpdatedData(config),
-                updateTranslationConfig = { _translationConfig.value = it },
+                updateTranslationConfig = { _translationConfig.value = it; translationVoiceRevision++ },
                 updateTranslationSupported = { _translationSupported.value = it },
                 showAlert = ShowAlert { message, type, duration -> showAlert(message, type, duration) }
             )
@@ -3449,6 +3453,7 @@ class MediasfuGenericState internal constructor(
 
         // PARITY AUXILIARY STATE - translation, permissions, panelists
         _translationSupported.value = false
+        translationVoiceRevision++
         _translationConfig.value = null
         _mySpokenLanguage.value = ""
         _mySpokenLanguageEnabled.value = false
@@ -4562,7 +4567,9 @@ class MediasfuGenericState internal constructor(
             return
         }
 
-        scope.launch {
+        translationVoiceRevision++
+        // Begin submission in the context validated by the native/Compose caller.
+        scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
             runCatching {
                 if (translationSupported.value) {
                     socket.emit(

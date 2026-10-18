@@ -66,3 +66,24 @@ Android validation commands, using JDK 17 and an installed Android SDK:
 ```
 
 These checks cover catalogue parsing, socket requests, bounded waits, cancellation and selection state. They do not establish physical-device audio playback or Apple framework acceptance. See [Apple translation validation](apple-translation-validation.md) for the Mac build and runtime checks.
+
+## Native iOS clients
+
+A mounted `MediaSFUIosHostBridge` exposes `translationVoices` for native Apple
+interfaces. Its `load(language:mode:completion:)` method returns a cancellable
+request and uses the same authenticated room socket as the hosted controller.
+Use `stock` mode for catalogue selection. Results use the catalogue fields above;
+cancellation prevents a late reply from authorizing a selection.
+
+The session supplies an opaque `contextToken(language:mode:)`. Apply an explicit
+selection with `apply(language:mode:token:voiceId:provider:)`. The session rejects
+stale tokens, unknown IDs and provider mismatches, and preserves the room's
+existing listening preferences and subtitles. Spoken translation must already be
+enabled. An accepted submission does not confirm provider authorization or audio
+playback; the server still validates the request.
+
+Call these APIs on the main thread and cancel the request when its native UI
+closes. The Apple package provides a SwiftUI picker and selection model around
+this API; see its [native integration guide](https://github.com/MediaSFU/mediasfu-apple-sdk/blob/feature/apple-translation-voices/USAGE.md#native-translation-voice-picker).
+A framework rebuilt from this source is required. Older published frameworks do
+not export this session.

@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.ComposeUIViewController
 import com.mediasfu.sdk.methods.MediasfuParameters
@@ -12,6 +14,8 @@ import com.mediasfu.sdk.model.Credentials
 import com.mediasfu.sdk.model.EventType
 import com.mediasfu.sdk.ui.mediasfu.MediasfuGeneric
 import com.mediasfu.sdk.ui.mediasfu.MediasfuGenericOptions
+import com.mediasfu.sdk.ui.mediasfu.MediasfuGenericState
+import com.mediasfu.sdk.ui.mediasfu.rememberMediasfuGenericState
 import com.mediasfu.sdk.ui.mediasfu.MediaSFUCloudRoomSession
 import com.mediasfu.sdk.util.MediaSFURuntimeProbe
 import com.mediasfu.sdk.webrtc.WebRtcFactory
@@ -69,6 +73,10 @@ class MediaSFUIosHostBridge {
     private val bridgeScope = MainScope()
     private var latestOptions: MediasfuGenericOptions? = null
     private var latestParameters: MediasfuParameters? = null
+    private var latestState: MediasfuGenericState? = null
+
+    /** Native stock-voice session for the same mounted room. Call on the main thread. */
+    val translationVoices = MediaSFUIosTranslationVoices(bridgeScope) { latestState }
 
     fun resetRuntimeProbe() {
         MediaSFUIosRuntimeProbeStore.reset()
@@ -236,7 +244,19 @@ class MediaSFUIosHostBridge {
     fun makeHostViewController(options: MediasfuGenericOptions): UIViewController {
         latestOptions = options
         latestParameters = options.sourceParameters
+        latestState = null
+        translationVoices.invalidate()
         return ComposeUIViewController {
+            val state = rememberMediasfuGenericState(options)
+            SideEffect { latestState = state }
+            DisposableEffect(state) {
+                onDispose {
+                    if (latestState === state) {
+                        latestState = null
+                        translationVoices.invalidate()
+                    }
+                }
+            }
             // Consume safe-drawing insets at the iOS host level so MediasfuGeneric
             // fills edge-to-edge.  The root composable applies
             // WindowInsets.safeDrawing.asPaddingValues() which would otherwise
@@ -247,6 +267,7 @@ class MediaSFUIosHostBridge {
             Box(modifier = Modifier.fillMaxSize().consumeWindowInsets(WindowInsets.safeDrawing)) {
                 MediasfuGeneric(
                     options = options,
+                    state = state,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
