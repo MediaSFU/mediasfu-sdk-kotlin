@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.10
 
 - Allow an explicit microphone retry to recreate a missing producer or terminal send transport instead of resuming stale paused state. Preserve normal mute/resume behavior, transient disconnections and host restrictions.
 - Discover stock translation voices from the joined room's configured provider and output language, with bounded requests and safe empty/error handling.
