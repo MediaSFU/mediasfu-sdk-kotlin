@@ -24,6 +24,7 @@ import com.mediasfu.sdk.model.PermissionConfig
 import com.mediasfu.sdk.model.ShowAlert
 import com.mediasfu.sdk.socket.SocketManager
 import com.mediasfu.sdk.webrtc.MediaStream
+import com.mediasfu.sdk.webrtc.TransportConnectionState
 import kotlinx.datetime.Clock
 
 /**
@@ -317,6 +318,23 @@ suspend fun clickAudio(options: ClickAudioOptions) {
                 }
                 
                 0 -> {
+                    // Reacquire only after this permitted click if the paused
+                    // producer no longer has a usable transport.
+                    val activeTransport = parameters.producerTransport
+                    val transportUnavailable = activeTransport == null ||
+                        activeTransport.connectionState == TransportConnectionState.CLOSED ||
+                        activeTransport.connectionState == TransportConnectionState.FAILED
+                    if (audioPaused && (parameters.audioProducer == null ||
+                            transportUnavailable)) {
+                        audioPaused = false
+                        updateAudioPaused(false)
+                        updateTransportCreatedAudio(false)
+                        if (transportUnavailable) {
+                            parameters.updateAudioProducer(null)
+                            parameters.updateProducerTransport(null)
+                            updateTransportCreated(false)
+                        }
+                    }
                     if (audioPaused) {
                         
                         // Re-enable the audio track to resume capturing/sending media
