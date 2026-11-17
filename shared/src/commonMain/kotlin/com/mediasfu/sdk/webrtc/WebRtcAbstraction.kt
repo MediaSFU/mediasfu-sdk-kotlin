@@ -224,6 +224,29 @@ interface WebRtcTransport {
     fun onProduce(handler: (ProduceData) -> Unit)
     fun onConnectionStateChange(handler: (String) -> Unit)
 
+    /**
+     * TURN relay fallback (turn-relay-v1): true when the platform created this transport with the relay ICE
+     * servers the server offered in `always` mode (the `iceServers` entry of the creation params).
+     */
+    val createdWithRelay: Boolean
+        get() = false
+
+    /**
+     * Replaces the ICE servers (`[{ urls, username, credential }]`) of the live transport; they take effect at the
+     * next [restartIce]. Throws when the native stack cannot apply TURN credentials to a live transport.
+     */
+    fun updateIceServers(iceServers: List<Map<String, Any?>>) {
+        throw UnsupportedOperationException("updateIceServers is not supported by this transport")
+    }
+
+    /** Restarts ICE with the parameters from the server's `transport-restart-ice` answer. */
+    fun restartIce(iceParameters: Map<String, Any?>) {
+        throw UnsupportedOperationException("restartIce is not supported by this transport")
+    }
+
+    /** Raw WebRTC stats for the transport as JSON (an array of stats or an id-keyed object), or null. */
+    fun getStatsJson(): String? = null
+
     fun produce(
         track: MediaStreamTrack,
         encodings: List<RtpEncodingParameters> = emptyList(),

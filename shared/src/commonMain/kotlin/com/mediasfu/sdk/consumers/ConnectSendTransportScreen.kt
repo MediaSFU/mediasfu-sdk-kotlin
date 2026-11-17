@@ -28,7 +28,7 @@ interface ConnectSendTransportScreenParameters : CreateSendTransportParameters {
     val params: ProducerOptionsType?
     val defScreenID: String
     val updateMainWindow: Boolean
-    val showAlert: ShowAlert?
+    override val showAlert: ShowAlert?
 
     val updateScreenProducer: (WebRtcProducer?) -> Unit
     val updateLocalScreenProducer: ((WebRtcProducer?) -> Unit)?

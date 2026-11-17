@@ -23,6 +23,25 @@ interface IosNativeTransportHandle {
     fun setOnConnectionStateChange(listener: ((String) -> Unit)?)
 }
 
+/**
+ * Optional (turn-relay-v1): a transport handle that can take TURN servers and restart ICE on a live transport.
+ * Handles that do not adopt it keep working; the shared relay fallback then reports the relay as unavailable and
+ * shows the blocked-network message instead of restarting ICE.
+ */
+interface IosNativeIceRelayTransportHandle {
+    /** True when the handle created the transport with the `iceServers` creation param (relay mode `always`). */
+    fun createdWithIceServers(): Boolean
+
+    /** Applies `[{ urls, username, credential }]`. Returns null on success, or an error message. */
+    fun updateIceServers(iceServersJson: String): String?
+
+    /** Restarts ICE with the server's ICE parameters. Returns null on success, or an error message. */
+    fun restartIce(iceParametersJson: String): String?
+
+    /** WebRTC stats JSON for the transport, or null. */
+    fun statsJson(): String?
+}
+
 interface IosNativeSendTransportHandle : IosNativeTransportHandle {
     fun setOnProduce(listener: IosNativeProduceListener?)
     fun produce(

@@ -73,6 +73,29 @@ internal class IosMediasoupTransport private constructor(
         handle.setOnConnectionStateChange(handler)
     }
 
+    // turn-relay-v1: available when the installed Swift bridge adopts IosNativeIceRelayTransportHandle.
+    private val relayHandle: IosNativeIceRelayTransportHandle?
+        get() = handle as? IosNativeIceRelayTransportHandle
+
+    override val createdWithRelay: Boolean
+        get() = relayHandle?.createdWithIceServers() == true
+
+    override fun updateIceServers(iceServers: List<Map<String, Any?>>) {
+        val relay = relayHandle ?: throw UnsupportedOperationException("The iOS media bridge cannot update ICE servers")
+        val json = iceServers.toIosBridgeJsonString()
+            ?: throw IllegalArgumentException("Failed to serialize ICE servers")
+        relay.updateIceServers(json)?.let { throw IllegalStateException(it) }
+    }
+
+    override fun restartIce(iceParameters: Map<String, Any?>) {
+        val relay = relayHandle ?: throw UnsupportedOperationException("The iOS media bridge cannot restart ICE")
+        val json = iceParameters.toIosBridgeJsonString()
+            ?: throw IllegalArgumentException("Failed to serialize ICE parameters")
+        relay.restartIce(json)?.let { throw IllegalStateException(it) }
+    }
+
+    override fun getStatsJson(): String? = relayHandle?.statsJson()
+
     override fun produce(
         track: MediaStreamTrack,
         encodings: List<RtpEncodingParameters>,

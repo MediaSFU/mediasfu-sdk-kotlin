@@ -44,7 +44,7 @@ interface StreamSuccessVideoParameters :
     override val lockScreen: Boolean
     override val shared: Boolean
     override val audioAlreadyOn: Boolean
-    val showAlert: ShowAlert?
+    override val showAlert: ShowAlert?
     
     // Camera permission allowed flag - set to true when camera is successfully started
     val allowed: Boolean

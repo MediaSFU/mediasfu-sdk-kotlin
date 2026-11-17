@@ -43,7 +43,7 @@ interface ConnectSendTransportAudioParameters : ResumeSendTransportAudioParamete
     override val lockScreen: Boolean
     override val shared: Boolean
     override val videoAlreadyOn: Boolean
-    val showAlert: ShowAlert?
+    override val showAlert: ShowAlert?
     override var producerTransport: WebRtcTransport?
     override var localProducerTransport: WebRtcTransport?
 

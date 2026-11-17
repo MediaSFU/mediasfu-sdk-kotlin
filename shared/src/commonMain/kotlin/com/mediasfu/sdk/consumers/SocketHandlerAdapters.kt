@@ -70,6 +70,9 @@ private open class MediasfuSignalParameters(
     override val reorderStreams: suspend (ReorderStreamsOptions) -> Unit
         get() = backing.reorderStreams
 
+    override val showAlert: ShowAlert?
+        get() = backing.showAlert
+
     override fun getUpdatedAllParams(): SignalNewConsumerTransportParameters =
         MediasfuSignalParameters(backing)
 }

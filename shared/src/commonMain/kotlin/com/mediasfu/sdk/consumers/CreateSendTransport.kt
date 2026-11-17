@@ -4,6 +4,7 @@ package com.mediasfu.sdk.consumers
 import com.mediasfu.sdk.util.Logger
 import com.mediasfu.sdk.webrtc.*
 import com.mediasfu.sdk.webrtc.ortc.OrtcUtils
+import com.mediasfu.sdk.model.ShowAlert
 import com.mediasfu.sdk.socket.SocketManager
 import com.mediasfu.sdk.util.toStringAnyMap
 import com.mediasfu.sdk.util.MediaSFURuntimeProbe
@@ -29,6 +30,10 @@ interface SendTransportSessionParameters {
     var localTransportCreated: Boolean
     var producerTransport: WebRtcTransport?
     var localProducerTransport: WebRtcTransport?
+
+    /** Alert sink for the blocked-network message of the TURN relay fallback (turn-relay-v1). */
+    val showAlert: ShowAlert?
+        get() = null
 
     val updateExtendedRtpCapabilities: ((OrtcUtils.ExtendedRtpCapabilities?) -> Unit)?
 
@@ -226,13 +231,17 @@ private suspend fun createLocalSendTransport(options: CreateSendTransportOptions
         // The acknowledgement may arrive after the room has been torn down. Re-read the
         // current bag at callback time and leave quietly when the device was cleared.
         val currentDevice = currentSendTransportDevice(parameters) ?: return
-        val localTransport = currentDevice.createSendTransport(params)
+        // turn-relay-v1: TURN credentials, when the server offers them, come beside params.
+        val relayOffer = IceRelayOffer.fromResponse(response)
+        val localTransport = currentDevice.createSendTransport(transportParamsWithRelay(params, relayOffer))
 
         setupSendTransportHandlers(
             transport = localTransport,
             socket = localSocket,
             islevel = parameters.islevel,
-            member = parameters.member
+            member = parameters.member,
+            relayOffer = relayOffer,
+            showAlert = parameters.showAlert
         )
 
         parameters.updateLocalProducerTransport?.invoke(localTransport)
@@ -345,13 +354,17 @@ private suspend fun createRemoteSendTransport(
 
         // Socket acks can race teardown. Never use the device captured before the await.
         val currentDevice = currentSendTransportDevice(parameters) ?: return
-        val remoteTransport = currentDevice.createSendTransport(params)
+        // turn-relay-v1: TURN credentials, when the server offers them, come beside params.
+        val relayOffer = IceRelayOffer.fromResponse(response)
+        val remoteTransport = currentDevice.createSendTransport(transportParamsWithRelay(params, relayOffer))
 
         setupSendTransportHandlers(
             transport = remoteTransport,
             socket = socket,
             islevel = parameters.islevel,
-            member = parameters.member
+            member = parameters.member,
+            relayOffer = relayOffer,
+            showAlert = parameters.showAlert
         )
 
         parameters.updateProducerTransport(remoteTransport)
@@ -506,9 +519,18 @@ private fun setupSendTransportHandlers(
     transport: WebRtcTransport,
     socket: SocketManager,
     islevel: String,
-    member: String
+    member: String,
+    relayOffer: IceRelayOffer?,
+    showAlert: ShowAlert?
 ) {
+    // turn-relay-v1: relay restart if ICE stays stuck. Registered first: the state handler below feeds it
+    // before its own failure handling.
+    val relay = attachRelayFallback(transport, socket, relayOffer, direction = "send") {
+        showNetworkBlocked(showAlert, socket)
+    }
+
     transport.onConnect { connectData ->
+        relay.onConnect()
         val startedAtMs = Clock.System.now().toEpochMilliseconds()
         try {
             val dtlsMap = connectData.dtlsParameters.toMap()
@@ -649,6 +671,7 @@ private fun setupSendTransportHandlers(
 
     transport.onConnectionStateChange { state ->
         Logger.i("CreateSendTransport", "transport-state transportId=${transport.id} state=$state")
+        relay.onConnectionState(state)
         when (state.lowercase()) {
             "failed" -> transport.close()
             "closed" -> { /* Transport shut down */ }

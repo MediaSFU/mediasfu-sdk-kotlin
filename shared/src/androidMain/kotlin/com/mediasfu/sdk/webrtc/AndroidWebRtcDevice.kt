@@ -663,7 +663,9 @@ class AndroidWebRtcDevice private constructor(
             }
         }
 
-        val options = createPeerConnectionOptions()
+        // turn-relay-v1: relay servers are present only when the server's iceRelayMode is "always".
+        val relayIceServers = relayIceServersFrom(params)
+        val options = createPeerConnectionOptions(relayIceServers)
         Logger.d("AndroidWebRtcDevice", "=== SEND TRANSPORT CREATION ===")
         Logger.d("AndroidWebRtcDevice", "  TransportID: $transportId")
         Logger.d("AndroidWebRtcDevice", "  ICE candidates JSON: $iceCandidates")
@@ -687,7 +689,7 @@ class AndroidWebRtcDevice private constructor(
         Logger.d("AndroidWebRtcDevice", "  ICE candidates count: ${iceCandidates?.let { it.length } ?: 0}")
         Logger.d("AndroidWebRtcDevice", "=== END TRANSPORT CREATION ===")
 
-        return MediasoupTransport(nativeTransport, TransportType.SEND)
+        return MediasoupTransport(nativeTransport, TransportType.SEND, createdWithRelay = relayIceServers.isNotEmpty())
     }
 
     override fun createRecvTransport(params: Map<String, Any?>): WebRtcTransport {
@@ -721,7 +723,9 @@ class AndroidWebRtcDevice private constructor(
         Logger.d("AndroidWebRtcDevice", "  ICE parameters JSON: $iceParameters")
         Logger.d("AndroidWebRtcDevice", "=== CALLING NATIVE CREATE RECV TRANSPORT ===")
         
-        val options = createPeerConnectionOptions()
+        // turn-relay-v1: relay servers are present only when the server's iceRelayMode is "always".
+        val relayIceServers = relayIceServersFrom(params)
+        val options = createPeerConnectionOptions(relayIceServers)
         val nativeTransport = device.createRecvTransport(
             listener,
             transportId,
@@ -737,7 +741,7 @@ class AndroidWebRtcDevice private constructor(
         Logger.d("AndroidWebRtcDevice", "  Initial connection state: ${nativeTransport.connectionState}")
         Logger.d("AndroidWebRtcDevice", "=== END RECV TRANSPORT CREATION ===")
 
-        return MediasoupTransport(nativeTransport, TransportType.RECEIVE)
+        return MediasoupTransport(nativeTransport, TransportType.RECEIVE, createdWithRelay = relayIceServers.isNotEmpty())
     }
 
     override fun currentRtpCapabilities(): RtpCapabilities? {
@@ -1104,8 +1108,51 @@ class AndroidWebRtcDevice private constructor(
             .createPeerConnectionFactory()
     }
 
-    private fun createPeerConnectionOptions(): PeerConnection.Options {
-        return PeerConnection.Options().apply { setFactory(peerFactory) }
+    private fun createPeerConnectionOptions(
+        relayIceServers: List<org.webrtc.PeerConnection.IceServer> = emptyList()
+    ): PeerConnection.Options {
+        return PeerConnection.Options().apply {
+            setFactory(peerFactory)
+            if (relayIceServers.isNotEmpty()) {
+                setRTCConfig(org.webrtc.PeerConnection.RTCConfiguration(relayIceServers))
+            }
+        }
+    }
+
+    /** turn-relay-v1: the `iceServers` entry the shared code adds to the creation params in `always` mode. */
+    private fun relayIceServersFrom(params: Map<String, Any?>): List<org.webrtc.PeerConnection.IceServer> {
+        val servers = params["iceServers"] as? List<*> ?: return emptyList()
+        return servers.mapNotNull { entry ->
+            val server = entry as? Map<*, *> ?: return@mapNotNull null
+            val urls = when (val raw = server["urls"]) {
+                is String -> listOf(raw)
+                is List<*> -> raw.mapNotNull { it as? String }
+                else -> emptyList()
+            }
+            if (urls.isEmpty()) return@mapNotNull null
+            org.webrtc.PeerConnection.IceServer.builder(urls)
+                .setUsername(server["username"] as? String ?: "")
+                .setPassword(server["credential"] as? String ?: "")
+                .createIceServer()
+        }
+    }
+
+    /** `[{ urls, username, credential }]` as the JSON the native transport expects. */
+    private fun iceServersJson(iceServers: List<Map<String, Any?>>): String {
+        val array = JSONArray()
+        iceServers.forEach { server ->
+            val entry = JSONObject()
+            val urls = when (val raw = server["urls"]) {
+                is String -> listOf(raw)
+                is List<*> -> raw.mapNotNull { it as? String }
+                else -> emptyList()
+            }
+            entry.put("urls", JSONArray(urls))
+            (server["username"] as? String)?.let { entry.put("username", it) }
+            (server["credential"] as? String)?.let { entry.put("credential", it) }
+            array.put(entry)
+        }
+        return array.toString()
     }
 
     private fun resolveAudioEnabled(value: Any?): Boolean = when (value) {
@@ -1841,7 +1888,8 @@ class AndroidWebRtcDevice private constructor(
 
     private inner class MediasoupTransport(
         private val nativeTransport: Transport,
-        override val type: TransportType
+        override val type: TransportType,
+        override val createdWithRelay: Boolean = false
     ) : WebRtcTransport {
 
         init { transports += this }
@@ -1900,6 +1948,19 @@ class AndroidWebRtcDevice private constructor(
         override fun onConnectionStateChange(handler: (String) -> Unit) {
             stateHandlers[id] = handler
         }
+
+        // turn-relay-v1. mediasoup-client 1.0.9+ accepts { urls, username, credential } here. Older clients take plain
+        // URIs only and throw on credentialed servers; the shared relay fallback then reports the relay as unavailable
+        // instead of restarting ICE.
+        override fun updateIceServers(iceServers: List<Map<String, Any?>>) {
+            nativeTransport.updateIceServers(iceServersJson(iceServers))
+        }
+
+        override fun restartIce(iceParameters: Map<String, Any?>) {
+            nativeTransport.restartIce(JSONObject(iceParameters).toString())
+        }
+
+        override fun getStatsJson(): String? = runCatching { nativeTransport.stats }.getOrNull()
 
         override fun produce(
             track: MediaStreamTrack,

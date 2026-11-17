@@ -17,7 +17,7 @@ interface NewPipeProducerParameters : com.mediasfu.sdk.consumers.SignalNewConsum
     override val device: com.mediasfu.sdk.webrtc.WebRtcDevice?
     override val consumingTransports: List<String>
     override val lockScreen: Boolean
-    val showAlert: ShowAlert?
+    override val showAlert: ShowAlert?
 
     val updateFirstRound: (Boolean) -> Unit
     val updateLandScaped: (Boolean) -> Unit

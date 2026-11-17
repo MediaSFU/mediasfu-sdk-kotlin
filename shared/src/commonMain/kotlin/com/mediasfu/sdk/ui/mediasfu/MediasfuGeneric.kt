@@ -4410,6 +4410,9 @@ class MediasfuGenericState internal constructor(
             override val reorderStreams: suspend (ReorderStreamsOptions) -> Unit
                 get() = { options -> parameters.reorderStreams.invoke(options) }
 
+            override val showAlert: com.mediasfu.sdk.model.ShowAlert?
+                get() = parameters.showAlert
+
             override fun getUpdatedAllParams(): SignalNewConsumerTransportParameters = this
         }
 

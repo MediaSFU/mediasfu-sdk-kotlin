@@ -1054,6 +1054,9 @@ class TestConnectSendTransportVideoParameters(
     localSocket = localSocket
 ) , ConnectSendTransportVideoParameters, ResumeSendTransportVideoParameters {
 
+    override val showAlert: ShowAlert?
+        get() = showAlertState
+
     private var localStreamState: MediaStream? = null
     private var lockScreenState: Boolean = false
     private var hostLabelState: String = hostLabel

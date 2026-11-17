@@ -11,6 +11,7 @@ import com.mediasfu.sdk.model.EventType
 import com.mediasfu.sdk.model.Participant
 import com.mediasfu.sdk.model.Stream
 import com.mediasfu.sdk.model.ReUpdateInterType
+import com.mediasfu.sdk.model.ShowAlert
 import com.mediasfu.sdk.socket.SocketManager
 import com.mediasfu.sdk.webrtc.*
 import com.mediasfu.sdk.webrtc.ortc.OrtcUtils
@@ -268,7 +269,11 @@ interface SignalNewConsumerTransportParameters {
     
     /** Reorder streams function for updating UI layout */
     val reorderStreams: suspend (ReorderStreamsOptions) -> Unit
-    
+
+    /** Alert sink for the blocked-network message of the TURN relay fallback (turn-relay-v1). */
+    val showAlert: ShowAlert?
+        get() = null
+
     /** Returns updated parameters */
     fun getUpdatedAllParams(): SignalNewConsumerTransportParameters
 }
@@ -542,8 +547,10 @@ suspend fun signalNewConsumerTransport(
                 }
                 
                 // STEP 3: Create client-side recv transport from STEP 1 params
+                // turn-relay-v1: TURN credentials, when the server offers them, come beside params.
+                val relayOffer = IceRelayOffer.fromResponse(createTransportResult.getOrNull())
                 val clientTransport = runCatching {
-                    device.createRecvTransport(transportParams.toStringAnyMap())
+                    device.createRecvTransport(transportParamsWithRelay(transportParams.toStringAnyMap(), relayOffer))
                 }.getOrElse { error ->
                     MediaSFURuntimeProbe.recordConsumerSignalStage(
                         "client-transport-fail",
@@ -561,9 +568,17 @@ suspend fun signalNewConsumerTransport(
                     "SignalNewConsumerTransport",
                     "client-transport-ok producerId=$producerId clientTransportId=${clientTransport.id}"
                 )
-                
+
+                // turn-relay-v1: relay restart if ICE stays stuck. Registered first: the state handler below
+                // feeds it before its own failure handling.
+                val relayAlert = parameters.showAlert
+                val relay = attachRelayFallback(clientTransport, socket, relayOffer, direction = "recv") {
+                    showNetworkBlocked(relayAlert, socket)
+                }
+
                 // Set up transport connect handler (following Flutter/React pattern)
                 clientTransport.onConnect { connectData ->
+                    relay.onConnect()
                     try {
                         val dtlsParameters = connectData.dtlsParameters
                         connectData.callback()
@@ -592,6 +607,7 @@ suspend fun signalNewConsumerTransport(
                 
                 // Set up connection state change handler
                 clientTransport.onConnectionStateChange { state ->
+                    relay.onConnectionState(state)
                     if (state == "failed") {
                         runCatching { clientTransport.close() }
                     }

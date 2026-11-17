@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.11
+
+- Add a TURN relay fallback for networks that block direct media ports. When the media server offers a relay, a transport that stays unconnected for the server-chosen wait restarts ICE once with relay servers, and reports the outcome to the server.
+- In the server's `always` relay mode, create send and receive transports with the offered relay servers.
+- If no path connects, tell the user once per media connection: "Your network is blocking the call connection. Try another network (a phone hotspot works) or turn off your VPN, then rejoin."
+- Servers that do not offer a relay behave as before, apart from that message.
+- Require `com.mediasfu:mediasoup-client` 1.0.9, which accepts TURN credentials when ICE servers are updated on a live transport.
+
 ## 1.0.10
 
 - Allow an explicit microphone retry to recreate a missing producer or terminal send transport instead of resuming stale paused state. Preserve normal mute/resume behavior, transient disconnections and host restrictions.
